@@ -16,6 +16,7 @@
 
 package com.android.car.rotary;
 
+import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Nullable;
@@ -33,13 +34,35 @@ import java.util.List;
  * their parameters or the caller will recycle it twice.
  */
 class Utils {
+    private static final String TAG = "Utils";
+    private static final boolean DEBUG = false;
 
-    /** Copies a node. The caller is responsible for recycling result. */
-    static AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
+    private static final Utils sInstance = new Utils();
+
+    private Utils() {
+    }
+
+    static Utils getInstance() {
+        return sInstance;
+    }
+
+    /**
+     * Copies a node. The caller is responsible for recycling result.
+     *
+     * Note: {@link AccessibilityNodeInfo#obtain(AccessibilityNodeInfo)} doesn't work when passed a
+     * mock {@link AccessibilityNodeInfo}, so we make this functions non-static and mock it in
+     * tests.
+     */
+    AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
         return node == null ? null : AccessibilityNodeInfo.obtain(node);
     }
 
-    /** Recycles a node. */
+    /**
+     * Recycles a node.
+     *
+     * Unlike {@link #copyNode(AccessibilityNodeInfo)}, this method is static because we don't need
+     * to mock it in tests.
+     */
     static void recycleNode(@Nullable AccessibilityNodeInfo node) {
         if (node != null) {
             node.recycle();
@@ -52,6 +75,30 @@ class Utils {
             for (AccessibilityNodeInfo node : nodes) {
                 recycleNode(node);
             }
+        }
+    }
+
+    /**
+     * Updates the given {@code node} in case the view represented by it is no longer in the view
+     * tree. If it's still in the view tree, returns the {@code node}. Otherwise recycles the
+     * {@code node} and returns null.
+     */
+    static AccessibilityNodeInfo refreshNode(@Nullable AccessibilityNodeInfo node) {
+        if (node == null) {
+            return null;
+        }
+        boolean succeeded = node.refresh();
+        if (succeeded) {
+            return node;
+        }
+        logw("This node is no longer in the view tree: " + node);
+        node.recycle();
+        return null;
+    }
+
+    private static void logw(String str) {
+        if (DEBUG) {
+            Log.w(TAG, str);
         }
     }
 }
