@@ -21,12 +21,14 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -44,12 +46,12 @@ import java.util.Map;
  */
 public class RotaryService extends RotaryServiceBase {
     private static final String TAG = "RotaryService";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     @NonNull
     private static Utils sUtils = Utils.getInstance();
 
-    private final NavigationHelper mNavigationHelper = new NavigationHelper();
+    private NavigationHelper mNavigationHelper;
 
     /**
      * Time interval in milliseconds to decide whether we should accelerate the rotation by 3 times
@@ -106,10 +108,14 @@ public class RotaryService extends RotaryServiceBase {
 
     @Override
     public void onCreate() {
+        super.onCreate();
         mRotationAcceleration3xMs =
                 getResources().getInteger(R.integer.rotation_acceleration_3x_ms);
         mRotationAcceleration2xMs =
                 getResources().getInteger(R.integer.rotation_acceleration_2x_ms);
+
+        int focusAreaMaxDepth = getResources().getInteger(R.integer.focus_area_max_depth);
+        mNavigationHelper = new NavigationHelper(focusAreaMaxDepth);
     }
 
     @Override
@@ -133,7 +139,7 @@ public class RotaryService extends RotaryServiceBase {
                     if (sourceNode != null && !sourceNode.equals(mFocusedNode)) {
                         // Android doesn't clear focus automatically when focus is set in another
                         // window.
-                        // TODO: remove this workaround once it's fixed.
+                        // TODO(b/152244654): remove this workaround once it's fixed.
                         maybeClearFocusInCurrentWindow(sourceNode);
                         setFocusedNode(sourceNode);
                     }
@@ -213,16 +219,16 @@ public class RotaryService extends RotaryServiceBase {
                 handleRotateEvent(View.FOCUS_FORWARD, event.getRepeatCount(), event.getEventTime());
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT:
-                // TODO: handleNudgeEvent(View.FOCUS_LEFT);
+                handleNudgeEvent(View.FOCUS_LEFT);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT:
-                // TODO: handleNudgeEvent(View.FOCUS_RIGHT);
+                handleNudgeEvent(View.FOCUS_RIGHT);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP:
-                // TODO: handleNudgeEvent(View.FOCUS_UP);
+                handleNudgeEvent(View.FOCUS_UP);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN:
-                // TODO: handleNudgeEvent(View.FOCUS_DOWN);
+                handleNudgeEvent(View.FOCUS_DOWN);
                 return true;
             case KeyEvent.KEYCODE_NAVIGATE_IN:
                 mClickRepeatCount = event.getRepeatCount();
@@ -234,6 +240,28 @@ public class RotaryService extends RotaryServiceBase {
                 // Do nothing
                 return false;
         }
+    }
+
+    private void handleNudgeEvent(int direction) {
+        if (initFocus()) {
+            return;
+        }
+        // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
+        List<AccessibilityWindowInfo> windows = getWindows();
+        AccessibilityNodeInfo targetNode =
+                mNavigationHelper.findNudgeTarget(windows, mFocusedNode, direction);
+        Utils.recycleWindows(windows);
+        if (targetNode == null) {
+            logw("Failed to find nudge target");
+            return;
+        }
+
+        // Android doesn't clear focus automatically when focus is set in another window.
+        // TODO(b/152244654): remove this workaround once it's fixed.
+        maybeClearFocusInCurrentWindow(targetNode);
+
+        performFocusAction(targetNode);
+        Utils.recycleNode(targetNode);
     }
 
     private void handleRotateEvent(int direction, int count, long eventTime) {
@@ -266,7 +294,7 @@ public class RotaryService extends RotaryServiceBase {
     /**
      * Initializes the current focus if it's null.
      * This method should be called when receiving an event from a rotary controller. If the current
-     * focus is not null, if will do nothing. Otherwise, it'll consume the event. Firstly, it tries
+     * focus is not null, it will do nothing. Otherwise, it'll consume the event. Firstly, it tries
      * to focus the view last touched by the user. If that view doesn't exist, or the focus action
      * failed, it will try to focus the first focusable view in the currently active window.
      *
@@ -304,7 +332,7 @@ public class RotaryService extends RotaryServiceBase {
     /**
      * Focuses the last touched node, if any.
      *
-     * @return {@code true} if {@code mLastTouchedNode} isn't {@code null} and it was
+     * @return {@code true} if {@link #mLastTouchedNode} isn't {@code null} and it was
      *         successfully focused
      */
     private boolean focusLastTouchedNode() {
