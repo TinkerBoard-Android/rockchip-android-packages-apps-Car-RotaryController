@@ -25,6 +25,26 @@
     rotate event is smaller than this value, we'll treat the rotation event as 2 rotations. -->
     <integer name="rotation_acceleration_2x_ms">40</integer>
 
-    <!-- How many levels in the node tree to scan for focus areas. -->
-    <integer name="focus_area_max_depth">3</integer>
+    <!-- Values for FocusHistoryCache, which saves last focused node by FocusArea. -->
+    <!-- Type of FocusHistoryCache. The values are defined in RotaryCache. 1 means the cache
+    is disabled, 2 means entries in the cache will expire after a period of time, and 3 means
+    elements in the cache will never expire as long as RotaryService is alive. -->
+    <integer name="focus_history_cache_type">2</integer>
+    <!-- How many milliseconds before an entry in FocusHistoryCache expires. Must be positive value
+    when focus_history_cache_type is 2. -->
+    <integer name="focus_history_expiration_time_ms">10000</integer>
+    <!-- Size of FocusHistoryCache. -->
+    <integer name="focus_history_cache_size">10</integer>
+
+    <!-- Values for FocusAreaHistoryCache, which saves target FocusArea by source FocusArea and
+    direction. -->
+    <!-- Type of FocusAreaHistoryCache. The values are defined in RotaryCache. 1 means the
+    cache is disabled, 2 means entries in the cache will expire after a period of time, and 3 means
+    elements in the cache will never expire as long as RotaryService is alive. -->
+    <integer name="focus_area_history_cache_type">2</integer>
+    <!-- How many milliseconds before an entry in FocusAreaHistoryCache expires. Must be positive
+    value when focus_history_cache_type is 2. -->
+    <integer name="focus_area_history_expiration_time_ms">10000</integer>
+    <!-- Size of FocusAreaHistoryCache. -->
+    <integer name="focus_area_history_cache_size">5</integer>
 </resources>
