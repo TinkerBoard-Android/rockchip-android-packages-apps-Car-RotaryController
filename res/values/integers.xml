@@ -24,4 +24,7 @@
     rotation for a rotate event. If the interval between the current rotate event and the previous
     rotate event is smaller than this value, we'll treat the rotation event as 2 rotations. -->
     <integer name="rotation_acceleration_2x_ms">40</integer>
+
+    <!-- How many levels in the node tree to scan for focus areas. -->
+    <integer name="focus_area_max_depth">3</integer>
 </resources>
