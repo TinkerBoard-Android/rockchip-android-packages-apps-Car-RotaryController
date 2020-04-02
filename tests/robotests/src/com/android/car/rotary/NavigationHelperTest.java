@@ -28,6 +28,7 @@ import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.junit.Before;
@@ -63,6 +64,10 @@ public class NavigationHelperTest {
         private Rect mBoundsInScreen;
         /** Whether this node is focusable. */
         private boolean mFocusable;
+        /** Whether this node is visible to the user. */
+        private boolean mVisibleToUser;
+        /** Whether this node is enabled. */
+        private boolean mEnabled;
 
         AccessibilityNodeInfo build() {
             AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
@@ -115,6 +120,10 @@ public class NavigationHelperTest {
             }
             // Mock AccessibilityNodeInfo#isFocusable().
             when(node.isFocusable()).thenReturn(mFocusable);
+            // Mock AccessibilityNodeInfo#isVisibleToUser().
+            when(node.isVisibleToUser()).thenReturn(mVisibleToUser);
+            // Mock AccessibilityNodeInfo#isEnabled().
+            when(node.isEnabled()).thenReturn(mEnabled);
 
             mNodes.add(node);
             return node;
@@ -142,6 +151,16 @@ public class NavigationHelperTest {
 
         NodeBuilder setFocusable(boolean focusable) {
             mFocusable = focusable;
+            return this;
+        }
+
+        NodeBuilder setVisibleToUser(boolean visibleToUser) {
+            mVisibleToUser = visibleToUser;
+            return this;
+        }
+
+        NodeBuilder setEnabled(boolean enabled) {
+            mEnabled = enabled;
             return this;
         }
     }
@@ -201,6 +220,8 @@ public class NavigationHelperTest {
         AccessibilityNodeInfo parent = new NodeBuilder()
                 .setWindow(window)
                 .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
                 .setClassName(getFocusAreaClassName())
                 .setBoundsInScreen(bounds)
                 .build();
@@ -208,6 +229,8 @@ public class NavigationHelperTest {
         assertThat(parent.getWindow()).isSameAs(window);
         assertThat(parent.getClassName()).isEqualTo(getFocusAreaClassName());
         assertThat(parent.isFocusable()).isTrue();
+        assertThat(parent.isVisibleToUser()).isTrue();
+        assertThat(parent.isEnabled()).isTrue();
 
         Rect boundsInScreen = new Rect();
         parent.getBoundsInScreen(boundsInScreen);
@@ -216,7 +239,6 @@ public class NavigationHelperTest {
         AccessibilityNodeInfo child1 = new NodeBuilder().setParent(parent).build();
         AccessibilityNodeInfo child2 = new NodeBuilder().setParent(parent).build();
 
-        assertThat(child1).isNotEqualTo(child2);
         assertThat(child1.getParent()).isSameAs(parent);
         assertThat(parent.getChildCount()).isEqualTo(2);
         assertThat(parent.getChild(0)).isSameAs(child1);
@@ -238,6 +260,15 @@ public class NavigationHelperTest {
         Rect boundsInScreen = new Rect();
         window.getBoundsInScreen(boundsInScreen);
         assertThat(boundsInScreen).isEqualTo(bounds);
+    }
+
+    @Test
+    public void testSetRootNodeForWindow() {
+        AccessibilityWindowInfo window = new WindowBuilder().build();
+        AccessibilityNodeInfo root = new NodeBuilder().build();
+        setRootNodeForWindow(root, window);
+
+        assertThat(window.getRoot()).isSameAs(root);
     }
 
     @Test
@@ -268,6 +299,122 @@ public class NavigationHelperTest {
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
         target = NavigationHelper.findRotateTarget(button1, direction, 3);
         assertThat(target).isSameAs(button3);
+    }
+
+    @Test
+    public void testFindNudgeTarget() {
+        // There are 2 windows. This is the left window.
+        Rect leftWindowBounds = new Rect(0, 0, 400, 800);
+        AccessibilityWindowInfo leftWindow = new WindowBuilder()
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        // We must specify window and boundsInScreen for each node when finding nudge target.
+        AccessibilityNodeInfo leftRoot = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        setRootNodeForWindow(leftRoot, leftWindow);
+
+        // Left window has 2 vertically aligned focus areas.
+        AccessibilityNodeInfo topLeft = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(getFocusAreaClassName())
+                .setBoundsInScreen(new Rect(0, 0, 400, 400))
+                .build();
+        AccessibilityNodeInfo bottomLeft = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(getFocusAreaClassName())
+                .setBoundsInScreen(new Rect(0, 400, 400, 800))
+                .build();
+
+        // Each focus area has 2 horizontally aligned views that can take focus.
+        AccessibilityNodeInfo topLeft1 = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(topLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 200, 400))
+                .build();
+        AccessibilityNodeInfo topLeft2 = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(topLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(200, 0, 400, 400))
+                .build();
+        AccessibilityNodeInfo bottomLeft1 = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(bottomLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 400, 200, 800))
+                .build();
+        AccessibilityNodeInfo bottomLeft2 = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(bottomLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(200, 400, 400, 800))
+                .build();
+
+        // This is the right window.
+        Rect rightWindowBounds = new Rect(400, 0, 800, 800);
+        AccessibilityWindowInfo rightWindow = new WindowBuilder()
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        AccessibilityNodeInfo rightRoot = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        setRootNodeForWindow(rightRoot, rightWindow);
+
+        // Right window has 1 focus area.
+        AccessibilityNodeInfo topRight = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setParent(rightRoot)
+                .setClassName(getFocusAreaClassName())
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .build();
+
+        // The focus area has 1 view that can take focus.
+        AccessibilityNodeInfo topRight1 = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setParent(topRight)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(400, 0, 600, 400))
+                .build();
+
+        NavigationHelper navigationHelper = new NavigationHelper(3);
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(leftWindow);
+        windows.add(rightWindow);
+
+        // Nudge within the same window.
+        AccessibilityNodeInfo target =
+                navigationHelper.findNudgeTarget(windows, topLeft1, View.FOCUS_DOWN);
+        assertThat(target).isSameAs(bottomLeft1);
+
+        // Reach to the boundary.
+        target = navigationHelper.findNudgeTarget(windows, topLeft1, View.FOCUS_UP);
+        assertThat(target).isNull();
+
+        // Nudge to a different window.
+        target = navigationHelper.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
+        assertThat(target).isSameAs(topLeft2);
+    }
+
+    /** Sets the {@code root} node in the {@code window}'s hierarchy. */
+    private void setRootNodeForWindow(@NonNull AccessibilityNodeInfo root,
+            @NonNull AccessibilityWindowInfo window) {
+        when(window.getRoot()).thenReturn(root);
     }
 
     private String getFocusAreaClassName() {
