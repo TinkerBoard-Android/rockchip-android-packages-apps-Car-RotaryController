@@ -18,13 +18,14 @@ package com.android.car.rotary;
 
 import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.Nullable;
 
 import java.util.List;
 
 /**
- * Utility methods for {@link AccessibilityNodeInfo}.
+ * Utility methods for {@link AccessibilityNodeInfo} and {@link AccessibilityWindowInfo}.
  *
  * Because {@link AccessibilityNodeInfo}s must be recycled, it's important to be consistent about
  * who is responsible for recycling them. For simplicity, it's best to avoid having multiple objects
@@ -94,6 +95,22 @@ class Utils {
         logw("This node is no longer in the view tree: " + node);
         node.recycle();
         return null;
+    }
+
+    /** Recycles a window. */
+    static void recycleWindow(@Nullable AccessibilityWindowInfo window) {
+        if (window != null) {
+            window.recycle();
+        }
+    }
+
+    /** Recycles a list of windows. */
+    static void recycleWindows(@Nullable List<AccessibilityWindowInfo> windows) {
+        if (windows != null) {
+            for (AccessibilityWindowInfo window : windows) {
+                recycleWindow(window);
+            }
+        }
     }
 
     private static void logw(String str) {
