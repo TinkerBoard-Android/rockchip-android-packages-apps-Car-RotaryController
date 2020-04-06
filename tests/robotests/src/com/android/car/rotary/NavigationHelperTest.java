@@ -301,6 +301,33 @@ public class NavigationHelperTest {
         assertThat(target).isSameAs(button3);
     }
 
+    /**
+     * Tests {@link NavigationHelper#findNudgeTarget} in the following layout:
+     *
+     *    ****************leftWindow**************    **************rightWindow****************
+     *    *                                      *    *                                       *
+     *    *  ========topLeft focus area========  *    *  ========topRight focus area========  *
+     *    *  =                                =  *    *  =                                 =  *
+     *    *  =  .............. .............  =  *    *  =  .............                  =  *
+     *    *  =  .           .  .           .  =  *    *  =  .           .                  =  *
+     *    *  =  . topLeft1  .  .  topLeft2 .  =  *    *  =  . topRight1 .                  =  *
+     *    *  =  .           .  .           .  =  *    *  =  .           .                  =  *
+     *    *  =  .............. .............  =  *    *  =  .............                  =  *
+     *    *  =                                =  *    *  =                                 =  *
+     *    *  ==================================  *    *  ===================================  *
+     *    *                                      *    *                                       *
+     *    *  =======bottomLeft focus area======  *    *                                       *
+     *    *  =                                =  *    *                                       *
+     *    *  =  .............. .............  =  *    *                                       *
+     *    *  =  .           .  .           .  =  *    *                                       *
+     *    *  =  .bottomLeft1.  .bottomLeft2.  =  *    *                                       *
+     *    *  =  .           .  .           .  =  *    *                                       *
+     *    *  =  .............  .............  =  *    *                                       *
+     *    *  =                                =  *    *                                       *
+     *    *  ==================================  *    *                                       *
+     *    *                                      *    *                                       *
+     *    ****************************************    *****************************************
+     */
     @Test
     public void testFindNudgeTarget() {
         // There are 2 windows. This is the left window.
@@ -409,6 +436,66 @@ public class NavigationHelperTest {
         // Nudge to a different window.
         target = navigationHelper.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
         assertThat(target).isSameAs(topLeft2);
+    }
+
+    /**
+     * Tests {@link NavigationHelper#findFirstFocusDescendant} in the following node tree:
+     *                   root
+     *                   * *
+     *                *       *
+     *          focusArea1  focusArea2
+     *           * *            * *
+     *         *     *        *      *
+     *     button1 button2 button3 button4
+     */
+    @Test
+    public void testFindFirstFocusDescendant() {
+        AccessibilityNodeInfo root = new NodeBuilder().build();
+        AccessibilityNodeInfo focusArea1 = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusAreaClassName())
+                .build();
+        AccessibilityNodeInfo focusArea2 = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusAreaClassName())
+                .build();
+
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setParent(focusArea1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setParent(focusArea1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setParent(focusArea2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button4 = new NodeBuilder()
+                .setParent(focusArea2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+
+        // Search forward from the focus area.
+        when(focusArea1.focusSearch(direction)).thenReturn(button2);
+        AccessibilityNodeInfo target = NavigationHelper.findFirstFocusDescendant(root);
+        assertThat(target).isSameAs(button2);
+
+        // Fall back to tree traversal.
+        when(focusArea1.focusSearch(direction)).thenReturn(null);
+        target = NavigationHelper.findFirstFocusDescendant(root);
+        assertThat(target).isSameAs(button1);
     }
 
     /** Sets the {@code root} node in the {@code window}'s hierarchy. */
