@@ -123,11 +123,92 @@ class NavigationHelper {
         return targetNode;
     }
 
+    /**
+     * Searches the {@code rootNode} and its descendants in depth-first order, and returns the first
+     * focus descendant (a node inside a focus area that can take focus) if any, or returns null if
+     * not found. The caller is responsible for recycling the result.
+     */
+    static AccessibilityNodeInfo findFirstFocusDescendant(@NonNull AccessibilityNodeInfo rootNode) {
+        AccessibilityNodeInfo focusArea = findFirstFocusArea(rootNode);
+        if (focusArea == null) {
+            loge("No FocusArea in the tree");
+            return null;
+        }
+        AccessibilityNodeInfo focusDescendant = findFirstFocus(focusArea);
+        focusArea.recycle();
+        return focusDescendant;
+    }
+
     /** Sets a mock Utils instance for testing. */
     @VisibleForTesting
     static void setUtils(@NonNull Utils utils) {
         sUtils = utils;
         // TODO(b/151349253): RotaryCache.setUtils(utils);
+    }
+
+    /**
+     * Searches the given {@code node} and its descendants in depth-first order, and returns the
+     * first {@link FocusArea}, or returns null if not found. The caller is responsible for
+     * recycling the result.
+     */
+    private static AccessibilityNodeInfo findFirstFocusArea(@NonNull AccessibilityNodeInfo node) {
+        if (isFocusArea(node)) {
+            return copyNode(node);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo childNode = node.getChild(i);
+            if (childNode != null) {
+                AccessibilityNodeInfo focusArea = findFirstFocusArea(childNode);
+                childNode.recycle();
+                if (focusArea != null) {
+                    return focusArea;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the first node that can take focus in tab order inside the given {@code focusArea}.
+     * The caller is responsible for recycling result.
+     */
+    private static AccessibilityNodeInfo findFirstFocus(@NonNull AccessibilityNodeInfo focusArea) {
+        // First try searching forward from the focus area. This is a quick way to find the first
+        // node within the focus area but it doesn't always work.
+        AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
+        if (targetNode != null) {
+            AccessibilityNodeInfo ancestorFocusArea = getAncestorFocusArea(targetNode);
+            boolean isTargetInFocusArea = focusArea.equals(ancestorFocusArea);
+            Utils.recycleNode(ancestorFocusArea);
+            if (isTargetInFocusArea) {
+                return targetNode;
+            }
+        }
+        Utils.recycleNode(targetNode);
+
+        // Fall back to tree traversal.
+        logw("Falling back to tree traversal");
+        return findDepthFirstFocus(focusArea);
+    }
+
+    /**
+     * Searches the given {@code node} and its descendants in depth-first order, and returns the
+     * first node that can take focus, or returns null if not found. The caller is responsible for
+     * recycling result.
+     */
+    private static AccessibilityNodeInfo findDepthFirstFocus(@NonNull AccessibilityNodeInfo node) {
+        if (canTakeFocus(node)) {
+            return copyNode(node);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            AccessibilityNodeInfo result = findDepthFirstFocus(child);
+            child.recycle();
+            if (result != null) {
+                return result;
+            }
+        }
+        return null;
     }
 
     /**
@@ -243,13 +324,12 @@ class NavigationHelper {
     }
 
     /**
-     * Adds the given {@code node} and all its descendants to the given list, but only if they can
-     * take focus (visible, focusable and enabled) and they are not focus areas. The caller is
-     * responsible for recycling added nodes.
+     * Adds the given {@code node} and all its focus descendants (nodes that can take focus) to the
+     * given list. The caller is responsible for recycling added nodes.
      */
     private static void addFocusDescendants(@NonNull AccessibilityNodeInfo node,
             @NonNull List<AccessibilityNodeInfo> results) {
-        if (canTakeFocus(node) && !isFocusArea(node)) {
+        if (canTakeFocus(node)) {
             results.add(copyNode(node));
         }
         for (int i = 0; i < node.getChildCount(); i++) {
@@ -261,7 +341,9 @@ class NavigationHelper {
 
     /** Returns whether the given {@code node} can be focused by a rotary controller. */
     private static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
-        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled();
+        // TODO(b/151458195): remove "!isFocusArea(node)" once FocusArea is not focusable.
+        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
+                && !isFocusArea(node);
     }
 
     /**
