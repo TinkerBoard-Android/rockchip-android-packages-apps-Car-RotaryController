@@ -296,7 +296,7 @@ public class RotaryService extends RotaryServiceBase {
      * This method should be called when receiving an event from a rotary controller. If the current
      * focus is not null, it will do nothing. Otherwise, it'll consume the event. Firstly, it tries
      * to focus the view last touched by the user. If that view doesn't exist, or the focus action
-     * failed, it will try to focus the first focusable view in the currently active window.
+     * failed, it will try to focus the first focus descendant in the currently active window.
      *
      * @return whether the event was consumed by this method
      */
@@ -311,7 +311,7 @@ public class RotaryService extends RotaryServiceBase {
                 return true;
             }
         }
-        focusFirstFocusable();
+        focusFirstFocusDescendant();
         return true;
     }
 
@@ -344,9 +344,24 @@ public class RotaryService extends RotaryServiceBase {
         return lastTouchedNodeFocused;
     }
 
-    /** Focuses the first focusable node in the current window, if any. */
-    private void focusFirstFocusable() {
-        // TODO: implement NavigationHelper.findFirstFocusable().
+    /**
+     * Focuses the first focus descendant (a node inside a focus area that can take focus) in the
+     * currently active window, if any.
+     */
+    private void focusFirstFocusDescendant() {
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        if (rootNode == null) {
+            loge("rootNode of active window is null");
+            return;
+        }
+        AccessibilityNodeInfo targetNode = NavigationHelper.findFirstFocusDescendant(rootNode);
+        rootNode.recycle();
+        if (targetNode == null) {
+            logw("Failed to find the first focus descendant");
+            return;
+        }
+        performFocusAction(targetNode);
+        targetNode.recycle();
     }
 
 
@@ -434,6 +449,12 @@ public class RotaryService extends RotaryServiceBase {
 
     private static AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
         return sUtils.copyNode(node);
+    }
+
+    private static void loge(String str) {
+        if (DEBUG) {
+            Log.e(TAG, str);
+        }
     }
 
     private static void logw(String str) {
