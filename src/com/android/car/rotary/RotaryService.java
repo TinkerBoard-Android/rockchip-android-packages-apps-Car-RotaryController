@@ -51,7 +51,7 @@ public class RotaryService extends RotaryServiceBase {
     @NonNull
     private static Utils sUtils = Utils.getInstance();
 
-    private NavigationHelper mNavigationHelper;
+    private Navigator mNavigator;
 
     /**
      * Time interval in milliseconds to decide whether we should accelerate the rotation by 3 times
@@ -64,6 +64,9 @@ public class RotaryService extends RotaryServiceBase {
      * for a rotate event.
      */
     private int mRotationAcceleration2xMs;
+
+    /** Whether to clear focus area history when the user rotates the controller. */
+    private boolean mClearFocusAreaHistoryWhenRotating;
 
     /** The currently focused node, if any. */
     private AccessibilityNodeInfo mFocusedNode = null;
@@ -114,8 +117,30 @@ public class RotaryService extends RotaryServiceBase {
         mRotationAcceleration2xMs =
                 getResources().getInteger(R.integer.rotation_acceleration_2x_ms);
 
-        int focusAreaMaxDepth = getResources().getInteger(R.integer.focus_area_max_depth);
-        mNavigationHelper = new NavigationHelper(focusAreaMaxDepth);
+        mClearFocusAreaHistoryWhenRotating =
+                getResources().getBoolean(R.bool.clear_focus_area_history_when_rotating);
+
+        @RotaryCache.CacheType int focusHistoryCacheType =
+                getResources().getInteger(R.integer.focus_history_cache_type);
+        int focusHistoryCacheSize =
+                getResources().getInteger(R.integer.focus_history_cache_size);
+        int focusHistoryExpirationTimeMs =
+                getResources().getInteger(R.integer.focus_history_expiration_time_ms);
+
+        @RotaryCache.CacheType int focusAreaHistoryCacheType =
+                getResources().getInteger(R.integer.focus_area_history_cache_type);
+        int focusAreaHistoryCacheSize =
+                getResources().getInteger(R.integer.focus_area_history_cache_size);
+        int focusAreaHistoryExpirationTimeMs =
+                getResources().getInteger(R.integer.focus_area_history_expiration_time_ms);
+
+        mNavigator = new Navigator(
+                focusHistoryCacheType,
+                focusHistoryCacheSize,
+                focusHistoryExpirationTimeMs,
+                focusAreaHistoryCacheType,
+                focusAreaHistoryCacheSize,
+                focusAreaHistoryExpirationTimeMs);
     }
 
     @Override
@@ -249,7 +274,7 @@ public class RotaryService extends RotaryServiceBase {
         // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
         List<AccessibilityWindowInfo> windows = getWindows();
         AccessibilityNodeInfo targetNode =
-                mNavigationHelper.findNudgeTarget(windows, mFocusedNode, direction);
+                mNavigator.findNudgeTarget(windows, mFocusedNode, direction);
         Utils.recycleWindows(windows);
         if (targetNode == null) {
             logw("Failed to find nudge target");
@@ -265,15 +290,16 @@ public class RotaryService extends RotaryServiceBase {
     }
 
     private void handleRotateEvent(int direction, int count, long eventTime) {
-        // TODO(b/151349253): Clear the focus area nudge history when the user rotates.
-        // mNavigationHelper.clearFocusAreaHistory();
+        if (mClearFocusAreaHistoryWhenRotating) {
+            mNavigator.clearFocusAreaHistory();
+        }
 
         if (initFocus()) {
             return;
         }
         int rotationCount = getRotateAcceleration(count, eventTime);
         AccessibilityNodeInfo targetNode =
-                mNavigationHelper.findRotateTarget(mFocusedNode, direction, rotationCount);
+                mNavigator.findRotateTarget(mFocusedNode, direction, rotationCount);
         if (targetNode == null) {
             logw("Failed to find rotate target");
             return;
@@ -354,7 +380,7 @@ public class RotaryService extends RotaryServiceBase {
             loge("rootNode of active window is null");
             return;
         }
-        AccessibilityNodeInfo targetNode = NavigationHelper.findFirstFocusDescendant(rootNode);
+        AccessibilityNodeInfo targetNode = Navigator.findFirstFocusDescendant(rootNode);
         rootNode.recycle();
         if (targetNode == null) {
             logw("Failed to find the first focus descendant");
@@ -378,6 +404,11 @@ public class RotaryService extends RotaryServiceBase {
     private void setFocusedNodeInternal(@Nullable AccessibilityNodeInfo focusedNode) {
         Utils.recycleNode(mFocusedNode);
         mFocusedNode = copyNode(focusedNode);
+
+        // Cache the focused node by focus area.
+        if (mFocusedNode != null) {
+            mNavigator.saveFocusedNode(mFocusedNode);
+        }
     }
 
     /**
