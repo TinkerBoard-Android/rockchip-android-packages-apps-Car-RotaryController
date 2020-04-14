@@ -16,6 +16,7 @@
 package com.android.car.rotary;
 
 import android.graphics.Rect;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -32,18 +33,39 @@ import java.util.List;
  * A helper class used for finding the next focusable node when the rotary controller is rotated or
  * nudged.
  */
-class NavigationHelper {
-    private static final String TAG = "NavigationHelper";
+class Navigator {
+    private static final String TAG = "Navigator";
     private static final boolean DEBUG = false;
 
     @NonNull
     private static Utils sUtils = Utils.getInstance();
 
-    /** How many levels in the node tree to scan for focus areas. */
-    private int mFocusAreaMaxDepth;
+    private final RotaryCache mRotaryCache;
 
-    NavigationHelper(int focusAreaMaxDepth) {
-        mFocusAreaMaxDepth = focusAreaMaxDepth;
+    Navigator(@RotaryCache.CacheType int focusHistoryCacheType,
+            int focusHistoryCacheSize,
+            int focusHistoryExpirationTimeMs,
+            @RotaryCache.CacheType int focusAreaHistoryCacheType,
+            int focusAreaHistoryCacheSize,
+            int focusAreaHistoryExpirationTimeMs) {
+        mRotaryCache = new RotaryCache(focusHistoryCacheType,
+                focusHistoryCacheSize,
+                focusHistoryExpirationTimeMs,
+                focusAreaHistoryCacheType,
+                focusAreaHistoryCacheSize,
+                focusAreaHistoryExpirationTimeMs);
+    }
+
+    /** Clears focus area history cache. */
+    void clearFocusAreaHistory() {
+        mRotaryCache.clearFocusAreaHistory();
+    }
+
+    /** Caches the focused node by focus area. */
+    void saveFocusedNode(@NonNull AccessibilityNodeInfo focusedNode) {
+        AccessibilityNodeInfo focusArea = getAncestorFocusArea(focusedNode);
+        mRotaryCache.saveFocusedNode(focusArea, focusedNode, SystemClock.elapsedRealtime());
+        Utils.recycleNode(focusArea);
     }
 
     /**
@@ -65,6 +87,14 @@ class NavigationHelper {
         Utils.recycleNode(currentFocusArea);
         if (targetFocusArea == null) {
             return null;
+        }
+
+        // Return the recently focused node within the target focus area, if any.
+        AccessibilityNodeInfo cachedFocusedNode =
+                mRotaryCache.getFocusedNode(targetFocusArea, SystemClock.elapsedRealtime());
+        if (cachedFocusedNode != null) {
+            Utils.recycleNode(targetFocusArea);
+            return cachedFocusedNode;
         }
 
         // Make a list of candidate nodes in the target FocusArea.
@@ -143,7 +173,7 @@ class NavigationHelper {
     @VisibleForTesting
     static void setUtils(@NonNull Utils utils) {
         sUtils = utils;
-        // TODO(b/151349253): RotaryCache.setUtils(utils);
+        RotaryCache.setUtils(utils);
     }
 
     /**
@@ -220,6 +250,19 @@ class NavigationHelper {
             @NonNull AccessibilityNodeInfo focusedNode,
             @NonNull AccessibilityNodeInfo currentFocusArea,
             int direction) {
+        long elapsedRealtime = SystemClock.elapsedRealtime();
+        // If there is a target focus area in the cache, returns it.
+        AccessibilityNodeInfo cachedTargetFocusArea =
+                mRotaryCache.getTargetFocusArea(currentFocusArea, direction, elapsedRealtime);
+        if (cachedTargetFocusArea != null) {
+            // We already got nudge history in the cache. Before nudging back, let's save "nudge
+            // back" history.
+            mRotaryCache.saveTargetFocusArea(
+                    currentFocusArea, cachedTargetFocusArea, direction, elapsedRealtime);
+            return cachedTargetFocusArea;
+        }
+
+        // No target focus area in the cache; we need to search the node tree to find it.
         AccessibilityWindowInfo currentWindow = focusedNode.getWindow();
         if (currentWindow == null) {
             loge("Currently focused window is null");
@@ -251,6 +294,12 @@ class NavigationHelper {
                 chooseBestNudgeCandidate(focusedNode, candidateFocusAreas, direction);
         Utils.recycleNodes(candidateFocusAreas);
 
+        if (targetFocusArea != null) {
+            // Save nudge history.
+            mRotaryCache.saveTargetFocusArea(
+                    currentFocusArea, targetFocusArea, direction, elapsedRealtime);
+        }
+
         return targetFocusArea;
     }
 
@@ -280,8 +329,8 @@ class NavigationHelper {
 
     /**
      * Scans the view hierarchy of the given {@code window} looking for focus areas and returns
-     * them. If there are no explicitly declared {@link FocusArea}s in the top {@link
-     * #mFocusAreaMaxDepth}, returns the root view. The caller is responsible for recycling the
+     * them. If there are no explicitly declared {@link FocusArea}s, returns the root view. The
+     * caller is responsible for recycling the
      * result.
      */
     private @NonNull
@@ -289,7 +338,7 @@ class NavigationHelper {
         List<AccessibilityNodeInfo> results = new ArrayList<>();
         AccessibilityNodeInfo rootNode = window.getRoot();
         if (rootNode != null) {
-            addFocusAreas(rootNode, results, mFocusAreaMaxDepth);
+            addFocusAreas(rootNode, results);
             if (results.isEmpty()) {
                 results.add(copyNode(rootNode));
             }
@@ -305,18 +354,16 @@ class NavigationHelper {
      *
      * @param rootNode the root to start scanning from
      * @param results  a list of focus areas to add to
-     * @param maxDepth how many levels to search
      */
     private static void addFocusAreas(@NonNull AccessibilityNodeInfo rootNode,
-            @NonNull List<AccessibilityNodeInfo> results,
-            int maxDepth) {
+            @NonNull List<AccessibilityNodeInfo> results) {
         if (isFocusArea(rootNode)) {
             results.add(copyNode(rootNode));
-        } else if (maxDepth > 1) {
+        } else {
             for (int i = 0; i < rootNode.getChildCount(); i++) {
                 AccessibilityNodeInfo childNode = rootNode.getChild(i);
                 if (childNode != null) {
-                    addFocusAreas(childNode, results, maxDepth - 1);
+                    addFocusAreas(childNode, results);
                     childNode.recycle();
                 }
             }
