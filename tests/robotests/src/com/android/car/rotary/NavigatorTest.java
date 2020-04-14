@@ -42,7 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
-public class NavigationHelperTest {
+public class NavigatorTest {
     @Mock
     private Utils mUtils;
 
@@ -208,7 +208,7 @@ public class NavigationHelperTest {
         // which returns the passed node itself rather than a copy. As a result, nodes created by
         // the mock method (such as |target| in testFindRotateTarget()) shouldn't be recycled.
         doAnswer(returnsFirstArg()).when(mUtils).copyNode(any(AccessibilityNodeInfo.class));
-        NavigationHelper.setUtils(mUtils);
+        Navigator.setUtils(mUtils);
 
         mNodes = new ArrayList<>();
     }
@@ -289,20 +289,20 @@ public class NavigationHelperTest {
         when(button3.focusSearch(direction)).thenReturn(null);
 
         // Rotate once, the focus should move from button1 to button2.
-        AccessibilityNodeInfo target = NavigationHelper.findRotateTarget(button1, direction, 1);
+        AccessibilityNodeInfo target = Navigator.findRotateTarget(button1, direction, 1);
         assertThat(target).isSameAs(button2);
 
         // Rotate twice, the focus should move from button1 to button3.
-        target = NavigationHelper.findRotateTarget(button1, direction, 2);
+        target = Navigator.findRotateTarget(button1, direction, 2);
         assertThat(target).isSameAs(button3);
 
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
-        target = NavigationHelper.findRotateTarget(button1, direction, 3);
+        target = Navigator.findRotateTarget(button1, direction, 3);
         assertThat(target).isSameAs(button3);
     }
 
     /**
-     * Tests {@link NavigationHelper#findNudgeTarget} in the following layout:
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
      *
      *    ****************leftWindow**************    **************rightWindow****************
      *    *                                      *    *                                       *
@@ -419,27 +419,45 @@ public class NavigationHelperTest {
                 .setBoundsInScreen(new Rect(400, 0, 600, 400))
                 .build();
 
-        NavigationHelper navigationHelper = new NavigationHelper(3);
+        Navigator navigator = new Navigator(
+                /* focusHistoryCacheType= */ RotaryCache.CACHE_TYPE_NEVER_EXPIRE,
+                /* focusHistoryCacheSize= */ 10,
+                /* focusHistoryExpirationTimeMs= */ 0,
+                /* focusAreaHistoryCacheType= */ RotaryCache.CACHE_TYPE_NEVER_EXPIRE,
+                /* focusAreaHistoryCacheSize= */ 5,
+                /* focusAreaHistoryExpirationTimeMs= */ 0);
         List<AccessibilityWindowInfo> windows = new ArrayList<>();
         windows.add(leftWindow);
         windows.add(rightWindow);
 
         // Nudge within the same window.
         AccessibilityNodeInfo target =
-                navigationHelper.findNudgeTarget(windows, topLeft1, View.FOCUS_DOWN);
+                navigator.findNudgeTarget(windows, topLeft1, View.FOCUS_DOWN);
         assertThat(target).isSameAs(bottomLeft1);
 
         // Reach to the boundary.
-        target = navigationHelper.findNudgeTarget(windows, topLeft1, View.FOCUS_UP);
+        target = navigator.findNudgeTarget(windows, topLeft1, View.FOCUS_UP);
         assertThat(target).isNull();
 
         // Nudge to a different window.
-        target = navigationHelper.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
+        target = navigator.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
         assertThat(target).isSameAs(topLeft2);
+
+        // When nudging back, the focus should return to the previously focused node within the
+        // previous focus area, rather than the geometrically close node or focus area.
+
+        // Firstly, we need to save the focused node.
+        navigator.saveFocusedNode(bottomLeft1);
+        // Then nudge to right.
+        target = navigator.findNudgeTarget(windows, bottomLeft1, View.FOCUS_RIGHT);
+        assertThat(target).isSameAs(topRight1);
+        // Then nudge back.
+        target = navigator.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
+        assertThat(target).isSameAs(bottomLeft1);
     }
 
     /**
-     * Tests {@link NavigationHelper#findFirstFocusDescendant} in the following node tree:
+     * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      *                   root
      *                   * *
      *                *       *
@@ -489,12 +507,12 @@ public class NavigationHelperTest {
 
         // Search forward from the focus area.
         when(focusArea1.focusSearch(direction)).thenReturn(button2);
-        AccessibilityNodeInfo target = NavigationHelper.findFirstFocusDescendant(root);
+        AccessibilityNodeInfo target = Navigator.findFirstFocusDescendant(root);
         assertThat(target).isSameAs(button2);
 
         // Fall back to tree traversal.
         when(focusArea1.focusSearch(direction)).thenReturn(null);
-        target = NavigationHelper.findFirstFocusDescendant(root);
+        target = Navigator.findFirstFocusDescendant(root);
         assertThat(target).isSameAs(button1);
     }
 
