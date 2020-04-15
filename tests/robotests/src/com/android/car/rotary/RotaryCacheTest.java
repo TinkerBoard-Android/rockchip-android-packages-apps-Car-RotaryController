@@ -257,7 +257,7 @@ public class RotaryCacheTest {
     }
 
     /**
-     * Creates a {@link AccessibilityNodeInfo}. The result will be recycled when the test is
+     * Creates an {@link AccessibilityNodeInfo}. The result will be recycled when the test is
      * completed.
      */
     private AccessibilityNodeInfo createNode() {
