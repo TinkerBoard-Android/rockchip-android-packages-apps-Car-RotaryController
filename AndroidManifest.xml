@@ -17,6 +17,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.car.rotary">
 
+    <!-- Allows input events to be monitored. -->
+    <uses-permission android:name="android.permission.MONITOR_INPUT"/>
+
     <application>
         <service
             android:name=".RotaryService"

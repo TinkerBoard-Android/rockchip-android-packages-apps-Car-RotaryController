@@ -16,14 +16,23 @@ android_app {
     name: "CarRotaryController",
     srcs: ["src/**/*.java"],
     resource_dirs: ["res"],
-    certificate: "shared",
-    sdk_version: "system_current",
+
+    // Because it uses a platform API (CarInputManager).
+    platform_apis: true,
+
+    // This app should be platform signed because it requires android.permission.MONITOR_INPUT
+    // permission, which is of type "signature".
+    certificate: "platform",
+
     optimize: {
         enabled: false,
     },
     dex_preopt: {
         enabled: false,
     },
+    libs: [
+        "android.car",
+    ],
     static_libs: [
         "car-ui-lib",
     ],
