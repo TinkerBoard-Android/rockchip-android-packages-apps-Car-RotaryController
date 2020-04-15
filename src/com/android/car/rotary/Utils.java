@@ -16,7 +16,6 @@
 
 package com.android.car.rotary;
 
-import android.util.Log;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -35,8 +34,6 @@ import java.util.List;
  * their parameters or the caller will recycle it twice.
  */
 class Utils {
-    private static final String TAG = "Utils";
-    private static final boolean DEBUG = false;
 
     private static final Utils sInstance = new Utils();
 
@@ -92,7 +89,7 @@ class Utils {
         if (succeeded) {
             return node;
         }
-        logw("This node is no longer in the view tree: " + node);
+        L.w("This node is no longer in the view tree: " + node);
         node.recycle();
         return null;
     }
@@ -110,12 +107,6 @@ class Utils {
             for (AccessibilityWindowInfo window : windows) {
                 recycleWindow(window);
             }
-        }
-    }
-
-    private static void logw(String str) {
-        if (DEBUG) {
-            Log.w(TAG, str);
         }
     }
 }
