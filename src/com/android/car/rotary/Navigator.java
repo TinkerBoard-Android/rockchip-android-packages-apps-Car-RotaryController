@@ -17,7 +17,6 @@ package com.android.car.rotary;
 
 import android.graphics.Rect;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -34,9 +33,6 @@ import java.util.List;
  * nudged.
  */
 class Navigator {
-    private static final String TAG = "Navigator";
-    private static final boolean DEBUG = false;
-
     @NonNull
     private static Utils sUtils = Utils.getInstance();
 
@@ -159,13 +155,19 @@ class Navigator {
      * not found. The caller is responsible for recycling the result.
      */
     static AccessibilityNodeInfo findFirstFocusDescendant(@NonNull AccessibilityNodeInfo rootNode) {
-        AccessibilityNodeInfo focusArea = findFirstFocusArea(rootNode);
-        if (focusArea == null) {
-            loge("No FocusArea in the tree");
-            return null;
+        // First try finding the first focus area and searching forward from the focus area. This
+        // is a quick way to find the first node but it doesn't always work.
+        AccessibilityNodeInfo focusDescendant = findFirstFocus(rootNode);
+        if (focusDescendant != null) {
+            return focusDescendant;
         }
-        AccessibilityNodeInfo focusDescendant = findFirstFocus(focusArea);
-        focusArea.recycle();
+
+        // Fall back to tree traversal.
+        L.w("Falling back to tree traversal");
+        focusDescendant = findDepthFirstFocus(rootNode);
+        if (focusDescendant == null) {
+            L.w("No node can take focus in the current window");
+        }
         return focusDescendant;
     }
 
@@ -174,6 +176,24 @@ class Navigator {
     static void setUtils(@NonNull Utils utils) {
         sUtils = utils;
         RotaryCache.setUtils(utils);
+    }
+
+    /**
+     * Searches the {@code rootNode} and its descendants in depth-first order for the first focus
+     * area, and returns the first node that can take focus in tab order from the focus area.
+     * The return value could be a node inside or outside the first focus area, or null if not
+     * found. The caller is responsible for recycling result.
+     */
+    private static AccessibilityNodeInfo findFirstFocus(@NonNull AccessibilityNodeInfo rootNode) {
+        AccessibilityNodeInfo focusArea = findFirstFocusArea(rootNode);
+        if (focusArea == null) {
+            L.e("No FocusArea in the tree");
+            return null;
+        }
+
+        AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
+        focusArea.recycle();
+        return targetNode;
     }
 
     /**
@@ -196,29 +216,6 @@ class Navigator {
             }
         }
         return null;
-    }
-
-    /**
-     * Returns the first node that can take focus in tab order inside the given {@code focusArea}.
-     * The caller is responsible for recycling result.
-     */
-    private static AccessibilityNodeInfo findFirstFocus(@NonNull AccessibilityNodeInfo focusArea) {
-        // First try searching forward from the focus area. This is a quick way to find the first
-        // node within the focus area but it doesn't always work.
-        AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
-        if (targetNode != null) {
-            AccessibilityNodeInfo ancestorFocusArea = getAncestorFocusArea(targetNode);
-            boolean isTargetInFocusArea = focusArea.equals(ancestorFocusArea);
-            Utils.recycleNode(ancestorFocusArea);
-            if (isTargetInFocusArea) {
-                return targetNode;
-            }
-        }
-        Utils.recycleNode(targetNode);
-
-        // Fall back to tree traversal.
-        logw("Falling back to tree traversal");
-        return findDepthFirstFocus(focusArea);
     }
 
     /**
@@ -265,7 +262,7 @@ class Navigator {
         // No target focus area in the cache; we need to search the node tree to find it.
         AccessibilityWindowInfo currentWindow = focusedNode.getWindow();
         if (currentWindow == null) {
-            loge("Currently focused window is null");
+            L.e("Currently focused window is null");
             return null;
         }
 
@@ -443,7 +440,7 @@ class Navigator {
         }
         AccessibilityNodeInfo parentNode = node.getParent();
         if (parentNode == null) {
-            logw("Couldn't find ancestor focus area for given node: " + node);
+            L.w("Couldn't find ancestor focus area for given node: " + node);
             return copyNode(node);
         }
         AccessibilityNodeInfo result = getAncestorFocusArea(parentNode);
@@ -457,17 +454,5 @@ class Navigator {
         // TODO(b/151458195): return FocusArea.class.getName().contentEquals(className);
         String focusArea = "com.android.car.ui.FocusArea";
         return focusArea.contentEquals(className);
-    }
-
-    private static void loge(String str) {
-        if (DEBUG) {
-            Log.e(TAG, str);
-        }
-    }
-
-    private static void logw(String str) {
-        if (DEBUG) {
-            Log.w(TAG, str);
-        }
     }
 }
