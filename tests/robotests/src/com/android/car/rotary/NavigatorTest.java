@@ -31,6 +31,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
 
 import org.junit.Before;
@@ -45,6 +46,9 @@ import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 public class NavigatorTest {
+    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    private static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+
     @Mock
     private Utils mUtils;
 
@@ -224,12 +228,12 @@ public class NavigatorTest {
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(bounds)
                 .build();
 
         assertThat(parent.getWindow()).isSameAs(window);
-        assertThat(parent.getClassName()).isEqualTo(getFocusAreaClassName());
+        assertThat(parent.getClassName()).isEqualTo(FOCUS_AREA_CLASS_NAME);
         assertThat(parent.isFocusable()).isTrue();
         assertThat(parent.isVisibleToUser()).isTrue();
         assertThat(parent.isEnabled()).isTrue();
@@ -287,7 +291,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo root = new NodeBuilder().build();
         AccessibilityNodeInfo focusArea = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .build();
 
         AccessibilityNodeInfo button1 = new NodeBuilder().setParent(focusArea).build();
@@ -327,14 +331,14 @@ public class NavigatorTest {
         AccessibilityNodeInfo root = new NodeBuilder().build();
         AccessibilityNodeInfo focusParkingView = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusParkingViewClassName())
+                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
                 .build();
         AccessibilityNodeInfo focusArea = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .build();
 
         AccessibilityNodeInfo button1 = new NodeBuilder()
@@ -405,13 +409,13 @@ public class NavigatorTest {
         AccessibilityNodeInfo topLeft = new NodeBuilder()
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
         AccessibilityNodeInfo bottomLeft = new NodeBuilder()
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(0, 400, 400, 800))
                 .build();
 
@@ -464,7 +468,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo topRight = new NodeBuilder()
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
 
@@ -549,7 +553,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(0, 0, 300, 400))
                 .build();
         AccessibilityNodeInfo left = new NodeBuilder()
@@ -565,7 +569,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo parking1 = new NodeBuilder()
                 .setWindow(leftWindow)
                 .setParent(leftFocusArea)
-                .setClassName(getFocusParkingViewClassName())
+                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
@@ -587,7 +591,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(500, 0, 800, 400))
                 .build();
         AccessibilityNodeInfo right = new NodeBuilder()
@@ -603,7 +607,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo parking2 = new NodeBuilder()
                 .setWindow(rightWindow)
                 .setParent(rightFocusArea)
-                .setClassName(getFocusParkingViewClassName())
+                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
@@ -641,11 +645,11 @@ public class NavigatorTest {
         AccessibilityNodeInfo root = new NodeBuilder().build();
         AccessibilityNodeInfo focusArea1 = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .build();
         AccessibilityNodeInfo focusArea2 = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .build();
 
         AccessibilityNodeInfo button1 = new NodeBuilder()
@@ -701,14 +705,14 @@ public class NavigatorTest {
         AccessibilityNodeInfo root = new NodeBuilder().build();
         AccessibilityNodeInfo focusParkingView = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusParkingViewClassName())
+                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
                 .build();
         AccessibilityNodeInfo focusArea = new NodeBuilder()
                 .setParent(root)
-                .setClassName(getFocusAreaClassName())
+                .setClassName(FOCUS_AREA_CLASS_NAME)
                 .build();
 
         AccessibilityNodeInfo button1 = new NodeBuilder()
@@ -741,14 +745,5 @@ public class NavigatorTest {
     private void setRootNodeForWindow(@NonNull AccessibilityNodeInfo root,
             @NonNull AccessibilityWindowInfo window) {
         when(window.getRoot()).thenReturn(root);
-    }
-
-    private String getFocusAreaClassName() {
-        // TODO(b/151458195): return FocusArea.class.getName();
-        return "com.android.car.ui.FocusArea";
-    }
-
-    private String getFocusParkingViewClassName() {
-        return FocusParkingView.class.getName();
     }
 }
