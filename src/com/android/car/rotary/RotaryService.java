@@ -256,10 +256,10 @@ public class RotaryService extends AccessibilityService implements
      */
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (Build.IS_DEBUGGABLE && handleKeyEvent(event)) {
-            return true;
+        if (Build.IS_DEBUGGABLE) {
+            return handleKeyEvent(event);
         }
-        return super.onKeyEvent(event);
+        return false;
     }
 
     /**
@@ -313,13 +313,7 @@ public class RotaryService extends AccessibilityService implements
                 return handleKeyDownEvent(event);
             }
             case KeyEvent.ACTION_UP: {
-                int keyCode = event.getKeyCode();
-                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
-                    if (mClickRepeatCount == 0) {
-                        // TODO: handleClickEvent();
-                    }
-                }
-                break;
+                return handleKeyUpEvent(event);
             }
             default:
                 // Do nothing.
@@ -329,13 +323,7 @@ public class RotaryService extends AccessibilityService implements
 
     /** Handles key down events. Returns whether the key event was handled. */
     private boolean handleKeyDownEvent(KeyEvent event) {
-        int keyCode = event.getKeyCode();
-        if (Build.IS_DEBUGGABLE) {
-            Integer mappingKeyCode = TEST_TO_REAL_KEYCODE_MAP.get(keyCode);
-            if (mappingKeyCode != null) {
-                keyCode = mappingKeyCode;
-            }
-        }
+        int keyCode = getKeyCode(event);
         switch (keyCode) {
             case KeyEvent.KEYCODE_C:
                 handleRotateEvent(View.FOCUS_BACKWARD, event.getRepeatCount(),
@@ -364,8 +352,50 @@ public class RotaryService extends AccessibilityService implements
                 return true;
             default:
                 // Do nothing
-                return false;
         }
+        return false;
+    }
+
+    /** Handles key up events. Returns whether the event was handled. */
+    private boolean handleKeyUpEvent(KeyEvent event) {
+        int keyCode = getKeyCode(event);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
+            if (mClickRepeatCount == 0) {
+                handleClickEvent();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int getKeyCode(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (Build.IS_DEBUGGABLE) {
+            Integer mappingKeyCode = TEST_TO_REAL_KEYCODE_MAP.get(keyCode);
+            if (mappingKeyCode != null) {
+                keyCode = mappingKeyCode;
+            }
+        }
+        return keyCode;
+    }
+
+    /** Handles click event. */
+    private void handleClickEvent() {
+        if (initFocus()) {
+            return;
+        }
+        // If the focus is in the application window, inject click event and the application will
+        // handle it.
+        if (isFocusInApplicationWindow()) {
+            // TODO(b/153888670): inject KeyEvent.KEYCODE_DPAD_CENTER event.
+            return;
+        }
+
+        boolean result = mFocusedNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        if (!result) {
+            L.w("Failed to perform ACTION_CLICK on " + mFocusedNode);
+        }
+        mRotaryClicked = true;
     }
 
     private void handleNudgeEvent(int direction) {
@@ -417,6 +447,17 @@ public class RotaryService extends AccessibilityService implements
         }
         performFocusAction(targetNode);
         Utils.recycleNode(targetNode);
+    }
+
+    /** Returns whether the focused node is in Application widow. */
+    private boolean isFocusInApplicationWindow() {
+        if (mFocusedNode == null) {
+            return false;
+        }
+        AccessibilityWindowInfo window = mFocusedNode.getWindow();
+        boolean result = window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION;
+        Utils.recycleWindow(window);
+        return result;
     }
 
     /**
