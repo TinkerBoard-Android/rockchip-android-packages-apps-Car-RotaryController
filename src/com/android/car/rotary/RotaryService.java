@@ -211,10 +211,10 @@ public class RotaryService extends AccessibilityService implements
                     // events to keep mFocusedNode up to date and to clear the focus when moving
                     // between windows.
                     AccessibilityNodeInfo sourceNode = event.getSource();
-                    if (sourceNode != null && !sourceNode.equals(mFocusedNode)) {
+                    if (sourceNode != null && !sourceNode.equals(mFocusedNode)
+                            && !Navigator.isFocusParkingView(sourceNode)) {
                         // Android doesn't clear focus automatically when focus is set in another
                         // window.
-                        // TODO(b/152244654): remove this workaround once it's fixed.
                         maybeClearFocusInCurrentWindow(sourceNode);
                         setFocusedNode(sourceNode);
                     }
@@ -383,7 +383,6 @@ public class RotaryService extends AccessibilityService implements
         }
 
         // Android doesn't clear focus automatically when focus is set in another window.
-        // TODO(b/152244654): remove this workaround once it's fixed.
         maybeClearFocusInCurrentWindow(targetNode);
 
         performFocusAction(targetNode);
@@ -453,18 +452,40 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
-    /** Clears the current focus if {@code targetNode} is in a different window. */
-    private void maybeClearFocusInCurrentWindow(@NonNull AccessibilityNodeInfo targetNode) {
+    /**
+     * Clears the current rotary focus if {@code targetFocus} is in a different window.
+     * If we really clear focus in the current window, Android will re-focus a view in the current
+     * window automatically, resulting in the current window and the target window being focused
+     * simultaneously. To avoid that we don't really clear the focus. Instead, we "park" the focus
+     * on a FocusParkingView in the current window. FocusParkingView is transparent no matter
+     * whether it's focused or not, so it's invisible to the user.
+     */
+    private void maybeClearFocusInCurrentWindow(@NonNull AccessibilityNodeInfo targetFocus) {
         if (mFocusedNode == null || !mFocusedNode.isFocused()
-                || mFocusedNode.getWindowId() == targetNode.getWindowId()) {
+                || mFocusedNode.getWindowId() == targetFocus.getWindowId()) {
             return;
         }
-        boolean result = mFocusedNode.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS);
+
+        AccessibilityWindowInfo window = mFocusedNode.getWindow();
+        if (window == null) {
+            L.e("Failed to get window of " + mFocusedNode);
+            return;
+        }
+        AccessibilityNodeInfo focusParkingView = Navigator.findFocusParkingView(window);
+        window.recycle();
+        if (focusParkingView == null) {
+            L.e("No FocusParkingView in " + window);
+            return;
+        }
+
+        boolean result = focusParkingView.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
         if (result) {
             setFocusedNode(null);
         } else {
-            L.w("Failed to perform ACTION_CLEAR_FOCUS");
+            L.w("Failed to perform ACTION_FOCUS on " + focusParkingView);
         }
+
+        focusParkingView.recycle();
     }
 
     /**
@@ -549,9 +570,8 @@ public class RotaryService extends AccessibilityService implements
             return true;
         }
         if (targetNode.isFocused()) {
-            L.w("targetNode is already focused.");
-            setFocusedNode(targetNode);
-            return true;
+            // TODO(b/154560076): find out why isFocused() returned true though it's not focused.
+            L.w("targetNode is already focused: " + targetNode);
         }
         boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
         if (result) {
