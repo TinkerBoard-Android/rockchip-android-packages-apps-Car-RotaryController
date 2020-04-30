@@ -25,6 +25,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.car.ui.FocusParkingView;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -171,11 +173,57 @@ class Navigator {
         return focusDescendant;
     }
 
+    /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
+    static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && FocusParkingView.class.getName().contentEquals(className);
+    }
+
     /** Sets a mock Utils instance for testing. */
     @VisibleForTesting
     static void setUtils(@NonNull Utils utils) {
         sUtils = utils;
         RotaryCache.setUtils(utils);
+    }
+
+    /**
+     * Searches all the nodes in the {@code window}, and returns the node representing a {@link
+     * FocusParkingView}, if any, or returns null if not found. The caller is responsible for
+     * recycling the result.
+     */
+    static AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityWindowInfo window) {
+        AccessibilityNodeInfo root = window.getRoot();
+        if (root == null) {
+            L.e("No root node in " + window);
+            return null;
+        }
+        AccessibilityNodeInfo focusParkingView = findFocusParkingView(root);
+        root.recycle();
+        return focusParkingView;
+    }
+
+    /**
+     * Searches the {@code node} and its descendants in depth-first order, and returns the node
+     * representing a {@link FocusParkingView}, if any, or returns null if not found. The caller is
+     * responsible for recycling the result.
+     */
+    private static AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        if (isFocusParkingView(node)) {
+            return copyNode(node);
+        }
+        // No need to search in focus areas because FocusParkingViews are outside of focus areas.
+        if (isFocusArea(node)) {
+            return null;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            AccessibilityNodeInfo focusParkingView = findFocusParkingView(child);
+            child.recycle();
+            if (focusParkingView != null) {
+                return focusParkingView;
+            }
+        }
+        return null;
     }
 
     /**
@@ -192,6 +240,26 @@ class Navigator {
         }
 
         AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
+        AccessibilityNodeInfo firstTarget = copyNode(targetNode);
+        // focusSearch() searches in the active window, which has at least one FocusParkingView. We
+        // need to skip it.
+        while (targetNode != null && isFocusParkingView(targetNode)) {
+            L.d("Found FocusParkingView, continue focusSearch() ...");
+            AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(View.FOCUS_FORWARD);
+            targetNode.recycle();
+            targetNode = nextTargetNode;
+
+            // If we found the same FocusParkingView again, it means all the focusable views in
+            // current window are FocusParkingViews, so we should just return null.
+            if (firstTarget.equals(targetNode)) {
+                L.w("Stop focusSearch() because there is no view to take focus except "
+                        + "FocusParkingViews");
+                Utils.recycleNode(targetNode);
+                targetNode = null;
+                break;
+            }
+        }
+        Utils.recycleNode(firstTarget);
         focusArea.recycle();
         return targetNode;
     }
@@ -387,7 +455,8 @@ class Navigator {
     private static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
         // TODO(b/151458195): remove "!isFocusArea(node)" once FocusArea is not focusable.
         return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
-                && !isFocusArea(node);
+                && !isFocusArea(node)
+                && !isFocusParkingView(node);
     }
 
     /**
