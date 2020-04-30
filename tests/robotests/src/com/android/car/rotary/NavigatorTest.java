@@ -31,6 +31,8 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.car.ui.FocusParkingView;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -271,6 +273,15 @@ public class NavigatorTest {
         assertThat(window.getRoot()).isSameAs(root);
     }
 
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     *              root
+     *               |
+     *           focusArea
+     *          /    |    \
+     *        /      |     \
+     *    button1 button2 button3
+     */
     @Test
     public void testFindRotateTarget() {
         AccessibilityNodeInfo root = new NodeBuilder().build();
@@ -299,6 +310,54 @@ public class NavigatorTest {
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
         target = Navigator.findRotateTarget(button1, direction, 3);
         assertThat(target).isSameAs(button3);
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     *                     root
+     *                    /    \
+     *                   /      \
+     *      focusParkingView   focusArea
+     *                           /    \
+     *                          /      \
+     *                       button1  button2
+     */
+    @Test
+    public void testFindRotateTargetNoWrapAround() {
+        AccessibilityNodeInfo root = new NodeBuilder().build();
+        AccessibilityNodeInfo focusParkingView = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusParkingViewClassName())
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo focusArea = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusAreaClassName())
+                .build();
+
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(focusParkingView);
+        when(focusParkingView.focusSearch(direction)).thenReturn(button1);
+
+        // Rotate at the end of focus area, no wrap-around should happen.
+        AccessibilityNodeInfo target = Navigator.findRotateTarget(button2, direction, 1);
+        assertThat(target).isNull();
     }
 
     /**
@@ -457,13 +516,124 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     *
+     *    ****************leftWindow**************    **************rightWindow***************
+     *    *                                      *    *                                      *
+     *    *  ===left focus area===   parking1    *    *   parking2   ===right focus area===  *
+     *    *  =                   =               *    *              =                    =  *
+     *    *  =  .............    =               *    *              =  .............     =  *
+     *    *  =  .           .    =               *    *              =  .           .     =  *
+     *    *  =  .   left    .    =               *    *              =  .   right   .     =  *
+     *    *  =  .           .    =               *    *              =  .           .     =  *
+     *    *  =  .............    =               *    *              =  .............     =  *
+     *    *  =                   =               *    *              =                    =  *
+     *    *  =====================               *    *              ======================  *
+     *    *                                      *    *                                      *
+     *    ****************************************    *****************************************
+     */
+    @Test
+    public void testFindNudgeTargetWithFocusParkingView() {
+        // There are 2 windows. This is the left window.
+        Rect leftWindowBounds = new Rect(0, 0, 400, 400);
+        AccessibilityWindowInfo leftWindow = new WindowBuilder()
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        AccessibilityNodeInfo leftRoot = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        setRootNodeForWindow(leftRoot, leftWindow);
+
+        // Left focus area and its view inside.
+        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(getFocusAreaClassName())
+                .setBoundsInScreen(new Rect(0, 0, 300, 400))
+                .build();
+        AccessibilityNodeInfo left = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(leftFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 300, 400))
+                .build();
+
+        // Left focus parking view.
+        AccessibilityNodeInfo parking1 = new NodeBuilder()
+                .setWindow(leftWindow)
+                .setParent(leftFocusArea)
+                .setClassName(getFocusParkingViewClassName())
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(350, 0, 351, 1))
+                .build();
+
+        // Right window.
+        Rect rightWindowBounds = new Rect(400, 0, 800, 400);
+        AccessibilityWindowInfo rightWindow = new WindowBuilder()
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        AccessibilityNodeInfo rightRoot = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        setRootNodeForWindow(rightRoot, rightWindow);
+
+        // Right focus area and its view inside.
+        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setParent(rightRoot)
+                .setClassName(getFocusAreaClassName())
+                .setBoundsInScreen(new Rect(500, 0, 800, 400))
+                .build();
+        AccessibilityNodeInfo right = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setParent(rightFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(500, 0, 800, 400))
+                .build();
+
+        // Right focus parking view.
+        AccessibilityNodeInfo parking2 = new NodeBuilder()
+                .setWindow(rightWindow)
+                .setParent(rightFocusArea)
+                .setClassName(getFocusParkingViewClassName())
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(450, 0, 451, 1))
+                .build();
+
+        Navigator navigator = new Navigator(
+                /* focusHistoryCacheType= */ RotaryCache.CACHE_TYPE_NEVER_EXPIRE,
+                /* focusHistoryCacheSize= */ 10,
+                /* focusHistoryExpirationTimeMs= */ 0,
+                /* focusAreaHistoryCacheType= */ RotaryCache.CACHE_TYPE_NEVER_EXPIRE,
+                /* focusAreaHistoryCacheSize= */ 5,
+                /* focusAreaHistoryExpirationTimeMs= */ 0);
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(leftWindow);
+        windows.add(rightWindow);
+
+        // Nudge from left window to right window.
+        AccessibilityNodeInfo target = navigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
+        assertThat(target).isSameAs(right);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      *                   root
-     *                   * *
-     *                *       *
+     *                  /    \
+     *                /       \
      *          focusArea1  focusArea2
-     *           * *            * *
-     *         *     *        *      *
+     *           /   \          /   \
+     *         /      \        /     \
      *     button1 button2 button3 button4
      */
     @Test
@@ -516,6 +686,57 @@ public class NavigatorTest {
         assertThat(target).isSameAs(button1);
     }
 
+    /**
+     * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
+     *                     root
+     *                    /    \
+     *                   /      \
+     *      focusParkingView   focusArea
+     *                           /    \
+     *                          /      \
+     *                      button1   button2
+     */
+    @Test
+    public void testFindFirstFocusDescendantWithFocusParkingView() {
+        AccessibilityNodeInfo root = new NodeBuilder().build();
+        AccessibilityNodeInfo focusParkingView = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusParkingViewClassName())
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo focusArea = new NodeBuilder()
+                .setParent(root)
+                .setClassName(getFocusAreaClassName())
+                .build();
+
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+
+        // Search forward from the focus area.
+        when(focusArea.focusSearch(direction)).thenReturn(button2);
+        AccessibilityNodeInfo target = Navigator.findFirstFocusDescendant(root);
+        assertThat(target).isSameAs(button2);
+
+        // Fall back to tree traversal.
+        when(focusArea.focusSearch(direction)).thenReturn(null);
+        target = Navigator.findFirstFocusDescendant(root);
+        assertThat(target).isSameAs(button1);
+    }
+
     /** Sets the {@code root} node in the {@code window}'s hierarchy. */
     private void setRootNodeForWindow(@NonNull AccessibilityNodeInfo root,
             @NonNull AccessibilityWindowInfo window) {
@@ -525,5 +746,9 @@ public class NavigatorTest {
     private String getFocusAreaClassName() {
         // TODO(b/151458195): return FocusArea.class.getName();
         return "com.android.car.ui.FocusArea";
+    }
+
+    private String getFocusParkingViewClassName() {
+        return FocusParkingView.class.getName();
     }
 }
