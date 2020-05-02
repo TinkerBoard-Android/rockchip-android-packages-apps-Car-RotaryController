@@ -31,6 +31,8 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.car.ui.utils.DirectManipulationHelper;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -111,6 +113,9 @@ public class RotaryService extends AccessibilityService implements
     /** Whether we're in rotary mode (vs touch mode). */
     private boolean mInRotaryMode;
 
+    /** Whether we're in direct manipulation mode. */
+    private boolean mInDirectManipulationMode;
+
     /** The {@link SystemClock#uptimeMillis} when the last rotary rotation event occurred. */
     private long mLastRotateEventTime;
 
@@ -135,6 +140,8 @@ public class RotaryService extends AccessibilityService implements
 
     private Car mCar;
     private CarInputManager mCarInputManager;
+
+    private DirectManipulationHelper mDirectManipulationHelper;
 
     @Override
     public void onCreate() {
@@ -168,6 +175,8 @@ public class RotaryService extends AccessibilityService implements
                 focusAreaHistoryCacheType,
                 focusAreaHistoryCacheSize,
                 focusAreaHistoryExpirationTimeMs);
+
+        mDirectManipulationHelper = new DirectManipulationHelper(this);
     }
 
     @Override
@@ -242,6 +251,14 @@ public class RotaryService extends AccessibilityService implements
                     }
                     Utils.recycleNode(sourceNode);
                 }
+                break;
+            }
+            case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED: {
+                updateDirectManipulationMode(event, true);
+                break;
+            }
+            case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED: {
+                updateDirectManipulationMode(event, false);
                 break;
             }
             default:
@@ -460,6 +477,21 @@ public class RotaryService extends AccessibilityService implements
         return result;
     }
 
+    private void updateDirectManipulationMode(AccessibilityEvent event, boolean enable) {
+        if (!mInRotaryMode || !mDirectManipulationHelper.isDirectManipulation(event)) {
+            return;
+        }
+        AccessibilityNodeInfo sourceNode = event.getSource();
+        if (sourceNode != null && sourceNode.equals(mFocusedNode)) {
+            if (mInDirectManipulationMode != enable) {
+                // Toggle direct manipulation mode upon app's request.
+                mInDirectManipulationMode = enable;
+                L.d((enable ? "Enter" : "Exit") + " direct manipulation mode upon app's request");
+            }
+        }
+        Utils.recycleNode(sourceNode);
+    }
+
     /**
      * Updates {@link #mFocusedNode} and {@link #mLastTouchedNode} in case the {@link View}s
      * represented by them are no longer in the view tree.
@@ -539,7 +571,9 @@ public class RotaryService extends AccessibilityService implements
         boolean lastTouchedNodeFocused = false;
         if (mLastTouchedNode != null) {
             lastTouchedNodeFocused = performFocusAction(mLastTouchedNode);
-            setLastTouchedNode(null);
+            if (mLastTouchedNode != null) {
+                setLastTouchedNode(null);
+            }
         }
         return lastTouchedNodeFocused;
     }
@@ -564,7 +598,6 @@ public class RotaryService extends AccessibilityService implements
         targetNode.recycle();
     }
 
-
     /**
      * Sets {@link #mFocusedNode} to a copy of the given node, and clears {@link #mLastTouchedNode}.
      */
@@ -576,6 +609,17 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void setFocusedNodeInternal(@Nullable AccessibilityNodeInfo focusedNode) {
+        if ((mFocusedNode == null && focusedNode == null) ||
+                (mFocusedNode != null && mFocusedNode.equals(focusedNode))) {
+            L.d("Don't reset mFocusedNode since it stays the same: " + mFocusedNode);
+            return;
+        }
+        if (mInDirectManipulationMode) {
+            // Toggle off direct manipulation mode since the focus has changed.
+            mInDirectManipulationMode = false;
+            L.d("Exit direct manipulation mode since the focus has changed");
+        }
+
         Utils.recycleNode(mFocusedNode);
         mFocusedNode = copyNode(focusedNode);
 
@@ -596,6 +640,11 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void setLastTouchedNodeInternal(@Nullable AccessibilityNodeInfo lastTouchedNode) {
+        if ((mLastTouchedNode == null && lastTouchedNode == null) ||
+                (mLastTouchedNode != null && mLastTouchedNode.equals(lastTouchedNode))) {
+            L.d("Don't reset mLastTouchedNode since it stays the same: " + mLastTouchedNode);
+        }
+
         Utils.recycleNode(mLastTouchedNode);
         mLastTouchedNode = copyNode(lastTouchedNode);
     }
