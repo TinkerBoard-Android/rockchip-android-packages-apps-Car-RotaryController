@@ -60,7 +60,8 @@ import java.util.Map;
  * {@link KeyEvent}s are handled by clicking the view, or moving the focus, sometimes within a
  * window and sometimes between windows.
  * <p>
- * {@link RotaryEvent}s are handled by moving the focus within the same {@link FocusArea}.
+ * {@link RotaryEvent}s are handled by moving the focus within the same {@link
+ * com.android.car.ui.FocusArea}.
  * <p>
  * Note: onFoo methods are all called on the main thread so no locks are needed.
  */

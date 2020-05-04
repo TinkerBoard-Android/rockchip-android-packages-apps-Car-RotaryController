@@ -25,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
 
 import java.util.ArrayList;
@@ -35,6 +36,9 @@ import java.util.List;
  * nudged.
  */
 class Navigator {
+    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    private static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+
     @NonNull
     private static Utils sUtils = Utils.getInstance();
 
@@ -130,10 +134,7 @@ class Navigator {
             AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(direction);
             AccessibilityNodeInfo targetFocusArea =
                     nextTargetNode == null ? null : getAncestorFocusArea(nextTargetNode);
-            if (nextTargetNode != null && !isFocusArea(nextTargetNode)
-                    // TODO(b/151458195): remove !isFocusArea(nextTargetNode) once FocusArea is
-                    //  not focusable.
-                    && currentFocusArea.equals(targetFocusArea)) {
+            if (nextTargetNode != null && currentFocusArea.equals(targetFocusArea)) {
                 Utils.recycleNode(targetNode);
                 Utils.recycleNode(targetFocusArea);
                 targetNode = nextTargetNode;
@@ -176,7 +177,7 @@ class Navigator {
     /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
     static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
-        return className != null && FocusParkingView.class.getName().contentEquals(className);
+        return className != null && FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
     }
 
     /** Sets a mock Utils instance for testing. */
@@ -453,9 +454,7 @@ class Navigator {
 
     /** Returns whether the given {@code node} can be focused by a rotary controller. */
     private static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
-        // TODO(b/151458195): remove "!isFocusArea(node)" once FocusArea is not focusable.
         return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
-                && !isFocusArea(node)
                 && !isFocusParkingView(node);
     }
 
@@ -520,8 +519,6 @@ class Navigator {
     /** Returns whether the given {@code node} represents a {@link FocusArea}. */
     private static boolean isFocusArea(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName() == null ? "" : node.getClassName();
-        // TODO(b/151458195): return FocusArea.class.getName().contentEquals(className);
-        String focusArea = "com.android.car.ui.FocusArea";
-        return focusArea.contentEquals(className);
+        return FOCUS_AREA_CLASS_NAME.contentEquals(className);
     }
 }
