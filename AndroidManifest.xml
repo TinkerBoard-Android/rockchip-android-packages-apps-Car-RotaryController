@@ -17,8 +17,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.car.rotary">
 
-    <!-- Allows input events to be monitored. -->
-    <uses-permission android:name="android.permission.MONITOR_INPUT"/>
+    <!-- Allows input events to be monitored by us. -->
+    <uses-permission android:name="android.permission.MONITOR_INPUT"
+                     android:protectionLevel="signature"/>
+
+    <!-- Allows us to inject input events (such as KeyEvent and MotionEvent) into the event stream
+         and deliver them. -->
+    <uses-permission android:name="android.permission.INJECT_EVENTS"
+                     android:protectionLevel="signature"/>
 
     <application>
         <service
