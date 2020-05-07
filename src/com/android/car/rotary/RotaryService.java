@@ -20,9 +20,12 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.graphics.Rect;
+import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -68,8 +71,20 @@ import java.util.Map;
 public class RotaryService extends AccessibilityService implements
         CarInputManager.CarInputCaptureCallback {
 
+    /*
+     * Whether to treat the application window as system window for direct manipulation mode. Set it
+     * to {@code true} for testing only.
+     */
+    private static final boolean TREAT_APP_WINDOW_AS_SYSTEM_WINDOW = false;
+
     @NonNull
     private static Utils sUtils = Utils.getInstance();
+
+    /**
+     * A {@link Rect}. Though it's a member variable, it's meant to be used as a local variable to
+     * reduce allocation and improve performance.
+     */
+    private final Rect mRect = new Rect();
 
     private Navigator mNavigator;
 
@@ -121,12 +136,14 @@ public class RotaryService extends AccessibilityService implements
     private long mLastRotateEventTime;
 
     /**
-     * The repeat count of {@link KeyEvent#KEYCODE_NAVIGATE_IN}. Use to prevent processing a click
-     * when the center button is released after a long press.
+     * The repeat count of {@link KeyEvent#KEYCODE_DPAD_CENTER}. Use to prevent processing a center
+     * button click when the center button is released after a long press.
      */
-    private int mClickRepeatCount;
+    private int mCenterButtonRepeatCount;
 
     private static final Map<Integer, Integer> TEST_TO_REAL_KEYCODE_MAP;
+
+    private static final Map<Integer, Integer> DIRECTION_TO_KEYCODE_MAP;
 
     static {
         Map<Integer, Integer> map = new HashMap<>();
@@ -139,9 +156,19 @@ public class RotaryService extends AccessibilityService implements
         TEST_TO_REAL_KEYCODE_MAP = Collections.unmodifiableMap(map);
     }
 
+    static {
+        Map<Integer, Integer> map = new HashMap<>();
+        map.put(View.FOCUS_UP, KeyEvent.KEYCODE_DPAD_UP);
+        map.put(View.FOCUS_DOWN, KeyEvent.KEYCODE_DPAD_DOWN);
+        map.put(View.FOCUS_LEFT, KeyEvent.KEYCODE_DPAD_LEFT);
+        map.put(View.FOCUS_RIGHT, KeyEvent.KEYCODE_DPAD_RIGHT);
+
+        DIRECTION_TO_KEYCODE_MAP = Collections.unmodifiableMap(map);
+    }
+
     private Car mCar;
     private CarInputManager mCarInputManager;
-
+    private InputManager mInputManager;
     private DirectManipulationHelper mDirectManipulationHelper;
 
     @Override
@@ -203,6 +230,8 @@ public class RotaryService extends AccessibilityService implements
             serviceInfo.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
             setServiceInfo(serviceInfo);
         }
+
+        mInputManager = getSystemService(InputManager.class);
     }
 
     @Override
@@ -323,65 +352,52 @@ public class RotaryService extends AccessibilityService implements
         return false;
     }
 
-    /** Handles key events. Returns whether the key event was handled. */
+    /**
+     * Handles key events. Returns whether the key event was consumed. To avoid invalid event stream
+     * getting through to the application, if a key down event is consumed, the corresponding key up
+     * event must be consumed too, and vice versa.
+     */
     private boolean handleKeyEvent(KeyEvent event) {
         int action = event.getAction();
-        switch (action) {
-            case KeyEvent.ACTION_DOWN: {
-                return handleKeyDownEvent(event);
-            }
-            case KeyEvent.ACTION_UP: {
-                return handleKeyUpEvent(event);
-            }
-            default:
-                // Do nothing.
-        }
-        return false;
-    }
-
-    /** Handles key down events. Returns whether the key event was handled. */
-    private boolean handleKeyDownEvent(KeyEvent event) {
+        boolean isActionDown = action == KeyEvent.ACTION_DOWN;
         int keyCode = getKeyCode(event);
         switch (keyCode) {
             case KeyEvent.KEYCODE_C:
-                handleRotateEvent(View.FOCUS_BACKWARD, event.getRepeatCount(),
-                        event.getEventTime());
+                if (isActionDown) {
+                    handleRotateEvent(/* clockwise= */ false, event.getRepeatCount(),
+                            event.getEventTime());
+                }
                 return true;
             case KeyEvent.KEYCODE_V:
-                handleRotateEvent(View.FOCUS_FORWARD, event.getRepeatCount(), event.getEventTime());
+                if (isActionDown) {
+                    handleRotateEvent(/* clockwise= */ true, event.getRepeatCount(),
+                            event.getEventTime());
+                }
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT:
-                handleNudgeEvent(View.FOCUS_LEFT);
+                handleNudgeEvent(View.FOCUS_LEFT, action);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT:
-                handleNudgeEvent(View.FOCUS_RIGHT);
+                handleNudgeEvent(View.FOCUS_RIGHT, action);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP:
-                handleNudgeEvent(View.FOCUS_UP);
+                handleNudgeEvent(View.FOCUS_UP, action);
                 return true;
             case KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN:
-                handleNudgeEvent(View.FOCUS_DOWN);
+                handleNudgeEvent(View.FOCUS_DOWN, action);
                 return true;
-            case KeyEvent.KEYCODE_NAVIGATE_IN:
-                mClickRepeatCount = event.getRepeatCount();
-                if (mClickRepeatCount == 1) {
-                    // TODO: handleLongClickEvent();
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+                if (isActionDown) {
+                    mCenterButtonRepeatCount = event.getRepeatCount();
+                }
+                if (mCenterButtonRepeatCount == 0) {
+                    handleCenterButtonEvent(action);
+                } else if (mCenterButtonRepeatCount == 1) {
+                    // TODO: handleLongClickEvent(action);
                 }
                 return true;
             default:
                 // Do nothing
-        }
-        return false;
-    }
-
-    /** Handles key up events. Returns whether the event was handled. */
-    private boolean handleKeyUpEvent(KeyEvent event) {
-        int keyCode = getKeyCode(event);
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
-            if (mClickRepeatCount == 0) {
-                handleClickEvent();
-                return true;
-            }
         }
         return false;
     }
@@ -397,18 +413,38 @@ public class RotaryService extends AccessibilityService implements
         return keyCode;
     }
 
-    /** Handles click event. */
-    private void handleClickEvent() {
+    /** Handles controller center button event. */
+    private void handleCenterButtonEvent(int action) {
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
+            L.w("Invalid action " + action);
+            return;
+        }
         if (initFocus()) {
             return;
         }
-        // If the focus is in the application window, inject click event and the application will
-        // handle it.
-        if (isFocusInApplicationWindow()) {
-            // TODO(b/153888670): inject KeyEvent.KEYCODE_DPAD_CENTER event.
+        // Case 1: the focus is in application window, inject KeyEvent.KEYCODE_DPAD_CENTER event and
+        // the application will handle it.
+        if (isInApplicationWindow(mFocusedNode)) {
+            injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, action);
+            return;
+        }
+        // We're done with ACTION_DOWN event.
+        if (action == KeyEvent.ACTION_DOWN) {
             return;
         }
 
+        // Case 2: the focus is not in application window (e.g., in system window) and the focused
+        // node supports direct manipulation, enter direct manipulation mode.
+        if (mDirectManipulationHelper.supportDirectManipulation(mFocusedNode)) {
+            if (!mInDirectManipulationMode) {
+                mInDirectManipulationMode = true;
+                L.d("Enter direct manipulation mode because focused node is clicked.");
+            }
+            return;
+        }
+
+        // Case 3: the focus is not in application window and the focused node doesn't support
+        // direct manipulation, perform click on the focused node.
         boolean result = mFocusedNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         if (!result) {
             L.w("Failed to perform ACTION_CLICK on " + mFocusedNode);
@@ -416,10 +452,32 @@ public class RotaryService extends AccessibilityService implements
         mRotaryClicked = true;
     }
 
-    private void handleNudgeEvent(int direction) {
+    private void handleNudgeEvent(int direction, int action) {
+        if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
+            L.w("Invalid action " + action);
+            return;
+        }
         if (initFocus()) {
             return;
         }
+
+        // If the focused node is in direct manipulation mode, manipulate it directly.
+        if (mInDirectManipulationMode) {
+            if (isInApplicationWindow(mFocusedNode)) {
+                injectKeyEventForDirection(direction, action);
+            } else {
+                // Ignore nudge events if the focus is not in application window.
+                L.d("Focused node is in window type " + mFocusedNode.getWindow().getType());
+            }
+            return;
+        }
+
+        // We're done with ACTION_UP event.
+        if (action == KeyEvent.ACTION_UP) {
+            return;
+        }
+
+        // If the focused node is not in direct manipulation mode, move the focus.
         // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
         List<AccessibilityWindowInfo> windows = getWindows();
         AccessibilityNodeInfo targetNode =
@@ -441,22 +499,36 @@ public class RotaryService extends AccessibilityService implements
         if (rotaryEvent.getInputType() != CarInputManager.INPUT_TYPE_ROTARY_NAVIGATION) {
             return;
         }
-        int direction = rotaryEvent.isClockwise() ? View.FOCUS_FORWARD : View.FOCUS_BACKWARD;
+        boolean clockwise = rotaryEvent.isClockwise();
         int count = rotaryEvent.getNumberOfClicks();
         // TODO(b/153195148): Use the first eventTime for now. We'll need to improve it later.
         long eventTime = rotaryEvent.getUptimeMillisForClick(0);
-        handleRotateEvent(direction, count, eventTime);
+        handleRotateEvent(clockwise, count, eventTime);
     }
 
-    private void handleRotateEvent(int direction, int count, long eventTime) {
+    private void handleRotateEvent(boolean clockwise, int count, long eventTime) {
         if (mClearFocusAreaHistoryWhenRotating) {
             mNavigator.clearFocusAreaHistory();
         }
-
         if (initFocus()) {
             return;
         }
+
         int rotationCount = getRotateAcceleration(count, eventTime);
+
+        // If the focused node is in direct manipulation mode, manipulate it directly.
+        if (mInDirectManipulationMode) {
+            if (isInApplicationWindow(mFocusedNode)) {
+                mFocusedNode.getBoundsInScreen(mRect);
+                injectMotionEvent(clockwise, rotationCount, mRect.centerX(), mRect.centerY());
+            } else {
+                performScrollAction(mFocusedNode, clockwise);
+            }
+            return;
+        }
+
+        // If the focused node is not in direct manipulation mode, move the focus.
+        int direction = clockwise ? View.FOCUS_FORWARD : View.FOCUS_BACKWARD;
         AccessibilityNodeInfo targetNode =
                 mNavigator.findRotateTarget(mFocusedNode, direction, rotationCount);
         if (targetNode == null) {
@@ -467,12 +539,30 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleNode(targetNode);
     }
 
-    /** Returns whether the focused node is in Application widow. */
-    private boolean isFocusInApplicationWindow() {
-        if (mFocusedNode == null) {
+    /** Performs scroll action on the given {@code targetNode} if it supports scroll action. */
+    private static void performScrollAction(@NonNull AccessibilityNodeInfo targetNode,
+            boolean clockwise) {
+        // TODO(b/155823126): Add config to let OEMs determine the mapping.
+        int actionToPerform = clockwise
+                ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+        int supportedActions = targetNode.getActions();
+        if ((actionToPerform & supportedActions) == 0) {
+            L.w("Node " + targetNode + " doesn't support action " + actionToPerform);
+            return;
+        }
+        boolean result = targetNode.performAction(actionToPerform);
+        if (!result) {
+            L.w("Failed to perform action " + actionToPerform + " on " + targetNode);
+        }
+    }
+
+    /** Returns whether the given {@code node} is in application window. */
+    private static boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
+        if (TREAT_APP_WINDOW_AS_SYSTEM_WINDOW) {
             return false;
         }
-        AccessibilityWindowInfo window = mFocusedNode.getWindow();
+        AccessibilityWindowInfo window = node.getWindow();
         boolean result = window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION;
         Utils.recycleWindow(window);
         return result;
@@ -491,6 +581,53 @@ public class RotaryService extends AccessibilityService implements
             }
         }
         Utils.recycleNode(sourceNode);
+    }
+
+    private void injectMotionEvent(boolean clockwise, int rotationCount, float x, float y) {
+        // TODO(b/155823126): Add config to let OEMs determine the mapping.
+        int indents = clockwise ? rotationCount : -rotationCount;
+        long upTime = SystemClock.uptimeMillis();
+        MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[1];
+        properties[0] = new MotionEvent.PointerProperties();
+        properties[0].id = 0; // Any integer value but -1 (INVALID_POINTER_ID) is fine.
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
+        coords[0] = new MotionEvent.PointerCoords();
+        coords[0].x = x;
+        coords[0].y = y;
+        coords[0].setAxisValue(MotionEvent.AXIS_SCROLL, indents);
+        MotionEvent motionEvent = MotionEvent.obtain(/* downTime= */ upTime,
+                /* eventTime= */ upTime,
+                MotionEvent.ACTION_SCROLL,
+                /* pointerCount= */ 1,
+                properties,
+                coords,
+                /* metaState= */ 0,
+                /* buttonState= */ 0,
+                /* xPrecision= */ 1.0f,
+                /* yPrecision= */ 1.0f,
+                /* deviceId= */ 0,
+                /* edgeFlags= */ 0,
+                /* source= */ 0,
+                /* flags= */ 0);
+
+        mInputManager.injectInputEvent(motionEvent,
+                InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+    }
+
+    private boolean injectKeyEventForDirection(int direction, int action) {
+        Integer keyCode = DIRECTION_TO_KEYCODE_MAP.get(direction);
+        if (keyCode == null) {
+            throw new IllegalArgumentException("direction must be one of "
+                    + "{FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, FOCUS_RIGHT}.");
+        }
+        return injectKeyEvent(keyCode, action);
+    }
+
+    private boolean injectKeyEvent(int keyCode, int action) {
+        long upTime = SystemClock.uptimeMillis();
+        KeyEvent keyEvent = new KeyEvent(
+                /* downTime= */ upTime, /* eventTime= */ upTime, action, keyCode, /* repeat= */ 0);
+        return mInputManager.injectInputEvent(keyEvent, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 
     /**
