@@ -51,9 +51,8 @@ class RotaryCache {
     public @interface CacheType {
     }
 
-    // TODO(b/153390767): get rid of static variables.
     @NonNull
-    private static Utils sUtils = Utils.getInstance();
+    private NodeCopier mNodeCopier = new NodeCopier();
 
     /** Cache of last focused node by focus area. */
     @NonNull
@@ -66,7 +65,9 @@ class RotaryCache {
     /** A record of when a node was focused. */
     private static class FocusHistory {
 
-        /** A node representing a focusable {@link View} or a {@link FocusArea}. */
+        /**
+         * A node representing a focusable {@link View} or a {@link com.android.car.ui.FocusArea}.
+         */
         @NonNull
         final AccessibilityNodeInfo node;
 
@@ -222,15 +223,27 @@ class RotaryCache {
 
     /**
      * Searches the cache to find the last focused node in the given {@code focusArea}. Returns the
-     * node, or null if there is nothing in the cache or the cache is stale. The caller is
-     * responsible for recycling the result.
+     * node, or null if there is nothing in the cache, the cache is stale, the view represented
+     * by the node is no longer in the view tree, or the node's state has changed so that it can't
+     * take focus any more. The caller is responsible for recycling the result.
      */
     AccessibilityNodeInfo getFocusedNode(@NonNull AccessibilityNodeInfo focusArea,
             long elapsedRealtime) {
         if (mFocusHistoryCache.enabled()) {
             FocusHistory focusHistory = mFocusHistoryCache.get(focusArea);
             if (mFocusHistoryCache.isValidFocusHistory(focusHistory, elapsedRealtime)) {
-                return copyNode(focusHistory.node);
+                AccessibilityNodeInfo node = copyNode(focusHistory.node);
+                // Refresh the node in case the view represented by the node is no longer in the
+                // view tree, or the node's state (e.g., isFocused()) has changed.
+                AccessibilityNodeInfo refreshedNode = Utils.refreshNode(node);
+
+                // If the node's state has changed so that it can't take focus any more, return
+                // null.
+                if (refreshedNode != null && !Utils.canTakeFocus(refreshedNode)) {
+                    Utils.recycleNode(refreshedNode);
+                    refreshedNode = null;
+                }
+                return refreshedNode;
             }
         }
         return null;
@@ -250,8 +263,9 @@ class RotaryCache {
 
     /**
      * Searches the cache to find the target focus area for a nudge in a given {@code direction}
-     * from a given focus area. Returns the focus area, or null if there is nothing in the cache or
-     * the cache is stale. The caller is responsible for recycling the result.
+     * from a given focus area. Returns the focus area, or null if there is nothing in the cache,
+     * the cache is stale, or the view represented by the node is no longer in the view tree.
+     * The caller is responsible for recycling the result.
      */
     AccessibilityNodeInfo getTargetFocusArea(@NonNull AccessibilityNodeInfo sourceFocusArea,
             int direction, long elapsedRealtime) {
@@ -259,7 +273,10 @@ class RotaryCache {
             FocusHistory focusHistory =
                     mFocusAreaHistoryCache.get(new FocusAreaHistory(sourceFocusArea, direction));
             if (mFocusAreaHistoryCache.isValidFocusHistory(focusHistory, elapsedRealtime)) {
-                return copyNode(focusHistory.node);
+                AccessibilityNodeInfo focusArea = copyNode(focusHistory.node);
+                // Refresh the node in case the view represented by the node is no longer in the
+                // view tree.
+                return Utils.refreshNode(focusArea);
             }
         }
         return null;
@@ -308,13 +325,13 @@ class RotaryCache {
                 + "FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, or FOCUS_RIGHT.");
     }
 
-    /** Sets a mock Utils instance for testing. */
+    /** Sets a mock {@link NodeCopier} instance for testing. */
     @VisibleForTesting
-    static void setUtils(@NonNull Utils utils) {
-        sUtils = utils;
+    void setNodeCopier(@NonNull NodeCopier nodeCopier) {
+        mNodeCopier = nodeCopier;
     }
 
-    private static AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
-        return sUtils.copyNode(node);
+    private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
+        return mNodeCopier.copy(node);
     }
 }
