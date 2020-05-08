@@ -19,13 +19,17 @@ package com.android.car.rotary;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.android.car.ui.FocusArea;
+import com.android.car.ui.FocusParkingView;
 
 import java.util.List;
 
 /**
  * Utility methods for {@link AccessibilityNodeInfo} and {@link AccessibilityWindowInfo}.
- *
+ * <p>
  * Because {@link AccessibilityNodeInfo}s must be recycled, it's important to be consistent about
  * who is responsible for recycling them. For simplicity, it's best to avoid having multiple objects
  * refer to the same instance of {@link AccessibilityNodeInfo}. Instead, each object should keep its
@@ -35,32 +39,13 @@ import java.util.List;
  */
 class Utils {
 
-    private static final Utils sInstance = new Utils();
+    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    private static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
 
     private Utils() {
     }
 
-    static Utils getInstance() {
-        return sInstance;
-    }
-
-    /**
-     * Copies a node. The caller is responsible for recycling result.
-     *
-     * Note: {@link AccessibilityNodeInfo#obtain(AccessibilityNodeInfo)} doesn't work when passed a
-     * mock {@link AccessibilityNodeInfo}, so we make this functions non-static and mock it in
-     * tests.
-     */
-    AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
-        return node == null ? null : AccessibilityNodeInfo.obtain(node);
-    }
-
-    /**
-     * Recycles a node.
-     *
-     * Unlike {@link #copyNode(AccessibilityNodeInfo)}, this method is static because we don't need
-     * to mock it in tests.
-     */
+    /** Recycles a node. */
     static void recycleNode(@Nullable AccessibilityNodeInfo node) {
         if (node != null) {
             node.recycle();
@@ -92,6 +77,24 @@ class Utils {
         L.w("This node is no longer in the view tree: " + node);
         node.recycle();
         return null;
+    }
+
+    /** Returns whether the given {@code node} can be focused by a rotary controller. */
+    static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
+        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
+                && !isFocusParkingView(node);
+    }
+
+    /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
+    static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
+    }
+
+    /** Returns whether the given {@code node} represents a {@link FocusArea}. */
+    static boolean isFocusArea(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && FOCUS_AREA_CLASS_NAME.contentEquals(className);
     }
 
     /** Recycles a window. */

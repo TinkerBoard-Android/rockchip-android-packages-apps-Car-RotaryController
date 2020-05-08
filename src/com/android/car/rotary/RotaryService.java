@@ -78,7 +78,7 @@ public class RotaryService extends AccessibilityService implements
     private static final boolean TREAT_APP_WINDOW_AS_SYSTEM_WINDOW = false;
 
     @NonNull
-    private static Utils sUtils = Utils.getInstance();
+    private NodeCopier mNodeCopier = new NodeCopier();
 
     /**
      * A {@link Rect}. Though it's a member variable, it's meant to be used as a local variable to
@@ -251,7 +251,7 @@ public class RotaryService extends AccessibilityService implements
                     // between windows.
                     AccessibilityNodeInfo sourceNode = event.getSource();
                     if (sourceNode != null && !sourceNode.equals(mFocusedNode)
-                            && !Navigator.isFocusParkingView(sourceNode)) {
+                            && !Utils.isFocusParkingView(sourceNode)) {
                         // Android doesn't clear focus automatically when focus is set in another
                         // window.
                         maybeClearFocusInCurrentWindow(sourceNode);
@@ -682,7 +682,7 @@ public class RotaryService extends AccessibilityService implements
             L.e("Failed to get window of " + mFocusedNode);
             return;
         }
-        AccessibilityNodeInfo focusParkingView = Navigator.findFocusParkingView(window);
+        AccessibilityNodeInfo focusParkingView = mNavigator.findFocusParkingView(window);
         window.recycle();
         if (focusParkingView == null) {
             L.e("No FocusParkingView in " + window);
@@ -726,7 +726,7 @@ public class RotaryService extends AccessibilityService implements
             L.e("rootNode of active window is null");
             return;
         }
-        AccessibilityNodeInfo targetNode = Navigator.findFirstFocusDescendant(rootNode);
+        AccessibilityNodeInfo targetNode = mNavigator.findFirstFocusDescendant(rootNode);
         rootNode.recycle();
         if (targetNode == null) {
             L.w("Failed to find the first focus descendant");
@@ -798,7 +798,6 @@ public class RotaryService extends AccessibilityService implements
             return true;
         }
         if (targetNode.isFocused()) {
-            // TODO(b/154560076): find out why isFocused() returned true though it's not focused.
             L.w("targetNode is already focused: " + targetNode);
         }
         boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
@@ -838,7 +837,7 @@ public class RotaryService extends AccessibilityService implements
         return result;
     }
 
-    private static AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
-        return sUtils.copyNode(node);
+    private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
+        return mNodeCopier.copy(node);
     }
 }
