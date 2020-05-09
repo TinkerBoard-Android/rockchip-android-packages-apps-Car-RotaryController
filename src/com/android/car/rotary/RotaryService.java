@@ -24,6 +24,7 @@ import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -172,6 +173,9 @@ public class RotaryService extends AccessibilityService implements
     private InputManager mInputManager;
     private DirectManipulationHelper mDirectManipulationHelper;
 
+    /** Package name of foreground app. */
+    private CharSequence mForegroundApp;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -290,6 +294,11 @@ public class RotaryService extends AccessibilityService implements
             }
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED: {
                 updateDirectManipulationMode(event, false);
+                break;
+            }
+            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: {
+                CharSequence packageName = event.getPackageName();
+                onForegroundAppChanged(packageName);
                 break;
             }
             default:
@@ -561,6 +570,17 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
+    private void onForegroundAppChanged(CharSequence packageName) {
+        if (TextUtils.equals(mForegroundApp, packageName)) {
+            return;
+        }
+        mForegroundApp = packageName;
+        if (mInDirectManipulationMode) {
+            L.d("Exit direct manipulation mode because the foreground app has changed");
+            mInDirectManipulationMode = false;
+        }
+    }
+
     private static boolean isValidAction(int action) {
         if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP) {
             L.w("Invalid action " + action);
@@ -782,10 +802,10 @@ public class RotaryService extends AccessibilityService implements
             L.d("Don't reset mFocusedNode since it stays the same: " + mFocusedNode);
             return;
         }
-        if (mInDirectManipulationMode) {
-            // Toggle off direct manipulation mode since the focus has changed.
+        if (mInDirectManipulationMode && focusedNode == null) {
+            // Toggle off direct manipulation mode since there is no focused node.
             mInDirectManipulationMode = false;
-            L.d("Exit direct manipulation mode since the focus has changed");
+            L.d("Exit direct manipulation mode since there is no focused node");
         }
 
         Utils.recycleNode(mFocusedNode);
