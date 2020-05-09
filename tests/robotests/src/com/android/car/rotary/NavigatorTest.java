@@ -201,6 +201,16 @@ public class NavigatorTest {
      *    *  =                                =  *    *  =                                 =  *
      *    *  ==================================  *    *  ===================================  *
      *    *                                      *    *                                       *
+     *    *  =======middleLeft focus area======  *    *                                       *
+     *    *  =                                =  *    *                                       *
+     *    *  =  .............. .............  =  *    *                                       *
+     *    *  =  .           .  .           .  =  *    *                                       *
+     *    *  =  .middleLeft1.  .middleLeft2.  =  *    *                                       *
+     *    *  =  . disabled  .  . disabled  .  =  *    *                                       *
+     *    *  =  .............  .............  =  *    *                                       *
+     *    *  =                                =  *    *                                       *
+     *    *  ==================================  *    *                                       *
+     *    *                                      *    *                                       *
      *    *  =======bottomLeft focus area======  *    *                                       *
      *    *  =                                =  *    *                                       *
      *    *  =  .............. .............  =  *    *                                       *
@@ -228,7 +238,7 @@ public class NavigatorTest {
                 .build();
         setRootNodeForWindow(leftRoot, leftWindow);
 
-        // Left window has 2 vertically aligned focus areas.
+        // Left window has 3 vertically aligned focus areas.
         AccessibilityNodeInfo topLeft = new NodeBuilder()
                 .setNodeList(mNodeList)
                 .setWindow(leftWindow)
@@ -236,16 +246,23 @@ public class NavigatorTest {
                 .setClassName(FOCUS_AREA_CLASS_NAME)
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
+        AccessibilityNodeInfo middleLeft = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 400, 800))
+                .build();
         AccessibilityNodeInfo bottomLeft = new NodeBuilder()
                 .setNodeList(mNodeList)
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
                 .setClassName(FOCUS_AREA_CLASS_NAME)
-                .setBoundsInScreen(new Rect(0, 400, 400, 800))
+                .setBoundsInScreen(new Rect(0, 800, 400, 1200))
                 .setInViewTree(true)
                 .build();
 
-        // Each focus area has 2 horizontally aligned views that can take focus.
+        // Each focus area but middleLeft has 2 horizontally aligned views that can take focus.
         AccessibilityNodeInfo topLeft1 = new NodeBuilder()
                 .setNodeList(mNodeList)
                 .setWindow(leftWindow)
@@ -272,7 +289,7 @@ public class NavigatorTest {
                 .setVisibleToUser(true)
                 .setEnabled(true)
                 .setInViewTree(true)
-                .setBoundsInScreen(new Rect(0, 400, 200, 800))
+                .setBoundsInScreen(new Rect(0, 800, 200, 1200))
                 .build();
         AccessibilityNodeInfo bottomLeft2 = new NodeBuilder()
                 .setNodeList(mNodeList)
@@ -281,6 +298,27 @@ public class NavigatorTest {
                 .setFocusable(true)
                 .setVisibleToUser(true)
                 .setEnabled(true)
+                .setBoundsInScreen(new Rect(200, 800, 400, 1200))
+                .build();
+
+        // middleLeft focus area has 2 disabled views, so that it will be skipped when nudging.
+        AccessibilityNodeInfo middleLeft1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(bottomLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
+                .setInViewTree(true)
+                .setBoundsInScreen(new Rect(0, 400, 200, 800))
+                .build();
+        AccessibilityNodeInfo middleLeft2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(bottomLeft)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
                 .setBoundsInScreen(new Rect(200, 400, 400, 800))
                 .build();
 
