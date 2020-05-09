@@ -85,6 +85,24 @@ class Utils {
                 && !isFocusParkingView(node);
     }
 
+    /** Returns whether the given {@code node} or its descendants can take focus. */
+    static boolean canHaveFocus(@NonNull AccessibilityNodeInfo node) {
+        if (canTakeFocus(node)) {
+            return true;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo childNode = node.getChild(i);
+            if (childNode != null) {
+                boolean result =  canHaveFocus(childNode);
+                childNode.recycle();
+                if (result) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
     static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();

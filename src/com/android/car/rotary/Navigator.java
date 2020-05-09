@@ -312,13 +312,14 @@ class Navigator {
         // If there is a target focus area in the cache, returns it.
         AccessibilityNodeInfo cachedTargetFocusArea =
                 mRotaryCache.getTargetFocusArea(currentFocusArea, direction, elapsedRealtime);
-        if (cachedTargetFocusArea != null) {
+        if (cachedTargetFocusArea != null && Utils.canHaveFocus(cachedTargetFocusArea)) {
             // We already got nudge history in the cache. Before nudging back, let's save "nudge
             // back" history.
             mRotaryCache.saveTargetFocusArea(
                     currentFocusArea, cachedTargetFocusArea, direction, elapsedRealtime);
             return cachedTargetFocusArea;
         }
+        Utils.recycleNode(cachedTargetFocusArea);
 
         // No target focus area in the cache; we need to search the node tree to find it.
         AccessibilityWindowInfo currentWindow = focusedNode.getWindow();
@@ -345,6 +346,17 @@ class Navigator {
         for (AccessibilityWindowInfo window : candidateWindows) {
             List<AccessibilityNodeInfo> focusAreasInAnotherWindow = findFocusAreas(window);
             candidateFocusAreas.addAll(focusAreasInAnotherWindow);
+        }
+
+        // Exclude focus areas that have no descendants to take focus, because once we found a best
+        // candidate focus area, we don't dig into other ones. If it has no descendants to take
+        // focus, the nudge will fail.
+        for (AccessibilityNodeInfo focusArea : candidateFocusAreas) {
+            if (!Utils.canHaveFocus(focusArea)) {
+                candidateFocusAreas.remove(focusArea);
+                focusArea.recycle();
+                break;
+            }
         }
 
         // Choose the best candidate as our target focus area.
