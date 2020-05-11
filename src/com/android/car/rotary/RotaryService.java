@@ -170,7 +170,6 @@ public class RotaryService extends AccessibilityService implements
     private Car mCar;
     private CarInputManager mCarInputManager;
     private InputManager mInputManager;
-    private DirectManipulationHelper mDirectManipulationHelper;
 
     @Override
     public void onCreate() {
@@ -204,8 +203,6 @@ public class RotaryService extends AccessibilityService implements
                 focusAreaHistoryCacheType,
                 focusAreaHistoryCacheSize,
                 focusAreaHistoryExpirationTimeMs);
-
-        mDirectManipulationHelper = new DirectManipulationHelper(this);
     }
 
     @Override
@@ -441,7 +438,7 @@ public class RotaryService extends AccessibilityService implements
 
         // Case 2: the focus is not in application window (e.g., in system window) and the focused
         // node supports direct manipulation, enter direct manipulation mode.
-        if (mDirectManipulationHelper.supportDirectManipulation(mFocusedNode)) {
+        if (DirectManipulationHelper.supportDirectManipulation(mFocusedNode)) {
             if (!mInDirectManipulationMode) {
                 mInDirectManipulationMode = true;
                 L.d("Enter direct manipulation mode because focused node is clicked.");
@@ -599,7 +596,7 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void updateDirectManipulationMode(AccessibilityEvent event, boolean enable) {
-        if (!mInRotaryMode || !mDirectManipulationHelper.isDirectManipulation(event)) {
+        if (!mInRotaryMode || !DirectManipulationHelper.isDirectManipulation(event)) {
             return;
         }
         AccessibilityNodeInfo sourceNode = event.getSource();
