@@ -26,9 +26,11 @@
     <uses-permission android:name="android.permission.INJECT_EVENTS"
                      android:protectionLevel="signature"/>
 
+    <!-- RotaryService needs to be directBootAware so that it can start before the user is unlocked. -->
     <application>
         <service
             android:name=".RotaryService"
+            android:directBootAware="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
