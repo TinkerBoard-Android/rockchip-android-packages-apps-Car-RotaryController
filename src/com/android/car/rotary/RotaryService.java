@@ -242,6 +242,17 @@ public class RotaryService extends AccessibilityService implements
     }
 
     @Override
+    public void onDestroy() {
+        if (mCarInputManager != null) {
+            mCarInputManager.releaseInputEventCapture(CarInputManager.TARGET_DISPLAY_TYPE_MAIN);
+        }
+        if (mCar != null) {
+            mCar.disconnect();
+        }
+        super.onDestroy();
+    }
+
+    @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         switch (event.getEventType()) {
             case AccessibilityEvent.TYPE_VIEW_FOCUSED: {
