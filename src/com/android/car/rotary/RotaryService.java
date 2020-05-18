@@ -148,6 +148,13 @@ public class RotaryService extends AccessibilityService implements
 
     static {
         Map<Integer, Integer> map = new HashMap<>();
+        map.put(KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT);
+        map.put(KeyEvent.KEYCODE_D, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT);
+        map.put(KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+        map.put(KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+        map.put(KeyEvent.KEYCODE_F, KeyEvent.KEYCODE_DPAD_CENTER);
+        map.put(KeyEvent.KEYCODE_R, KeyEvent.KEYCODE_BACK);
+        // Legacy map
         map.put(KeyEvent.KEYCODE_J, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT);
         map.put(KeyEvent.KEYCODE_L, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT);
         map.put(KeyEvent.KEYCODE_I, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
@@ -380,12 +387,14 @@ public class RotaryService extends AccessibilityService implements
         boolean isActionDown = action == KeyEvent.ACTION_DOWN;
         int keyCode = getKeyCode(event);
         switch (keyCode) {
+            case KeyEvent.KEYCODE_Q:
             case KeyEvent.KEYCODE_C:
                 if (isActionDown) {
                     handleRotateEvent(/* clockwise= */ false, event.getRepeatCount(),
                             event.getEventTime());
                 }
                 return true;
+            case KeyEvent.KEYCODE_E:
             case KeyEvent.KEYCODE_V:
                 if (isActionDown) {
                     handleRotateEvent(/* clockwise= */ true, event.getRepeatCount(),
