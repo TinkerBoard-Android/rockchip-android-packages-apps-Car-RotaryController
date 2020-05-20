@@ -27,6 +27,10 @@ import androidx.annotation.VisibleForTesting;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -61,6 +65,13 @@ class RotaryCache {
     /** Cache of target focus area by source focus area and direction (up, down, left or right). */
     @NonNull
     private final FocusAreaHistoryCache mFocusAreaHistoryCache;
+
+    /**
+     * Cache of recently focused nodes in recently focused windows. Used to recover when the
+     * focused window closes.
+     */
+    @NonNull
+    private final FocusWindowCache mFocusWindowCache;
 
     /** A record of when a node was focused. */
     private static class FocusHistory {
@@ -111,6 +122,25 @@ class RotaryCache {
         @Override
         public int hashCode() {
             return Objects.hash(sourceFocusArea, direction);
+        }
+    }
+
+    /** An entry in {@link #mFocusWindowCache}. */
+    private static class FocusWindowHistory {
+        /** A node in a window representing a focused {@link View}. */
+        @NonNull
+        final AccessibilityNodeInfo mNode;
+
+        /** The {@link SystemClock#uptimeMillis} when this history was recorded. */
+        final long mTimestamp;
+
+        FocusWindowHistory(@NonNull AccessibilityNodeInfo node, long timestamp) {
+            this.mNode = node;
+            this.mTimestamp = timestamp;
+        }
+
+        void recycle() {
+            this.mNode.recycle();
         }
     }
 
@@ -209,16 +239,100 @@ class RotaryCache {
         }
     }
 
+    /**
+     * A cache of recently focused nodes in recently focused windows. Used to recover when the
+     * focused window closes.
+     */
+    private class FocusWindowCache extends LruCache<Integer, FocusWindowHistory> {
+        @CacheType
+        final int mCacheType;
+        final int mExpirationTimeMs;
+
+        FocusWindowCache(@CacheType int cacheType, int size, int expirationTimeMs) {
+            super(size);
+            mCacheType = cacheType;
+            mExpirationTimeMs = expirationTimeMs;
+            if (cacheType == CACHE_TYPE_EXPIRED_AFTER_SOME_TIME && expirationTimeMs <= 0) {
+                throw new IllegalArgumentException(
+                        "Expiration time must be positive if CacheType is "
+                                + "CACHE_TYPE_EXPIRED_AFTER_SOME_TIME");
+            }
+        }
+
+        /**
+         * Returns whether an entry in this cache is valid. To be valid:
+         * <ul>
+         *     <li>the cached node must still be in the view tree
+         *     <li>the cached node must still be able to take focus
+         *     <li>the cache entry must not have expired
+         * </ul>
+         */
+        boolean isValidEntry(@NonNull FocusWindowHistory focusWindowHistory, long elapsedRealtime) {
+            if (!focusWindowHistory.mNode.refresh()
+                    || !Utils.canTakeFocus(focusWindowHistory.mNode)) {
+                return false;
+            }
+
+            switch (mCacheType) {
+                case CACHE_TYPE_NEVER_EXPIRE:
+                    return true;
+                case CACHE_TYPE_EXPIRED_AFTER_SOME_TIME:
+                    return elapsedRealtime - focusWindowHistory.mTimestamp < mExpirationTimeMs;
+                default:
+                    return false;
+            }
+        }
+
+        /**
+         * Stores the given (window ID, node) pair, overwriting the existing pair with the given
+         * window ID, if any.
+         */
+        void put(int windowId, @NonNull AccessibilityNodeInfo node, long elapsedRealtime) {
+            if (mCacheType == CACHE_TYPE_DISABLED) {
+                return;
+            }
+            put(windowId, new FocusWindowHistory(copyNode(node), elapsedRealtime));
+        }
+
+        /**
+         * Returns the most recently focused valid node or {@code null} if there are no valid
+         * nodes in the cache. The caller is responsible for recycling the result.
+         */
+        @Nullable
+        AccessibilityNodeInfo getMostRecentValidNode(long elapsedRealtime) {
+            Map<Integer, FocusWindowHistory> snapshot = snapshot();
+            List<FocusWindowHistory> focusWindowHistories = new ArrayList<>(snapshot.values());
+            Collections.reverse(focusWindowHistories);
+            for (FocusWindowHistory focusWindowHistory : focusWindowHistories) {
+                if (isValidEntry(focusWindowHistory, elapsedRealtime)) {
+                    return copyNode(focusWindowHistory.mNode);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void entryRemoved(boolean evicted, Integer windowId, FocusWindowHistory oldValue,
+                FocusWindowHistory newValue) {
+            oldValue.recycle();
+        }
+    }
+
     RotaryCache(@CacheType int focusHistoryCacheType,
             int focusHistoryCacheSize,
             int focusHistoryExpirationTimeMs,
             @CacheType int focusAreaHistoryCacheType,
             int focusAreaHistoryCacheSize,
-            int focusAreaHistoryExpirationTimeMs) {
+            int focusAreaHistoryExpirationTimeMs,
+            @CacheType int focusWindowCacheType,
+            int focusWindowCacheSize,
+            int focusWindowExpirationTimeMs) {
         mFocusHistoryCache = new FocusHistoryCache(
                 focusHistoryCacheType, focusHistoryCacheSize, focusHistoryExpirationTimeMs);
         mFocusAreaHistoryCache = new FocusAreaHistoryCache(focusAreaHistoryCacheType,
                 focusAreaHistoryCacheSize, focusAreaHistoryExpirationTimeMs);
+        mFocusWindowCache = new FocusWindowCache(focusWindowCacheType, focusWindowCacheSize,
+                focusWindowExpirationTimeMs);
     }
 
     /**
@@ -306,6 +420,20 @@ class RotaryCache {
     @VisibleForTesting
     boolean isFocusAreaHistoryCacheEmpty() {
         return mFocusAreaHistoryCache.size() == 0;
+    }
+
+    /** Saves the most recently focused node within a window. */
+    void saveWindowFocus(@NonNull AccessibilityNodeInfo focusedNode, long elapsedRealtime) {
+        mFocusWindowCache.put(focusedNode.getWindowId(), focusedNode, elapsedRealtime);
+    }
+
+    /**
+     * Returns the most recently focused valid node or {@code null} if there are no valid nodes
+     * saved by {@link #saveWindowFocus}. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    AccessibilityNodeInfo getMostRecentFocus(long elapsedRealtime) {
+        return mFocusWindowCache.getMostRecentValidNode(elapsedRealtime);
     }
 
     /** Returns the direction opposite the given {@code direction} */

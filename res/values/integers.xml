@@ -47,4 +47,19 @@
     <integer name="focus_area_history_expiration_time_ms">10000</integer>
     <!-- Size of FocusAreaHistoryCache. -->
     <integer name="focus_area_history_cache_size">5</integer>
+
+    <!-- Values for FocusWindowCache, which saves the last focused node for each window. -->
+    <!-- Type of FocusWindowCache. The values are defined in RotaryCache. 1 means the
+    cache is disabled, 2 means entries in the cache will expire after a period of time, and 3 means
+    elements in the cache will never expire as long as RotaryService is alive. -->
+    <integer name="focus_window_cache_type">2</integer>
+    <!-- How many milliseconds before an entry in FocusWindowCache expires. Must be positive
+    value when focus_window_cache_type is 2. -->
+    <integer name="focus_window_expiration_time_ms">600000</integer>
+    <!-- Size of FocusWindowCache. -->
+    <integer name="focus_window_cache_size">5</integer>
+
+    <!-- How many milliseconds to ignore TYPE_VIEW_CLICKED events after performing ACTION_CLICK or
+    injecting KEYCODE_DPAD_CENTER. -->
+    <integer name="ignore_view_clicked_ms">200</integer>
 </resources>
