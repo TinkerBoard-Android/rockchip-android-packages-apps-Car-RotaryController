@@ -226,7 +226,7 @@ public class NavigatorTest {
     @Test
     public void testFindNudgeTarget() {
         // There are 2 windows. This is the left window.
-        Rect leftWindowBounds = new Rect(0, 0, 400, 800);
+        Rect leftWindowBounds = new Rect(0, 0, 400, 1200);
         AccessibilityWindowInfo leftWindow = new WindowBuilder()
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
@@ -251,7 +251,7 @@ public class NavigatorTest {
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
                 .setClassName(FOCUS_AREA_CLASS_NAME)
-                .setBoundsInScreen(new Rect(0, 0, 400, 800))
+                .setBoundsInScreen(new Rect(0, 400, 400, 800))
                 .build();
         AccessibilityNodeInfo bottomLeft = new NodeBuilder()
                 .setNodeList(mNodeList)
@@ -323,7 +323,7 @@ public class NavigatorTest {
                 .build();
 
         // This is the right window.
-        Rect rightWindowBounds = new Rect(400, 0, 800, 800);
+        Rect rightWindowBounds = new Rect(400, 0, 800, 1200);
         AccessibilityWindowInfo rightWindow = new WindowBuilder()
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
