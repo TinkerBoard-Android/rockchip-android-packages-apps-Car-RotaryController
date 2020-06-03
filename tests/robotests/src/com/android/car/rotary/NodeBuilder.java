@@ -41,6 +41,8 @@ class NodeBuilder {
     private List<AccessibilityNodeInfo> mNodeList;
     /** The window to which this node belongs. */
     private AccessibilityWindowInfo mWindow;
+    /** The window ID to which this node belongs. */
+    private Integer mWindowId;
     /** The parent of this node. */
     private AccessibilityNodeInfo mParent;
     /** The class this node comes from. */
@@ -61,6 +63,10 @@ class NodeBuilder {
         if (mWindow != null) {
             // Mock AccessibilityNodeInfo#getWindow().
             when(node.getWindow()).thenReturn(mWindow);
+        }
+        if (mWindowId != null) {
+            // Mock AccessibilityNodeInfo#getWindowId().
+            when(node.getWindowId()).thenReturn(mWindowId);
         }
         if (mParent != null && mNodeList != null) {
             // Mock AccessibilityNodeInfo#getParent().
@@ -128,6 +134,11 @@ class NodeBuilder {
 
     NodeBuilder setWindow(@Nullable AccessibilityWindowInfo window) {
         mWindow = window;
+        return this;
+    }
+
+    NodeBuilder setWindowId(int windowId) {
+        mWindowId = windowId;
         return this;
     }
 

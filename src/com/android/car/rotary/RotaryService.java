@@ -20,6 +20,7 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.content.res.Resources;
 import android.graphics.Rect;
 import android.hardware.input.InputManager;
 import android.os.Build;
@@ -28,6 +29,7 @@ import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -122,10 +124,23 @@ public class RotaryService extends AccessibilityService implements
     private AccessibilityNodeInfo mLastTouchedNode = null;
 
     /**
-     * Whether this service generated a regular or long click which it has yet to receive an
-     * accessibility event for.
+     * How many milliseconds to ignore {@link AccessibilityEvent#TYPE_VIEW_CLICKED} events after
+     * performing {@link AccessibilityNodeInfo#ACTION_CLICK} or injecting a {@link
+     * KeyEvent#KEYCODE_DPAD_CENTER} event.
      */
-    private boolean mRotaryClicked;
+    private int mIgnoreViewClickedMs;
+
+    /**
+     * When not {@code null}, {@link AccessibilityEvent#TYPE_VIEW_CLICKED} events with this node
+     * are ignored if they occur before {@link #mIgnoreViewClickedUntil}.
+     */
+    private AccessibilityNodeInfo mIgnoreViewClickedNode;
+
+    /**
+     * When to stop ignoring {@link AccessibilityEvent#TYPE_VIEW_CLICKED} events for {@link
+     * #mIgnoreViewClickedNode} in {@link SystemClock#uptimeMillis}.
+     */
+    private long mIgnoreViewClickedUntil;
 
     /** Whether we're in rotary mode (vs touch mode). */
     private boolean mInRotaryMode;
@@ -185,27 +200,43 @@ public class RotaryService extends AccessibilityService implements
     @Override
     public void onCreate() {
         super.onCreate();
-        mRotationAcceleration3xMs =
-                getResources().getInteger(R.integer.rotation_acceleration_3x_ms);
-        mRotationAcceleration2xMs =
-                getResources().getInteger(R.integer.rotation_acceleration_2x_ms);
+        Resources res = getResources();
+        mRotationAcceleration3xMs = res.getInteger(R.integer.rotation_acceleration_3x_ms);
+        mRotationAcceleration2xMs = res.getInteger(R.integer.rotation_acceleration_2x_ms);
 
         mClearFocusAreaHistoryWhenRotating =
-                getResources().getBoolean(R.bool.clear_focus_area_history_when_rotating);
+                res.getBoolean(R.bool.clear_focus_area_history_when_rotating);
 
         @RotaryCache.CacheType int focusHistoryCacheType =
-                getResources().getInteger(R.integer.focus_history_cache_type);
+                res.getInteger(R.integer.focus_history_cache_type);
         int focusHistoryCacheSize =
-                getResources().getInteger(R.integer.focus_history_cache_size);
+                res.getInteger(R.integer.focus_history_cache_size);
         int focusHistoryExpirationTimeMs =
-                getResources().getInteger(R.integer.focus_history_expiration_time_ms);
+                res.getInteger(R.integer.focus_history_expiration_time_ms);
 
         @RotaryCache.CacheType int focusAreaHistoryCacheType =
-                getResources().getInteger(R.integer.focus_area_history_cache_type);
+                res.getInteger(R.integer.focus_area_history_cache_type);
         int focusAreaHistoryCacheSize =
-                getResources().getInteger(R.integer.focus_area_history_cache_size);
+                res.getInteger(R.integer.focus_area_history_cache_size);
         int focusAreaHistoryExpirationTimeMs =
-                getResources().getInteger(R.integer.focus_area_history_expiration_time_ms);
+                res.getInteger(R.integer.focus_area_history_expiration_time_ms);
+
+        @RotaryCache.CacheType int focusWindowCacheType =
+                res.getInteger(R.integer.focus_window_cache_type);
+        int focusWindowCacheSize =
+                res.getInteger(R.integer.focus_window_cache_size);
+        int focusWindowExpirationTimeMs =
+                res.getInteger(R.integer.focus_window_expiration_time_ms);
+
+        int hunMarginHorizontal =
+                res.getDimensionPixelSize(R.dimen.notification_headsup_card_margin_horizontal);
+        int hunLeft = hunMarginHorizontal;
+        WindowManager windowManager = getSystemService(WindowManager.class);
+        int displayWidth = windowManager.getCurrentWindowMetrics().getBounds().width();
+        int hunRight = displayWidth - hunMarginHorizontal;
+        boolean showHunOnBottom = res.getBoolean(R.bool.config_showHeadsUpNotificationOnBottom);
+
+        mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
 
         mNavigator = new Navigator(
                 focusHistoryCacheType,
@@ -213,7 +244,13 @@ public class RotaryService extends AccessibilityService implements
                 focusHistoryExpirationTimeMs,
                 focusAreaHistoryCacheType,
                 focusAreaHistoryCacheSize,
-                focusAreaHistoryExpirationTimeMs);
+                focusAreaHistoryExpirationTimeMs,
+                focusWindowCacheType,
+                focusWindowCacheSize,
+                focusWindowExpirationTimeMs,
+                hunLeft,
+                hunRight,
+                showHunOnBottom);
     }
 
     @Override
@@ -282,25 +319,29 @@ public class RotaryService extends AccessibilityService implements
                 break;
             }
             case AccessibilityEvent.TYPE_VIEW_CLICKED: {
-                // A view was clicked. If we triggered the click via performAction(ACTION_CLICK),
-                // we ignore it. Otherwise, we assume the user touched the screen. In this case, we
-                // exit rotary mode if necessary, update mLastTouchedNode, and clear the focus if
-                // the user touched a view in a different window.
-                if (mRotaryClicked) {
-                    mRotaryClicked = false;
+                // A view was clicked. If we triggered the click via performAction(ACTION_CLICK) or
+                // by injecting KEYCODE_DPAD_CENTER, we ignore it. Otherwise, we assume the user
+                // touched the screen. In this case, we exit rotary mode if necessary, update
+                // mLastTouchedNode, and clear the focus if the user touched a view in a different
+                // window.
+                AccessibilityNodeInfo sourceNode = event.getSource();
+                if (mIgnoreViewClickedNode != null
+                        && event.getEventTime() < mIgnoreViewClickedUntil
+                        && mIgnoreViewClickedNode.equals(sourceNode)) {
+                    setIgnoreViewClickedNode(null);
                 } else {
                     // Enter touch mode once the user touches the screen.
                     mInRotaryMode = false;
-                    AccessibilityNodeInfo sourceNode = event.getSource();
                     if (sourceNode != null) {
+                        // Explicitly clear focus when user uses touch in another window.
+                        maybeClearFocusInCurrentWindow(sourceNode);
+
                         if (!sourceNode.equals(mLastTouchedNode)) {
                             setLastTouchedNode(sourceNode);
                         }
-                        // Explicitly clear focus when user uses touch in another window.
-                        maybeClearFocusInCurrentWindow(sourceNode);
                     }
-                    Utils.recycleNode(sourceNode);
                 }
+                Utils.recycleNode(sourceNode);
                 break;
             }
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED: {
@@ -314,6 +355,23 @@ public class RotaryService extends AccessibilityService implements
             case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: {
                 CharSequence packageName = event.getPackageName();
                 onForegroundAppChanged(packageName);
+                break;
+            }
+            case AccessibilityEvent.TYPE_WINDOWS_CHANGED: {
+                if ((event.getWindowChanges() & AccessibilityEvent.WINDOWS_CHANGE_REMOVED) != 0
+                        && mInRotaryMode
+                        && mFocusedNode != null
+                        && mFocusedNode.getWindowId() == event.getWindowId()) {
+                    // The window containing the focused node is gone. Restore focus to the last
+                    // focused node in the last focused window.
+                    mFocusedNode.recycle();
+                    mFocusedNode = null;
+                    AccessibilityNodeInfo newFocus = mNavigator.getMostRecentFocus();
+                    if (newFocus != null) {
+                        performFocusAction(newFocus);
+                        newFocus.recycle();
+                    }
+                }
                 break;
             }
             default:
@@ -458,6 +516,7 @@ public class RotaryService extends AccessibilityService implements
         // the application will handle it.
         if (isInApplicationWindow(mFocusedNode)) {
             injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, action);
+            setIgnoreViewClickedNode(mFocusedNode);
             return;
         }
         // We're done with ACTION_DOWN event.
@@ -481,7 +540,7 @@ public class RotaryService extends AccessibilityService implements
         if (!result) {
             L.w("Failed to perform ACTION_CLICK on " + mFocusedNode);
         }
-        mRotaryClicked = true;
+        setIgnoreViewClickedNode(mFocusedNode);
     }
 
     private void handleNudgeEvent(int direction, int action) {
@@ -538,7 +597,11 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void handleRotateEvent(boolean clockwise, int count, long eventTime) {
-        if (mClearFocusAreaHistoryWhenRotating) {
+        // Clear focus area history if configured to do so, but not when rotating in the HUN. The
+        // HUN overlaps the application window so it's common for focus areas to overlap, causing
+        // geometric searches to fail. History is essential here.
+        if (mClearFocusAreaHistoryWhenRotating
+                && (mFocusedNode == null || !isInHunWindow(mFocusedNode))) {
             mNavigator.clearFocusAreaHistory();
         }
         if (initFocus()) {
@@ -624,13 +687,21 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    /** Returns whether the given {@code node} is in application window. */
+    /** Returns whether the given {@code node} is in the application window. */
     private static boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
         if (TREAT_APP_WINDOW_AS_SYSTEM_WINDOW) {
             return false;
         }
         AccessibilityWindowInfo window = node.getWindow();
         boolean result = window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION;
+        Utils.recycleWindow(window);
+        return result;
+    }
+
+    /** Returns whether the given {@code node} is in the HUN window. */
+    private boolean isInHunWindow(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityWindowInfo window = node.getWindow();
+        boolean result = mNavigator.isHunWindow(window);
         Utils.recycleWindow(window);
         return result;
     }
@@ -863,6 +934,16 @@ public class RotaryService extends AccessibilityService implements
         mLastTouchedNode = copyNode(lastTouchedNode);
     }
 
+    private void setIgnoreViewClickedNode(@Nullable AccessibilityNodeInfo node) {
+        if (mIgnoreViewClickedNode != null) {
+            mIgnoreViewClickedNode.recycle();
+        }
+        mIgnoreViewClickedNode = copyNode(node);
+        if (node != null) {
+            mIgnoreViewClickedUntil = SystemClock.uptimeMillis() + mIgnoreViewClickedMs;
+        }
+    }
+
     /**
      * Performs {@link AccessibilityNodeInfo#ACTION_FOCUS} on the given {@code targetNode}.
      *
@@ -875,14 +956,15 @@ public class RotaryService extends AccessibilityService implements
         }
         if (targetNode.isFocused()) {
             L.w("targetNode is already focused: " + targetNode);
-        }
-        boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-        if (result) {
-            setFocusedNode(targetNode);
         } else {
-            L.w("Failed to perform ACTION_FOCUS on node " + targetNode);
+            boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+            if (!result) {
+                L.w("Failed to perform ACTION_FOCUS on node " + targetNode);
+                return result;
+            }
         }
-        return result;
+        setFocusedNode(targetNode);
+        return true;
     }
 
     /**
