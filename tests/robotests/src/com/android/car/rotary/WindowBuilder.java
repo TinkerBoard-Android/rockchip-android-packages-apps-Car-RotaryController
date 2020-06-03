@@ -35,6 +35,8 @@ class WindowBuilder {
     private AccessibilityNodeInfo mRoot;
     /** The bounds of this window in the screen. */
     private Rect mBoundsInScreen;
+    /** The window type, if specified. */
+    private Integer mType;
 
     AccessibilityWindowInfo build() {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
@@ -50,6 +52,9 @@ class WindowBuilder {
                 return null;
             }).when(window).getBoundsInScreen(any(Rect.class));
         }
+        if (mType != null) {
+            when(window.getType()).thenReturn(mType);
+        }
         return window;
     }
 
@@ -60,6 +65,11 @@ class WindowBuilder {
 
     WindowBuilder setBoundsInScreen(@Nullable Rect boundsInScreen) {
         mBoundsInScreen = boundsInScreen;
+        return this;
+    }
+
+    WindowBuilder setType(int type) {
+        mType = type;
         return this;
     }
 }

@@ -17,4 +17,9 @@
 <resources>
     <!-- Whether to clear focus area history when the user rotates the navigation controller. -->
     <bool name="clear_focus_area_history_when_rotating">true</bool>
+
+    <!-- Whether heads-up notifications should be shown on the bottom as opposed to the top.
+     NOTE: This must have the same value as the config_showHeadsUpNotificationOnBottom bool
+     resource in frameworks/base/packages/CarSystemUI/res/values/config.xml -->
+    <bool name="config_showHeadsUpNotificationOnBottom">false</bool>
 </resources>
