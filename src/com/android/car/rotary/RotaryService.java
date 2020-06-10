@@ -476,9 +476,9 @@ public class RotaryService extends AccessibilityService implements
                     mCenterButtonRepeatCount = event.getRepeatCount();
                 }
                 if (mCenterButtonRepeatCount == 0) {
-                    handleCenterButtonEvent(action);
+                    handleCenterButtonEvent(action, /* longClick= */ false);
                 } else if (mCenterButtonRepeatCount == 1) {
-                    // TODO: handleLongClickEvent(action);
+                    handleCenterButtonEvent(action, /* longClick= */ true);
                 }
                 return true;
             case KeyEvent.KEYCODE_BACK:
@@ -505,7 +505,7 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /** Handles controller center button event. */
-    private void handleCenterButtonEvent(int action) {
+    private void handleCenterButtonEvent(int action, boolean longClick) {
         if (!isValidAction(action)) {
             return;
         }
@@ -535,12 +535,18 @@ public class RotaryService extends AccessibilityService implements
         }
 
         // Case 3: the focus is not in application window and the focused node doesn't support
-        // direct manipulation, perform click on the focused node.
-        boolean result = mFocusedNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        // direct manipulation, perform click or long click on the focused node.
+        boolean result = mFocusedNode.performAction(
+                longClick
+                ? AccessibilityNodeInfo.ACTION_LONG_CLICK
+                : AccessibilityNodeInfo.ACTION_CLICK);
         if (!result) {
-            L.w("Failed to perform ACTION_CLICK on " + mFocusedNode);
+            L.w("Failed to perform " + (longClick ? "ACTION_LONG_CLICK" : "ACTION_CLICK")
+                    + " on " + mFocusedNode);
         }
-        setIgnoreViewClickedNode(mFocusedNode);
+        if (!longClick) {
+            setIgnoreViewClickedNode(mFocusedNode);
+        }
     }
 
     private void handleNudgeEvent(int direction, int action) {
