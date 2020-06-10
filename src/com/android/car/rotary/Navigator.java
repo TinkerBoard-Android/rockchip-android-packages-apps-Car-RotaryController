@@ -617,6 +617,8 @@ class Navigator {
      * from {@code sourceNode} in the given {@code direction}. Returns null if none of the {@code
      * candidates} are in the given {@code direction}. The caller is responsible for recycling the
      * result.
+     *
+     * @param candidates could be a list of {@link FocusArea}s, or a list of focusable views
      */
     private AccessibilityNodeInfo chooseBestNudgeCandidate(
             @NonNull AccessibilityNodeInfo sourceNode,
@@ -633,8 +635,8 @@ class Navigator {
 
         Rect candidateBounds = new Rect();
         for (AccessibilityNodeInfo candidate : candidates) {
-            candidate.getBoundsInScreen(candidateBounds);
-            if (FocusFinder.isCandidate(sourceBounds, candidateBounds, direction)) {
+            if (isCandidate(sourceBounds, candidate, direction)) {
+                candidate.getBoundsInScreen(candidateBounds);
                 if (bestNode == null || FocusFinder.isBetterCandidate(
                         direction, sourceBounds, candidateBounds, bestBounds)) {
                     bestNode = candidate;
@@ -643,6 +645,35 @@ class Navigator {
             }
         }
         return copyNode(bestNode);
+    }
+
+    /**
+     * Returns whether the given {@code node} is a candidate from {@code sourceBounds} to the given
+     * {@code direction}. The candidate could be a non-focusable view container, or a focusable
+     * view.
+     */
+    private static boolean isCandidate(@NonNull Rect sourceBounds,
+            @NonNull AccessibilityNodeInfo node,
+            int direction) {
+        // If the node can take focus (it represents a focusable view inside a FocusArea), returns
+        // whether the node itself is a candidate.
+        if (Utils.canTakeFocus(node)) {
+            Rect candidateBounds = new Rect();
+            node.getBoundsInScreen(candidateBounds);
+            return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
+        }
+        // Otherwise (it represents a non-focusable view container, such as a FocusArea, or a
+        // non-focusable ViewGroup inside a FocusArea), returns whether the node contains at
+        // least one candidate focusable view.
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (isCandidate(sourceBounds, child, direction)) {
+                child.recycle();
+                return true;
+            }
+            child.recycle();
+        }
+        return false;
     }
 
     private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
