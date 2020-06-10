@@ -711,6 +711,267 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * In the same window
+     *
+     *            ======focus area 1===========
+     *            =                  *view1*  =
+     *            =============================
+     *
+     *            ========focus area 2=========
+     *            = *view2*                   =
+     *            =============================
+     *
+     *    =====source focus area=====
+     *    = *    source view      * =
+     *    ===========================
+     */
+    @Test
+    public void testNudgeToFocusAreaWithNoCandidates() {
+        Rect windowBounds = new Rect(0, 0, 600, 500);
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setBoundsInScreen(windowBounds)
+                .build();
+        AccessibilityNodeInfo root = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setBoundsInScreen(windowBounds)
+                .build();
+        setRootNodeForWindow(root, window);
+
+        // Currently focused view.
+        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 400, 400, 500))
+                .build();
+        AccessibilityNodeInfo sourceView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(sourceFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 400, 400, 500))
+                .build();
+
+        // focusArea1 is a better candidate than focusArea2 for a nudge to right, but its descendant
+        // view is not a candidate.
+        AccessibilityNodeInfo focusArea1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(200, 0, 600, 100))
+                .build();
+        AccessibilityNodeInfo view1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(focusArea1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(599, 0, 600, 100))
+                .build();
+
+        // focusArea2 is a worse candidate than focusArea1 for a nudge to right, but its descendant
+        // view is a candidate.
+        AccessibilityNodeInfo focusArea2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(200, 200, 600, 300))
+                .build();
+        AccessibilityNodeInfo view2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(focusArea2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(200, 200, 201, 300))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge from sourceView to right, and it should go to view1.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_RIGHT);
+        assertThat(target).isSameAs(view1);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * In the same window
+     *
+     *    =====source focus area=====
+     *    = *    source view      * =
+     *    ===========================
+     *
+     *    ======target focus area====
+     *    =   ---non-focusable----  =
+     *    =   -                  -  =
+     *    =   -  *target view*   -  =
+     *    =   -                  -  =
+     *    =   ---view container---  =
+     *    ===========================
+     */
+    @Test
+    public void testNudgeToFocusAreaWithIndirectChild() {
+        Rect windowBounds = new Rect(0, 0, 100, 200);
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setBoundsInScreen(windowBounds)
+                .build();
+        AccessibilityNodeInfo root = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setBoundsInScreen(windowBounds)
+                .build();
+        setRootNodeForWindow(root, window);
+
+        // Currently focused view.
+        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+        AccessibilityNodeInfo sourceView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(sourceFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+
+        // Target view.
+        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+        // viewContainer is non-focusable.
+        AccessibilityNodeInfo viewContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(targetFocusArea)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+        AccessibilityNodeInfo targetView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(viewContainer)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge down from sourceView, and it should go to targetView.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_DOWN);
+        assertThat(target).isSameAs(targetView);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * In the same window
+     *
+     *    =====source focus area=====
+     *    = *    source view      * =
+     *    ===========================
+     *
+     *    ======target focus area====
+     *    =   -----focusable------  =
+     *    =   -                  -  =
+     *    =   -  *target view*   -  =
+     *    =   -                  -  =
+     *    =   ---view container---  =
+     *    ===========================
+     */
+    @Test
+    public void testNudgeToFocusAreaWithNestedFocusableChild() {
+        Rect windowBounds = new Rect(0, 0, 100, 200);
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setBoundsInScreen(windowBounds)
+                .build();
+        AccessibilityNodeInfo root = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setBoundsInScreen(windowBounds)
+                .build();
+        setRootNodeForWindow(root, window);
+
+        // Currently focused view.
+        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+        AccessibilityNodeInfo sourceView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(sourceFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+
+        // Target view.
+        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+        // viewContainer is focusable.
+        AccessibilityNodeInfo viewContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(targetFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+        AccessibilityNodeInfo targetView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(window)
+                .setParent(viewContainer)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 100, 100, 200))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge down from sourceView, and it should go to viewContainer.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_DOWN);
+        assertThat(target).isSameAs(viewContainer);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      *                   root
      *                  /    \
