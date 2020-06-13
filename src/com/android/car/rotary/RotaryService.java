@@ -23,6 +23,8 @@ import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SCROLLED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOWS_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_REMOVED;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
@@ -31,11 +33,14 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.content.Context;
 import android.content.res.Resources;
+import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.Display;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -264,6 +269,8 @@ public class RotaryService extends AccessibilityService implements
     /** Package name of foreground app. */
     private CharSequence mForegroundApp;
 
+    private WindowManager mWindowManager;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -319,6 +326,32 @@ public class RotaryService extends AccessibilityService implements
                 hunLeft,
                 hunRight,
                 showHunOnBottom);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * We need to access WindowManager in onCreate() and
+     * IAccessibilityServiceClientWrapper.Callbacks#init(). Since WindowManager is a visual
+     * service, only Activity or other visual Context can access it. So we create a window context
+     * (a visual context) and delegate getSystemService() to it.
+     */
+    @Override
+    public Object getSystemService(@ServiceName @NonNull String name) {
+        // Guarantee that we always return the same WindowManager instance.
+        if (WINDOW_SERVICE.equals(name)) {
+            if (mWindowManager == null) {
+                // We need to set the display before creating the WindowContext.
+                DisplayManager displayManager = getSystemService(DisplayManager.class);
+                Display primaryDisplay = displayManager.getDisplay(DEFAULT_DISPLAY);
+                updateDisplay(primaryDisplay.getDisplayId());
+
+                Context windowContext = createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+                mWindowManager = (WindowManager) windowContext.getSystemService(WINDOW_SERVICE);
+            }
+            return mWindowManager;
+        }
+        return super.getSystemService(name);
     }
 
     @Override
