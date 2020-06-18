@@ -324,10 +324,19 @@ public class RotaryService extends AccessibilityService implements
                 // touched the screen. In this case, we exit rotary mode if necessary, update
                 // mLastTouchedNode, and clear the focus if the user touched a view in a different
                 // window.
+                // To decide whether the click was triggered by us, we can compare the source node
+                // in the event with mIgnoreViewClickedNode. If they're equal, the click was
+                // triggered by us. But there is a corner case. If a dialog shows up after we
+                // clicked the view, the window containing the view will be removed. We still
+                // receive click event (TYPE_VIEW_CLICKED) but the source node in the event will be
+                // null.
+                // Note: there is no way to tell whether the window is removed in click event
+                // because window remove event (TYPE_WINDOWS_CHANGED with type
+                // WINDOWS_CHANGE_REMOVED) comes AFTER click event.
                 AccessibilityNodeInfo sourceNode = event.getSource();
                 if (mIgnoreViewClickedNode != null
                         && event.getEventTime() < mIgnoreViewClickedUntil
-                        && mIgnoreViewClickedNode.equals(sourceNode)) {
+                        && (sourceNode == null) || mIgnoreViewClickedNode.equals(sourceNode)) {
                     setIgnoreViewClickedNode(null);
                 } else {
                     // Enter touch mode once the user touches the screen.
@@ -562,8 +571,8 @@ public class RotaryService extends AccessibilityService implements
             if (isInApplicationWindow(mFocusedNode)) {
                 injectKeyEventForDirection(direction, action);
             } else {
-                // Ignore nudge events if the focus is not in application window.
-                L.d("Focused node is in window type " + mFocusedNode.getWindow().getType());
+                L.d("Ignore nudge events because we're in DM mode and the focus is not in"
+                        + " application window");
             }
             return;
         }
@@ -606,8 +615,7 @@ public class RotaryService extends AccessibilityService implements
         // Clear focus area history if configured to do so, but not when rotating in the HUN. The
         // HUN overlaps the application window so it's common for focus areas to overlap, causing
         // geometric searches to fail. History is essential here.
-        if (mClearFocusAreaHistoryWhenRotating
-                && (mFocusedNode == null || !isInHunWindow(mFocusedNode))) {
+        if (mClearFocusAreaHistoryWhenRotating && !isFocusInHunWindow()) {
             mNavigator.clearFocusAreaHistory();
         }
         if (initFocus()) {
@@ -699,14 +707,25 @@ public class RotaryService extends AccessibilityService implements
             return false;
         }
         AccessibilityWindowInfo window = node.getWindow();
+        if (window == null) {
+            L.w("Failed to get window of " + node);
+            return false;
+        }
         boolean result = window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION;
         Utils.recycleWindow(window);
         return result;
     }
 
-    /** Returns whether the given {@code node} is in the HUN window. */
-    private boolean isInHunWindow(@NonNull AccessibilityNodeInfo node) {
-        AccessibilityWindowInfo window = node.getWindow();
+    /** Returns whether {@link #mFocusedNode} is in the HUN window. */
+    private boolean isFocusInHunWindow() {
+        if (mFocusedNode == null) {
+            return false;
+        }
+        AccessibilityWindowInfo window = mFocusedNode.getWindow();
+        if (window == null) {
+            L.w("Failed to get window of " + mFocusedNode);
+            return false;
+        }
         boolean result = mNavigator.isHunWindow(window);
         Utils.recycleWindow(window);
         return result;
@@ -832,7 +851,7 @@ public class RotaryService extends AccessibilityService implements
 
         AccessibilityWindowInfo window = mFocusedNode.getWindow();
         if (window == null) {
-            L.e("Failed to get window of " + mFocusedNode);
+            L.w("Failed to get window of " + mFocusedNode);
             return;
         }
         AccessibilityNodeInfo focusParkingView = mNavigator.findFocusParkingView(window);
