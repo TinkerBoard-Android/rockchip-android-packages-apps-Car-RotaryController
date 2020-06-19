@@ -16,6 +16,9 @@
 
 package com.android.car.rotary;
 
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_HORIZONTALLY_SCROLLABLE;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
+
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -93,7 +96,7 @@ class Utils {
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo childNode = node.getChild(i);
             if (childNode != null) {
-                boolean result =  canHaveFocus(childNode);
+                boolean result = canHaveFocus(childNode);
                 childNode.recycle();
                 if (result) {
                     return true;
@@ -113,6 +116,39 @@ class Utils {
     static boolean isFocusArea(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
         return className != null && FOCUS_AREA_CLASS_NAME.contentEquals(className);
+    }
+
+    /**
+     * Returns whether the given node represents a view which can be scrolled using the rotary
+     * controller, as indicated by its content description.
+     */
+    static boolean isScrollableContainer(@NonNull AccessibilityNodeInfo node) {
+        CharSequence contentDescription = node.getContentDescription();
+        return contentDescription != null
+                && (ROTARY_HORIZONTALLY_SCROLLABLE.contentEquals(contentDescription)
+                || ROTARY_VERTICALLY_SCROLLABLE.contentEquals(contentDescription));
+    }
+
+    /**
+     * Returns whether the given node represents a view which can be scrolled horizontally using the
+     * rotary controller, as indicated by its content description.
+     */
+    static boolean isHorizontallyScrollableContainer(@NonNull AccessibilityNodeInfo node) {
+        CharSequence contentDescription = node.getContentDescription();
+        return contentDescription != null
+                && (ROTARY_HORIZONTALLY_SCROLLABLE.contentEquals(contentDescription));
+    }
+
+    /** Returns whether {@code descendant} is a descendant of {@code ancestor}. */
+    static boolean isDescendant(@NonNull AccessibilityNodeInfo ancestor,
+            @NonNull AccessibilityNodeInfo descendant) {
+        AccessibilityNodeInfo parent = descendant.getParent();
+        if (parent == null) {
+            return false;
+        }
+        boolean result = parent.equals(ancestor) || isDescendant(ancestor, parent);
+        recycleNode(parent);
+        return result;
     }
 
     /** Recycles a window. */
