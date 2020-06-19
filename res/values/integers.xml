@@ -62,4 +62,6 @@
     <!-- How many milliseconds to ignore TYPE_VIEW_CLICKED events after performing ACTION_CLICK or
     injecting KEYCODE_DPAD_CENTER. -->
     <integer name="ignore_view_clicked_ms">200</integer>
+    <!-- How many milliseconds to wait for TYPE_VIEW_SCROLLED events after scrolling. -->
+    <integer name="after_scroll_timeout_ms">200</integer>
 </resources>
