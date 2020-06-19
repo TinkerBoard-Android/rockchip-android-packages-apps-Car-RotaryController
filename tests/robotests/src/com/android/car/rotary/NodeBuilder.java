@@ -27,6 +27,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,14 +41,19 @@ class NodeBuilder {
      */
     private List<AccessibilityNodeInfo> mNodeList;
     /** The window to which this node belongs. */
+    @Nullable
     private AccessibilityWindowInfo mWindow;
     /** The window ID to which this node belongs. */
+    @Nullable
     private Integer mWindowId;
     /** The parent of this node. */
+    @Nullable
     private AccessibilityNodeInfo mParent;
     /** The class this node comes from. */
+    @Nullable
     private String mClassName;
     /** The node bounds in screen coordinates. */
+    @Nullable
     private Rect mBoundsInScreen;
     /** Whether this node is focusable. */
     private boolean mFocusable;
@@ -57,6 +63,12 @@ class NodeBuilder {
     private boolean mEnabled;
     /** Whether the view represented by this node is still in the view tree. */
     private boolean mInViewTree;
+    /** The content description for this node. */
+    @Nullable
+    private String mContentDescription;
+    /** The action list for this node. */
+    @NonNull
+    private List<AccessibilityNodeInfo.AccessibilityAction> mActionList = new ArrayList<>();
 
     AccessibilityNodeInfo build() {
         AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
@@ -121,6 +133,14 @@ class NodeBuilder {
         // Mock AccessibilityNodeInfo#refresh().
         when(node.refresh()).thenReturn(mInViewTree);
 
+        if (mContentDescription != null) {
+            // Mock AccessibilityNodeInfo#getContentDescription().
+            when(node.getContentDescription()).thenReturn(mContentDescription);
+        }
+
+        // Mock AccessibilityNodeInfo#getActionList().
+        when(node.getActionList()).thenReturn(mActionList);
+
         if (mNodeList != null) {
             mNodeList.add(node);
         }
@@ -174,6 +194,16 @@ class NodeBuilder {
 
     NodeBuilder setInViewTree(boolean inViewTree) {
         mInViewTree = inViewTree;
+        return this;
+    }
+
+    NodeBuilder setContentDescription(@Nullable String contentDescription) {
+        mContentDescription = contentDescription;
+        return this;
+    }
+
+    NodeBuilder setActionList(@NonNull List<AccessibilityNodeInfo.AccessibilityAction> actionList) {
+        mActionList = actionList;
         return this;
     }
 }

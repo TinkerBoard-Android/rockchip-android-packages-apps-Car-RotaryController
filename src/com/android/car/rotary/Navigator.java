@@ -15,6 +15,9 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
+
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.view.View;
@@ -241,25 +244,40 @@ class Navigator {
     }
 
     /**
-     * Returns the target focusable for a rotate. The caller is responsible for recycling the
-     * result.
+     * Returns the target focusable for a rotate. The caller is responsible for recycling the node
+     * in the result.
+     *
+     * <p>If {@code skipNode} isn't null, this node will be skipped. This is used when the focus is
+     * inside a scrollable container to avoid moving the focus to the scrollable container itself.
+     *
+     * <p>Limits navigation to focusable views within a scrollable container's viewport, if any.
      *
      * @param sourceNode    the current focus
+     * @param skipNode      a node to skip - optional
      * @param direction     rotate direction, must be {@link View#FOCUS_FORWARD} or {@link
      *                      View#FOCUS_BACKWARD}
-     * @param rotationCount the number of "ticks" to rotate. Only count nodes that can take focus (
-     *                      visible, focusable and enabled).
-     * @return a focusable view in the given {@code direction} from the current focus within the
-     *         same {@link FocusArea}. If the first or last view is reached before counting up to
-     *         {@code rotationCount}, the first or last view is returned. However, if there are no
-     *         views that can take focus in the given {@code direction}, {@code null} is returned.
+     * @param rotationCount the number of "ticks" to rotate. Only count nodes that can take focus
+     *                      (visible, focusable and enabled). If {@code skipNode} is encountered, it
+     *                      isn't counted.
+     * @return a FindRotateTargetResult containing a node and a count of the number of times the
+     *         search advanced to another node. The node represents a focusable view in the given
+     *         {@code direction} from the current focus within the same {@link FocusArea}. If the
+     *         first or last view is reached before counting up to {@code rotationCount}, the first
+     *         or last view is returned. However, if there are no views that can take focus in the
+     *         given {@code direction}, {@code null} is returned.
      */
-    AccessibilityNodeInfo findRotateTarget(@NonNull AccessibilityNodeInfo sourceNode,
-            int direction, int rotationCount) {
+    @Nullable
+    FindRotateTargetResult findRotateTarget(@NonNull AccessibilityNodeInfo sourceNode,
+            @Nullable AccessibilityNodeInfo skipNode, int direction, int rotationCount) {
+        int advancedCount = 0;
         AccessibilityNodeInfo currentFocusArea = getAncestorFocusArea(sourceNode);
         AccessibilityNodeInfo targetNode = copyNode(sourceNode);
         for (int i = 0; i < rotationCount; i++) {
             AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(direction);
+            if (skipNode != null && skipNode.equals(nextTargetNode)) {
+                Utils.recycleNode(nextTargetNode);
+                nextTargetNode = skipNode.focusSearch(direction);
+            }
             AccessibilityNodeInfo targetFocusArea =
                     nextTargetNode == null ? null : getAncestorFocusArea(nextTargetNode);
 
@@ -268,9 +286,33 @@ class Navigator {
             // focus area in the window, including when the root node is treated as a focus area.
             if (nextTargetNode != null && currentFocusArea.equals(targetFocusArea)
                     && !Utils.isFocusParkingView(nextTargetNode)) {
+                // If we're navigating through a scrolling view that can scroll in the specified
+                // direction and the next view is off-screen, don't advance to it. (We'll scroll
+                // instead.)
+                Rect nextTargetBounds = new Rect();
+                nextTargetNode.getBoundsInScreen(nextTargetBounds);
+                AccessibilityNodeInfo scrollableContainer = findScrollableContainer(targetNode);
+                AccessibilityNodeInfo.AccessibilityAction scrollAction =
+                        direction == View.FOCUS_FORWARD
+                                ? ACTION_SCROLL_FORWARD
+                                : ACTION_SCROLL_BACKWARD;
+                if (scrollableContainer != null
+                        && scrollableContainer.getActionList().contains(scrollAction)) {
+                    Rect scrollBounds = new Rect();
+                    scrollableContainer.getBoundsInScreen(scrollBounds);
+                    boolean intersects = nextTargetBounds.intersect(scrollBounds);
+                    if (!intersects) {
+                        Utils.recycleNode(nextTargetNode);
+                        Utils.recycleNode(targetFocusArea);
+                        break;
+                    }
+                }
+                Utils.recycleNode(scrollableContainer);
+
                 Utils.recycleNode(targetNode);
                 Utils.recycleNode(targetFocusArea);
                 targetNode = nextTargetNode;
+                advancedCount++;
             } else {
                 Utils.recycleNode(nextTargetNode);
                 Utils.recycleNode(targetFocusArea);
@@ -282,7 +324,7 @@ class Navigator {
             targetNode.recycle();
             return null;
         }
-        return targetNode;
+        return new FindRotateTargetResult(targetNode, advancedCount);
     }
 
     /**
@@ -345,10 +387,12 @@ class Navigator {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            AccessibilityNodeInfo focusParkingView = findFocusParkingView(child);
-            child.recycle();
-            if (focusParkingView != null) {
-                return focusParkingView;
+            if (child != null) {
+                AccessibilityNodeInfo focusParkingView = findFocusParkingView(child);
+                child.recycle();
+                if (focusParkingView != null) {
+                    return focusParkingView;
+                }
             }
         }
         return null;
@@ -425,10 +469,12 @@ class Navigator {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            AccessibilityNodeInfo result = findDepthFirstFocus(child);
-            child.recycle();
-            if (result != null) {
-                return result;
+            if (child != null) {
+                AccessibilityNodeInfo result = findDepthFirstFocus(child);
+                child.recycle();
+                if (result != null) {
+                    return result;
+                }
             }
         }
         return null;
@@ -574,6 +620,128 @@ class Navigator {
     }
 
     /**
+     * Searches from the given node up through its ancestors to the containing focus area, looking
+     * for a node that's marked as horizontally or vertically scrollable. Returns a copy of the
+     * first such node or null if none is found. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    AccessibilityNodeInfo findScrollableContainer(@NonNull AccessibilityNodeInfo node) {
+        if (Utils.isScrollableContainer(node)) {
+            return copyNode(node);
+        }
+        if (Utils.isFocusArea(node)) {
+            return null;
+        }
+        AccessibilityNodeInfo parent = node.getParent();
+        if (parent == null) {
+            return null;
+        }
+        AccessibilityNodeInfo scrollableContainer = findScrollableContainer(parent);
+        parent.recycle();
+        return scrollableContainer;
+    }
+
+    /**
+     * Returns the previous node in Tab order before {@code referenceNode} within
+     * {@code containerNode} or null if none. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    static AccessibilityNodeInfo findPreviousFocusableDescendant(
+            @NonNull AccessibilityNodeInfo containerNode,
+            @NonNull AccessibilityNodeInfo referenceNode) {
+        return findFocusableDescendantInDirection(containerNode, referenceNode,
+                View.FOCUS_BACKWARD);
+    }
+
+    /**
+     * Returns the next node after {@code referenceNode} in Tab order within {@code containerNode}
+     * or null if none. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    static AccessibilityNodeInfo findNextFocusableDescendant(
+            @NonNull AccessibilityNodeInfo containerNode,
+            @NonNull AccessibilityNodeInfo referenceNode) {
+        return findFocusableDescendantInDirection(containerNode, referenceNode, View.FOCUS_FORWARD);
+    }
+
+    /**
+     * Returns the previous node before {@code referenceNode} in Tab order or the next node after
+     * {@code referenceNode} in Tab order, depending on {@code direction}. The search is limited to
+     * descendants of {@code containerNode}. Returns null if there are no focusable descendants in
+     * the given direction. The caller is responsible for recycling the result.
+     *
+     * @param containerNode the node with descendants
+     * @param referenceNode a descendant of {@code containerNode} to start from
+     * @param direction {@link View#FOCUS_FORWARD} or {@link View#FOCUS_BACKWARD}
+     * @return the node before or after {@code referenceNode} or null if none
+     */
+    @Nullable
+    static AccessibilityNodeInfo findFocusableDescendantInDirection(
+            @NonNull AccessibilityNodeInfo containerNode,
+            @NonNull AccessibilityNodeInfo referenceNode,
+            int direction) {
+        AccessibilityNodeInfo targetNode = referenceNode.focusSearch(direction);
+        if (targetNode == null
+                || targetNode.equals(containerNode)
+                || !Utils.canTakeFocus(targetNode)
+                || !Utils.isDescendant(containerNode, targetNode)) {
+            Utils.recycleNode(targetNode);
+            return null;
+        }
+        if (targetNode.equals(referenceNode)) {
+            L.w((direction == View.FOCUS_FORWARD ? "Next" : "Previous")
+                    + " node is the same node: " + referenceNode);
+            Utils.recycleNode(targetNode);
+            return null;
+        }
+        return targetNode;
+    }
+
+    /**
+     * Returns the first descendant of {@code node} which can take focus. The nodes are searched in
+     * in depth-first order, not including {@code node} itself. If no descendant can take focus,
+     * null is returned. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    AccessibilityNodeInfo findFirstFocusableDescendant(@NonNull AccessibilityNodeInfo node) {
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo childNode = node.getChild(i);
+            if (childNode != null) {
+                AccessibilityNodeInfo result = Utils.canTakeFocus(childNode)
+                        ? copyNode(childNode)
+                        : findFirstFocusableDescendant(childNode);
+                childNode.recycle();
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the last descendant of {@code node} which can take focus. The nodes are searched in
+     * in reverse depth-first order, not including {@code node} itself. If no descendant can take
+     * focus, null is returned. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    AccessibilityNodeInfo findLastFocusableDescendant(@NonNull AccessibilityNodeInfo node) {
+        for (int i = node.getChildCount() - 1; i >= 0; i--) {
+            AccessibilityNodeInfo childNode = node.getChild(i);
+            if (childNode != null) {
+                AccessibilityNodeInfo result = Utils.canTakeFocus(childNode)
+                        ? copyNode(childNode)
+                        : findLastFocusableDescendant(childNode);
+                childNode.recycle();
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Scans descendants of the given {@code rootNode} looking for focus areas and adds them to the
      * given list. It doesn't scan inside focus areas since nested focus areas aren't allowed. The
      * caller is responsible for recycling added nodes.
@@ -607,8 +775,10 @@ class Navigator {
         }
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            addFocusDescendants(child, results);
-            child.recycle();
+            if (child != null) {
+                addFocusDescendants(child, results);
+                child.recycle();
+            }
         }
     }
 
@@ -667,11 +837,13 @@ class Navigator {
         // least one candidate focusable view.
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo child = node.getChild(i);
-            if (isCandidate(sourceBounds, child, direction)) {
+            if (node != null) {
+                if (isCandidate(sourceBounds, child, direction)) {
+                    child.recycle();
+                    return true;
+                }
                 child.recycle();
-                return true;
             }
-            child.recycle();
         }
         return false;
     }
@@ -686,8 +858,8 @@ class Navigator {
      * ancestors of this view, returns the root view. The caller is responsible for recycling the
      * result.
      */
-    private @NonNull
-    AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
+    @NonNull
+    private AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
         if (Utils.isFocusArea(node)) {
             return copyNode(node);
         }
@@ -699,5 +871,16 @@ class Navigator {
         AccessibilityNodeInfo result = getAncestorFocusArea(parentNode);
         parentNode.recycle();
         return result;
+    }
+
+    /** Result from {@link #findRotateTarget}. */
+    static class FindRotateTargetResult {
+        @NonNull final AccessibilityNodeInfo node;
+        final int advancedCount;
+
+        FindRotateTargetResult(@NonNull AccessibilityNodeInfo node, int advancedCount) {
+            this.node = node;
+            this.advancedCount = advancedCount;
+        }
     }
 }
