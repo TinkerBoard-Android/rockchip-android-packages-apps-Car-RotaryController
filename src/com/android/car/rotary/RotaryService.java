@@ -15,6 +15,9 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
+
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.car.Car;
@@ -26,6 +29,7 @@ import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -80,6 +84,12 @@ public class RotaryService extends AccessibilityService implements
      */
     private static final boolean TREAT_APP_WINDOW_AS_SYSTEM_WINDOW = false;
 
+    /**
+     * How many detents to rotate when the user holds in shift while pressing C, V, Q, or E on a
+     * debug build.
+     */
+    private static final int SHIFT_DETENTS = 10;
+
     @NonNull
     private NodeCopier mNodeCopier = new NodeCopier();
 
@@ -119,6 +129,11 @@ public class RotaryService extends AccessibilityService implements
     private AccessibilityNodeInfo mFocusedNode = null;
 
     /**
+     * The current scrollable container, if any. Either {@link #mFocusedNode} or an ancestor of it.
+     */
+    private AccessibilityNodeInfo mScrollableContainer = null;
+
+    /**
      * The last clicked node by touching the screen, if any were clicked since we last navigated.
      */
     private AccessibilityNodeInfo mLastTouchedNode = null;
@@ -141,6 +156,42 @@ public class RotaryService extends AccessibilityService implements
      * #mIgnoreViewClickedNode} in {@link SystemClock#uptimeMillis}.
      */
     private long mIgnoreViewClickedUntil;
+
+    /**
+     * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
+     *
+     * @see #injectScrollEvent
+     */
+    private enum AfterScrollAction {
+        /** Do nothing. */
+        NONE,
+        /**
+         * Focus the view before the focused view in Tab order in the scrollable container, if any.
+         */
+        FOCUS_PREVIOUS,
+        /**
+         * Focus the view after the focused view in Tab order in the scrollable container, if any.
+         */
+        FOCUS_NEXT,
+        /** Focus the first view in the scrollable container, if any. */
+        FOCUS_FIRST,
+        /** Focus the last view in the scrollable container, if any. */
+        FOCUS_LAST,
+    }
+
+    private AfterScrollAction mAfterScrollAction = AfterScrollAction.NONE;
+
+    /**
+     * How many milliseconds to wait for a {@link AccessibilityEvent#TYPE_VIEW_SCROLLED} event after
+     * scrolling.
+     */
+    private int mAfterScrollTimeoutMs;
+
+    /**
+     * When to give up on receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}, in
+     * {@link SystemClock#uptimeMillis}.
+     */
+    private long mAfterScrollActionUntil;
 
     /** Whether we're in rotary mode (vs touch mode). */
     private boolean mInRotaryMode;
@@ -237,6 +288,7 @@ public class RotaryService extends AccessibilityService implements
         boolean showHunOnBottom = res.getBoolean(R.bool.config_showHeadsUpNotificationOnBottom);
 
         mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
+        mAfterScrollTimeoutMs = res.getInteger(R.integer.after_scroll_timeout_ms);
 
         mNavigator = new Navigator(
                 focusHistoryCacheType,
@@ -300,22 +352,38 @@ public class RotaryService extends AccessibilityService implements
     public void onAccessibilityEvent(AccessibilityEvent event) {
         switch (event.getEventType()) {
             case AccessibilityEvent.TYPE_VIEW_FOCUSED: {
-                if (mInRotaryMode) {
-                    // A view was focused. We ignore focus changes in touch mode. We don't use
-                    // TYPE_VIEW_FOCUSED to keep mLastTouchedNode up to date because most views
-                    // can't be focused in touch mode. In rotary mode, we use TYPE_VIEW_FOCUSED
-                    // events to keep mFocusedNode up to date and to clear the focus when moving
-                    // between windows.
-                    AccessibilityNodeInfo sourceNode = event.getSource();
-                    if (sourceNode != null && !sourceNode.equals(mFocusedNode)
-                            && !Utils.isFocusParkingView(sourceNode)) {
+                // A view was focused. We ignore focus changes in touch mode. We don't use
+                // TYPE_VIEW_FOCUSED to keep mLastTouchedNode up to date because most views can't be
+                // focused in touch mode. In rotary mode, we use TYPE_VIEW_FOCUSED events to keep
+                // mFocusedNode up to date, to clear the focus when moving between windows, and to
+                // detect when a scrollable container scrolls, pushing the focused descendant out of
+                // the viewport.
+                if (!mInRotaryMode) {
+                    break;
+                }
+                AccessibilityNodeInfo sourceNode = event.getSource();
+                if (sourceNode == null) {
+                    break;
+                }
+                if (!Utils.isFocusParkingView(sourceNode)) {
+                    if (!sourceNode.equals(mFocusedNode)) {
                         // Android doesn't clear focus automatically when focus is set in another
                         // window.
                         maybeClearFocusInCurrentWindow(sourceNode);
                         setFocusedNode(sourceNode);
                     }
-                    Utils.recycleNode(sourceNode);
+                } else {
+                    // The FocusParkingView is focused when scrolling pushes the focused view out of
+                    // the viewport. When this happens, focus the scrollable container.
+                    if (mFocusedNode != null && mScrollableContainer != null) {
+                        mScrollableContainer = Utils.refreshNode(mScrollableContainer);
+                        if (mScrollableContainer != null) {
+                            L.d("Moving focus from FocusParkingView to scrollable container");
+                            performFocusAction(mScrollableContainer);
+                        }
+                    }
                 }
+                Utils.recycleNode(sourceNode);
                 break;
             }
             case AccessibilityEvent.TYPE_VIEW_CLICKED: {
@@ -336,7 +404,7 @@ public class RotaryService extends AccessibilityService implements
                 AccessibilityNodeInfo sourceNode = event.getSource();
                 if (mIgnoreViewClickedNode != null
                         && event.getEventTime() < mIgnoreViewClickedUntil
-                        && (sourceNode == null) || mIgnoreViewClickedNode.equals(sourceNode)) {
+                        && ((sourceNode == null) || mIgnoreViewClickedNode.equals(sourceNode))) {
                     setIgnoreViewClickedNode(null);
                 } else {
                     // Enter touch mode once the user touches the screen.
@@ -359,6 +427,10 @@ public class RotaryService extends AccessibilityService implements
             }
             case AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED: {
                 updateDirectManipulationMode(event, false);
+                break;
+            }
+            case AccessibilityEvent.TYPE_VIEW_SCROLLED: {
+                handleViewScrolledEvent(event);
                 break;
             }
             case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: {
@@ -453,18 +525,19 @@ public class RotaryService extends AccessibilityService implements
         int action = event.getAction();
         boolean isActionDown = action == KeyEvent.ACTION_DOWN;
         int keyCode = getKeyCode(event);
+        int detents = event.isShiftPressed() ? SHIFT_DETENTS : 1;
         switch (keyCode) {
             case KeyEvent.KEYCODE_Q:
             case KeyEvent.KEYCODE_C:
                 if (isActionDown) {
-                    handleRotateEvent(/* clockwise= */ false, event.getRepeatCount(),
+                    handleRotateEvent(/* clockwise= */ false, detents,
                             event.getEventTime());
                 }
                 return true;
             case KeyEvent.KEYCODE_E:
             case KeyEvent.KEYCODE_V:
                 if (isActionDown) {
-                    handleRotateEvent(/* clockwise= */ true, event.getRepeatCount(),
+                    handleRotateEvent(/* clockwise= */ true, detents,
                             event.getEventTime());
                 }
                 return true;
@@ -500,6 +573,64 @@ public class RotaryService extends AccessibilityService implements
                 // Do nothing
         }
         return false;
+    }
+
+    private void handleViewScrolledEvent(AccessibilityEvent event) {
+        if (mAfterScrollAction == AfterScrollAction.NONE
+                || SystemClock.uptimeMillis() >= mAfterScrollActionUntil) {
+            return;
+        }
+        AccessibilityNodeInfo sourceNode = event.getSource();
+        if (sourceNode == null || !Utils.isScrollableContainer(sourceNode)) {
+            Utils.recycleNode(sourceNode);
+            return;
+        }
+        switch (mAfterScrollAction) {
+            case FOCUS_PREVIOUS:
+            case FOCUS_NEXT: {
+                if (mFocusedNode.equals(sourceNode)) {
+                    break;
+                }
+                AccessibilityNodeInfo target = Navigator.findFocusableDescendantInDirection(
+                        sourceNode, mFocusedNode,
+                        mAfterScrollAction == AfterScrollAction.FOCUS_PREVIOUS
+                                ? View.FOCUS_BACKWARD
+                                : View.FOCUS_FORWARD);
+                if (target == null) {
+                    break;
+                }
+                L.d("Focusing %s after scroll",
+                        mAfterScrollAction == AfterScrollAction.FOCUS_PREVIOUS
+                                ? "previous"
+                                : "next");
+                if (performFocusAction(target)) {
+                    mAfterScrollAction = AfterScrollAction.NONE;
+                }
+                Utils.recycleNode(target);
+                break;
+            }
+            case FOCUS_FIRST:
+            case FOCUS_LAST: {
+                AccessibilityNodeInfo target =
+                        mAfterScrollAction == AfterScrollAction.FOCUS_FIRST
+                                ? mNavigator.findFirstFocusableDescendant(sourceNode)
+                                : mNavigator.findLastFocusableDescendant(sourceNode);
+                if (target == null) {
+                    break;
+                }
+                L.d("Focusing %s after scroll",
+                        mAfterScrollAction == AfterScrollAction.FOCUS_FIRST ? "first" : "last");
+                if (performFocusAction(target)) {
+                    mAfterScrollAction = AfterScrollAction.NONE;
+                }
+                Utils.recycleNode(target);
+                break;
+            }
+            default:
+                throw new IllegalStateException(
+                        "Unknown after scroll action: " + mAfterScrollAction);
+        }
+        Utils.recycleNode(sourceNode);
     }
 
     private static int getKeyCode(KeyEvent event) {
@@ -624,27 +755,63 @@ public class RotaryService extends AccessibilityService implements
 
         int rotationCount = getRotateAcceleration(count, eventTime);
 
+        // If a scrollable container is focused, no focusable descendants are visible, so scroll the
+        // container.
+        AccessibilityNodeInfo.AccessibilityAction scrollAction =
+                clockwise ? ACTION_SCROLL_FORWARD : ACTION_SCROLL_BACKWARD;
+        if (mFocusedNode != null && Utils.isScrollableContainer(mFocusedNode)
+                && mFocusedNode.getActionList().contains(scrollAction)) {
+            injectScrollEvent(mFocusedNode, clockwise, rotationCount);
+            return;
+        }
+
         // If the focused node is in direct manipulation mode, manipulate it directly.
         if (mInDirectManipulationMode) {
             if (isInApplicationWindow(mFocusedNode)) {
-                mFocusedNode.getBoundsInScreen(mRect);
-                injectMotionEvent(clockwise, rotationCount, mRect.centerX(), mRect.centerY());
+                AccessibilityWindowInfo window = mFocusedNode.getWindow();
+                if (window == null) {
+                    L.w("Failed to get window of " + mFocusedNode);
+                    return;
+                }
+                int displayId = window.getDisplayId();
+                window.recycle();
+                // TODO(b/155823126): Add config to let OEMs determine the mapping.
+                injectMotionEvent(displayId, MotionEvent.AXIS_SCROLL,
+                        clockwise ? rotationCount : -rotationCount);
             } else {
                 performScrollAction(mFocusedNode, clockwise);
             }
             return;
         }
 
-        // If the focused node is not in direct manipulation mode, move the focus.
+        // If the focused node is not in direct manipulation mode, move the focus. Skip over
+        // mScrollableContainer; we don't want to navigate from a focusable descendant to the
+        // scrollable container except as a side-effect of scrolling.
+        int remainingRotationCount = rotationCount;
         int direction = clockwise ? View.FOCUS_FORWARD : View.FOCUS_BACKWARD;
-        AccessibilityNodeInfo targetNode =
-                mNavigator.findRotateTarget(mFocusedNode, direction, rotationCount);
-        if (targetNode == null) {
+        Navigator.FindRotateTargetResult result = mNavigator.findRotateTarget(mFocusedNode,
+                /* skipNode= */ mScrollableContainer, direction, rotationCount);
+        if (result != null) {
+            if (performFocusAction(result.node)) {
+                remainingRotationCount -= result.advancedCount;
+            }
+            Utils.recycleNode(result.node);
+        } else {
             L.w("Failed to find rotate target");
-            return;
         }
-        performFocusAction(targetNode);
-        Utils.recycleNode(targetNode);
+
+        // If navigation didn't consume all of rotationCount and the focused node either is a
+        // scrollable container or is a descendant of one, scroll it. The former happens when no
+        // focusable views are visible in the scrollable container. The latter happens when there
+        // are focusable views but they're in the wrong direction. Inject a MotionEvent rather than
+        // performing an action so that the application can control the amount it scrolls. Scrolling
+        // is only supported in the application window because injected events always go to the
+        // application window. We don't bother checking whether the scrollable container can
+        // currently scroll because there's nothing else to do if it can't.
+        if (remainingRotationCount > 0 && isInApplicationWindow(mFocusedNode)
+                && mScrollableContainer != null) {
+            injectScrollEvent(mScrollableContainer, clockwise, remainingRotationCount);
+        }
     }
 
     /** Handles Back button event. */
@@ -755,18 +922,64 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    private void injectMotionEvent(boolean clockwise, int rotationCount, float x, float y) {
-        // TODO(b/155823126): Add config to let OEMs determine the mapping.
-        int indents = clockwise ? rotationCount : -rotationCount;
+    /**
+     * Injects a {@link MotionEvent} to scroll {@code scrollableContainer} by {@code rotationCount}
+     * steps. The direction depends on the value of {@code clockwise}. Sets
+     * {@link #mAfterScrollAction} to move the focus once the scroll occurs, as follows:<ul>
+     *     <li>If the user is spinning the rotary controller quickly, focuses the first or last
+     *         focusable descendant so that the next rotation event will scroll immediately.
+     *     <li>If the user is spinning slowly and there are no focusable descendants visible,
+     *         focuses the first focusable descendant to scroll into view. This will be the last
+     *         focusable descendant when scrolling up.
+     *     <li>If the user is spinning slowly and there are focusable descendants visible, focuses
+     *         the next or previous focusable descendant.
+     * </ul>
+     */
+    private void injectScrollEvent(@NonNull AccessibilityNodeInfo scrollableContainer,
+            boolean clockwise, int rotationCount) {
+        // TODO(b/155823126): Add config to let OEMs determine the mappings.
+        if (rotationCount > 1) {
+            // Focus last when quickly scrolling down so the next event scrolls.
+            mAfterScrollAction = clockwise
+                    ? AfterScrollAction.FOCUS_LAST
+                    : AfterScrollAction.FOCUS_FIRST;
+        } else {
+            if (Utils.isScrollableContainer(mFocusedNode)) {
+                // Focus first when scrolling down while no focusable descendants are visible.
+                mAfterScrollAction = clockwise
+                        ? AfterScrollAction.FOCUS_FIRST
+                        : AfterScrollAction.FOCUS_LAST;
+            } else {
+                // Focus next when scrolling down with a focused descendant.
+                mAfterScrollAction = clockwise
+                        ? AfterScrollAction.FOCUS_NEXT
+                        : AfterScrollAction.FOCUS_PREVIOUS;
+            }
+        }
+        mAfterScrollActionUntil = SystemClock.uptimeMillis() + mAfterScrollTimeoutMs;
+        int axis = Utils.isHorizontallyScrollableContainer(scrollableContainer)
+                ? MotionEvent.AXIS_HSCROLL
+                : MotionEvent.AXIS_VSCROLL;
+        AccessibilityWindowInfo window = scrollableContainer.getWindow();
+        if (window == null) {
+            L.w("Failed to get window of " + scrollableContainer);
+            return;
+        }
+        int displayId = window.getDisplayId();
+        window.recycle();
+        injectMotionEvent(displayId, axis, clockwise ? -rotationCount : rotationCount);
+    }
+
+    private void injectMotionEvent(int displayId, int axis, int axisValue) {
         long upTime = SystemClock.uptimeMillis();
         MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[1];
         properties[0] = new MotionEvent.PointerProperties();
         properties[0].id = 0; // Any integer value but -1 (INVALID_POINTER_ID) is fine.
         MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
         coords[0] = new MotionEvent.PointerCoords();
-        coords[0].x = x;
-        coords[0].y = y;
-        coords[0].setAxisValue(MotionEvent.AXIS_SCROLL, indents);
+        // No need to set X,Y coordinates. We use a non-pointer source so the event will be routed
+        // to the focused view.
+        coords[0].setAxisValue(axis, axisValue);
         MotionEvent motionEvent = MotionEvent.obtain(/* downTime= */ upTime,
                 /* eventTime= */ upTime,
                 MotionEvent.ACTION_SCROLL,
@@ -779,11 +992,16 @@ public class RotaryService extends AccessibilityService implements
                 /* yPrecision= */ 1.0f,
                 /* deviceId= */ 0,
                 /* edgeFlags= */ 0,
-                /* source= */ 0,
+                InputDevice.SOURCE_ROTARY_ENCODER,
+                displayId,
                 /* flags= */ 0);
 
-        mInputManager.injectInputEvent(motionEvent,
-                InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        if (motionEvent != null) {
+            mInputManager.injectInputEvent(motionEvent,
+                    InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        } else {
+            L.w("Unable to obtain MotionEvent");
+        }
     }
 
     private boolean injectKeyEventForDirection(int direction, int action) {
@@ -809,22 +1027,35 @@ public class RotaryService extends AccessibilityService implements
     private void refreshSavedNodes() {
         mFocusedNode = Utils.refreshNode(mFocusedNode);
         mLastTouchedNode = Utils.refreshNode(mLastTouchedNode);
+        mScrollableContainer = Utils.refreshNode(mScrollableContainer);
     }
 
     /**
-     * Initializes the current focus if it's null.
-     * This method should be called when receiving an event from a rotary controller. If the current
-     * focus is not null, it will do nothing. Otherwise, it'll consume the event. Firstly, it tries
-     * to focus the view last touched by the user. If that view doesn't exist, or the focus action
-     * failed, it will try to focus the first focus descendant in the currently active window.
+     * This method should be called when receiving an event from a rotary controller. It does the
+     * following:<ol>
+     *     <li>If {@link #mFocusedNode} isn't null and represents a view that still exists, does
+     *         nothing. The event isn't consumed in this case. This is the normal case.
+     *     <li>If {@link #mScrollableContainer} isn't null and represents a view that still exists,
+     *         focuses it. The event isn't consumed in this case. This can happen when the user
+     *         rotates quickly as they scroll into a section without any focusable views.
+     *     <li>If {@link #mLastTouchedNode} isn't null and represents a view that still exists,
+     *         focuses it. The event is consumed in this case. This happens when the user switches
+     *         from touch to rotary.
+     * </ol>
      *
-     * @return whether the event was consumed by this method
+     * @return whether the event was consumed by this method. When {@code false},
+     *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
     private boolean initFocus() {
         refreshSavedNodes();
         mInRotaryMode = true;
         if (mFocusedNode != null) {
             return false;
+        }
+        if (mScrollableContainer != null) {
+            if (performFocusAction(mScrollableContainer)) {
+                return false;
+            }
         }
         if (mLastTouchedNode != null) {
             if (focusLastTouchedNode()) {
@@ -933,10 +1164,33 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleNode(mFocusedNode);
         mFocusedNode = copyNode(focusedNode);
 
+        // Set mScrollableContainer to the scrollable container which contains mFocusedNode, if any.
+        // Skip if mFocusedNode is a FocusParkingView. The FocusParkingView is focused when the
+        // focus view is scrolled off the screen. We'll focus the scrollable container when we
+        // receive the TYPE_VIEW_FOCUSED event in this case.
+        if (mFocusedNode == null) {
+            setScrollableContainer(null);
+        } else if (!Utils.isFocusParkingView(mFocusedNode)) {
+            setScrollableContainer(mNavigator.findScrollableContainer(mFocusedNode));
+        }
+
         // Cache the focused node by focus area.
         if (mFocusedNode != null) {
             mNavigator.saveFocusedNode(mFocusedNode);
         }
+    }
+
+    private void setScrollableContainer(@Nullable AccessibilityNodeInfo scrollableContainer) {
+        if ((mScrollableContainer == null && scrollableContainer == null)
+                || (mScrollableContainer != null
+                        && mScrollableContainer.equals(scrollableContainer))) {
+            L.d("Don't reset mScrollableContainer since it stays the same: "
+                    + mScrollableContainer);
+            return;
+        }
+
+        Utils.recycleNode(mScrollableContainer);
+        mScrollableContainer = copyNode(scrollableContainer);
     }
 
     /**
@@ -950,9 +1204,10 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void setLastTouchedNodeInternal(@Nullable AccessibilityNodeInfo lastTouchedNode) {
-        if ((mLastTouchedNode == null && lastTouchedNode == null) ||
-                (mLastTouchedNode != null && mLastTouchedNode.equals(lastTouchedNode))) {
+        if ((mLastTouchedNode == null && lastTouchedNode == null)
+                || (mLastTouchedNode != null && mLastTouchedNode.equals(lastTouchedNode))) {
             L.d("Don't reset mLastTouchedNode since it stays the same: " + mLastTouchedNode);
+            return;
         }
 
         Utils.recycleNode(mLastTouchedNode);

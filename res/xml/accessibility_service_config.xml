@@ -15,7 +15,7 @@
 -->
 
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewFocused|typeViewClicked|typeViewAccessibilityFocused|typeViewAccessibilityFocusCleared|typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityEventTypes="typeViewFocused|typeViewClicked|typeViewAccessibilityFocused|typeViewAccessibilityFocusCleared|typeViewScrolled|typeWindowStateChanged|typeWindowsChanged"
     android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows"
     android:canRequestFilterKeyEvents="true"
     android:canRetrieveWindowContent="true"/>

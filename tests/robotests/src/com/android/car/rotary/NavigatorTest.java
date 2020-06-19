@@ -29,8 +29,10 @@ import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.NonNull;
 
+import com.android.car.rotary.Navigator.FindRotateTargetResult;
 import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
+import com.android.car.ui.utils.RotaryConstants;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -40,6 +42,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
@@ -96,12 +99,14 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
      *              root
      *               |
      *           focusArea
      *          /    |    \
      *        /      |     \
      *    button1 button2 button3
+     * </pre>
      */
     @Test
     public void testFindRotateTarget() {
@@ -131,20 +136,29 @@ public class NavigatorTest {
         when(button3.focusSearch(direction)).thenReturn(null);
 
         // Rotate once, the focus should move from button1 to button2.
-        AccessibilityNodeInfo target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target).isSameAs(button2);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, null, direction, 1);
+        assertThat(target.node).isSameAs(button2);
+        assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button3.
-        target = mNavigator.findRotateTarget(button1, direction, 2);
-        assertThat(target).isSameAs(button3);
+        target = mNavigator.findRotateTarget(button1, null, direction, 2);
+        assertThat(target.node).isSameAs(button3);
+        assertThat(target.advancedCount).isEqualTo(2);
 
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
-        target = mNavigator.findRotateTarget(button1, direction, 3);
-        assertThat(target).isSameAs(button3);
+        target = mNavigator.findRotateTarget(button1, null, direction, 3);
+        assertThat(target.node).isSameAs(button3);
+        assertThat(target.advancedCount).isEqualTo(2);
+
+        // Rotate once, skipping button2; the focus should move to button3.
+        target = mNavigator.findRotateTarget(button1, button2, direction, 1);
+        assertThat(target.node).isSameAs(button3);
+        assertThat(target.advancedCount).isEqualTo(1);
     }
 
     /**
      * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
      *                     root
      *                    /    \
      *                   /      \
@@ -152,6 +166,7 @@ public class NavigatorTest {
      *                           /    \
      *                          /      \
      *                       button1  button2
+     * </pre>
      */
     @Test
     public void testFindRotateTargetNoWrapAround() {
@@ -191,17 +206,19 @@ public class NavigatorTest {
         when(focusParkingView.focusSearch(direction)).thenReturn(button1);
 
         // Rotate at the end of focus area, no wrap-around should happen.
-        AccessibilityNodeInfo target = mNavigator.findRotateTarget(button2, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, null, direction, 1);
         assertThat(target).isNull();
     }
 
     /**
      * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
      *                          root
      *                         /  |  \
      *                       /    |    \
      *                     /      |      \
      *      focusParkingView   button1   button2
+     * </pre>
      */
     @Test
     public void testFindRotateTargetNoWrapAround2() {
@@ -235,13 +252,95 @@ public class NavigatorTest {
         when(focusParkingView.focusSearch(direction)).thenReturn(button1);
 
         // Rotate at the end of focus area, no wrap-around should happen.
-        AccessibilityNodeInfo target = mNavigator.findRotateTarget(button2, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, null, direction, 1);
         assertThat(target).isNull();
     }
 
     /**
-     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * Tests {@link Navigator#findRotateTarget} in the following layout:
+     * <pre>
+     *     ============ focus area ============
+     *     =                                  =
+     *     =  ***** scrollable container **** =
+     *     =  *                             * =
+     *     =  *  ........ button 1 ........ * =
+     *     =  *  .                        . * =
+     *     =  *  .......................... * =
+     *     =  *                             * =
+     *     =  *  ........ button 2 ........ * =
+     *     =  *  .                        . * =
+     *     =  *  .......................... * =
+     *     =  *                             * =
+     *     =  ******************************* =
+     *     =                                  =
+     *     ============ focus area ============
      *
+     *           ........ button 3 ........
+     *           .      (offscreen)       .
+     *           ..........................
+     * </pre>
+     * where {@code button 3} is inside the scrollable container.
+     */
+    @Test
+    public void testFindRotateTargetInScrollableContainer() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo focusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setContentDescription(RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE)
+                .setActionList(new ArrayList<>(Collections.singletonList(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)))
+                .setBoundsInScreen(new Rect(0, 0, 100, 100))
+                .build();
+
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .setBoundsInScreen(new Rect(0, 0, 100, 50))
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .setBoundsInScreen(new Rect(0, 50, 100, 100))
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .setBoundsInScreen(new Rect(0, 100, 100, 150))
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(button3);
+        when(button3.focusSearch(direction)).thenReturn(null);
+
+        // Rotate once, the focus should move from button1 to button2.
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, null, direction, 1);
+        assertThat(target.node).isSameAs(button2);
+        assertThat(target.advancedCount).isEqualTo(1);
+
+        // Rotate twice, the focus should move from button1 to button2 since button3 is out of
+        // bounds.
+        target = mNavigator.findRotateTarget(button1, null, direction, 2);
+        assertThat(target.node).isSameAs(button2);
+        assertThat(target.advancedCount).isEqualTo(1);
+
+        // Rotate three times should do the same.
+        target = mNavigator.findRotateTarget(button1, null, direction, 3);
+        assertThat(target.node).isSameAs(button2);
+        assertThat(target.advancedCount).isEqualTo(1);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
      *    ****************leftWindow**************    **************rightWindow****************
      *    *                                      *    *                                       *
      *    *  ========topLeft focus area========  *    *  ========topRight focus area========  *
@@ -275,6 +374,7 @@ public class NavigatorTest {
      *    *  ==================================  *    *                                       *
      *    *                                      *    *                                       *
      *    ****************************************    *****************************************
+     * </pre>
      */
     @Test
     public void testFindNudgeTarget() {
@@ -439,7 +539,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findNudgeTarget} in the following layout:
-     *
+     * <pre>
      *    ****************leftWindow**************    **************rightWindow***************
      *    *                                      *    *                                      *
      *    *  ===left focus area===   parking1    *    *   parking2   ===right focus area===  *
@@ -453,6 +553,7 @@ public class NavigatorTest {
      *    *  =====================               *    *              ======================  *
      *    *                                      *    *                                      *
      *    ****************************************    *****************************************
+     * </pre>
      */
     @Test
     public void testFindNudgeTargetWithFocusParkingView() {
@@ -551,7 +652,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findNudgeTarget} in the following layout:
-     *
+     * <pre>
      *    ****************mainWindow**************
      *    *                                      *
      *    *    ==============top=============    *
@@ -575,15 +676,15 @@ public class NavigatorTest {
      *    *    ==============================    *
      *    *                                      *
      *    ****************************************
-     *
+     * </pre>
      * with the HUN overlapping the top of the main window:
-     *
+     * <pre>
      *       *************hunWindow************
      *       * ..............  .............. *
      *       * .  hunLeft   .  .  hunRight  . *
      *       * ..............  .............. *
      *       **********************************
-     *
+     * </pre>
      */
     @Test
     public void testFindHunNudgeTarget() {
@@ -973,6 +1074,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
+     * <pre>
      *                   root
      *                  /    \
      *                /       \
@@ -980,6 +1082,7 @@ public class NavigatorTest {
      *           /   \          /   \
      *         /      \        /     \
      *     button1 button2 button3 button4
+     * </pre>
      */
     @Test
     public void testFindFirstFocusDescendant() {
@@ -1040,6 +1143,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
+     * <pre>
      *                     root
      *                    /    \
      *                   /      \
@@ -1047,6 +1151,7 @@ public class NavigatorTest {
      *                           /    \
      *                          /      \
      *                      button1   button2
+     * </pre>
      */
     @Test
     public void testFindFirstFocusDescendantWithFocusParkingView() {
@@ -1091,6 +1196,309 @@ public class NavigatorTest {
         when(focusArea.focusSearch(direction)).thenReturn(null);
         target = mNavigator.findFirstFocusDescendant(root);
         assertThat(target).isSameAs(button1);
+    }
+
+    /**
+     * Tests {@link Navigator#findScrollableContainer} in the following node tree:
+     * <pre>
+     *                root
+     *                 |
+     *                 |
+     *             focusArea
+     *              /     \
+     *            /         \
+     *        scrolling    button2
+     *        container
+     *           |
+     *           |
+     *       container
+     *           |
+     *           |
+     *        button1
+     * </pre>
+     */
+    @Test
+    public void testFindScrollableContainer() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo focusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(focusArea)
+                .setFocusable(true)
+                .setContentDescription(RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE)
+                .build();
+        AccessibilityNodeInfo container = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(focusArea)
+                .build();
+
+        AccessibilityNodeInfo target = mNavigator.findScrollableContainer(button1);
+        assertThat(target).isSameAs(scrollableContainer);
+        target = mNavigator.findScrollableContainer(button2);
+        assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findPreviousFocusableDescendant} in the following node tree:
+     * <pre>
+     *                     root
+     *                   /      \
+     *                 /          \
+     *         container1        container2
+     *           /   \             /   \
+     *         /       \         /       \
+     *     button1   button2  button3  button4
+     * </pre>
+     */
+    @Test
+    public void testFindPreviousFocusableDescendant() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo container1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo container2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button4 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_BACKWARD;
+        when(button4.focusSearch(direction)).thenReturn(button3);
+        when(button3.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(button1);
+        when(button1.focusSearch(direction)).thenReturn(null);
+
+        AccessibilityNodeInfo target =
+                Navigator.findPreviousFocusableDescendant(container2, button4);
+        assertThat(target).isSameAs(button3);
+        target = Navigator.findPreviousFocusableDescendant(container2, button3);
+        assertThat(target).isNull();
+        target = Navigator.findPreviousFocusableDescendant(container1, button2);
+        assertThat(target).isSameAs(button1);
+        target = Navigator.findPreviousFocusableDescendant(container1, button1);
+        assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findNextFocusableDescendant} in the following node tree:
+     * <pre>
+     *                     root
+     *                   /      \
+     *                 /          \
+     *         container1        container2
+     *           /   \             /   \
+     *         /       \         /       \
+     *     button1   button2  button3  button4
+     * </pre>
+     */
+    @Test
+    public void testFindNextFocusableDescendant() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo container1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo container2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button4 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(button3);
+        when(button3.focusSearch(direction)).thenReturn(button4);
+        when(button4.focusSearch(direction)).thenReturn(null);
+
+        AccessibilityNodeInfo target = mNavigator.findNextFocusableDescendant(container1, button1);
+        assertThat(target).isSameAs(button2);
+        target = mNavigator.findNextFocusableDescendant(container1, button2);
+        assertThat(target).isNull();
+        target = mNavigator.findNextFocusableDescendant(container2, button3);
+        assertThat(target).isSameAs(button4);
+        target = mNavigator.findNextFocusableDescendant(container2, button4);
+        assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findFirstFocusableDescendant} in the following node tree:
+     * <pre>
+     *                     root
+     *                   /      \
+     *                 /          \
+     *         container1        container2
+     *           /   \             /   \
+     *         /       \         /       \
+     *     button1   button2  button3  button4
+     * </pre>
+     * where {@code button1} and {@code button2} are disabled.
+     */
+    @Test
+    public void testFindFirstFocusableDescendant() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo container1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
+                .build();
+        AccessibilityNodeInfo container2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button4 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        AccessibilityNodeInfo target = mNavigator.findFirstFocusableDescendant(root);
+        assertThat(target).isSameAs(button3);
+    }
+
+    /**
+     * Tests {@link Navigator#findLastFocusableDescendant} in the following node tree:
+     * <pre>
+     *                     root
+     *                   /      \
+     *                 /          \
+     *         container1        container2
+     *           /   \             /   \
+     *         /       \         /       \
+     *     button1   button2  button3  button4
+     * </pre>
+     * where {@code button3} and {@code button4} are disabled.
+     */
+    @Test
+    public void testFindLastFocusableDescendant() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo container1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container1)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+        AccessibilityNodeInfo container2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
+                .build();
+        AccessibilityNodeInfo button4 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(container2)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(false)
+                .build();
+
+        AccessibilityNodeInfo target = mNavigator.findLastFocusableDescendant(root);
+        assertThat(target).isSameAs(button2);
     }
 
     /** Sets the {@code root} node in the {@code window}'s hierarchy. */
