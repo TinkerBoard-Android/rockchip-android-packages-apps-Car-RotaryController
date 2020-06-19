@@ -12,6 +12,9 @@ android_robolectric_test {
     libs: [
         "android.car",
     ],
+    static_libs: [
+        "car-ui-lib",
+    ],
 
     instrumentation_for: "CarRotaryController",
 }
