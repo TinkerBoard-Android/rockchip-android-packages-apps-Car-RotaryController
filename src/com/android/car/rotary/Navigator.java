@@ -44,6 +44,9 @@ class Navigator {
     @NonNull
     private NodeCopier mNodeCopier = new NodeCopier();
 
+    @NonNull
+    private final TreeTraverser mTreeTraverser = new TreeTraverser();
+
     private final RotaryCache mRotaryCache;
 
     private final int mHunLeft;
@@ -353,6 +356,7 @@ class Navigator {
     @VisibleForTesting
     void setNodeCopier(@NonNull NodeCopier nodeCopier) {
         mNodeCopier = nodeCopier;
+        mTreeTraverser.setNodeCopier(nodeCopier);
         mRotaryCache.setNodeCopier(nodeCopier);
     }
 
@@ -378,24 +382,8 @@ class Navigator {
      * responsible for recycling the result.
      */
     private AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityNodeInfo node) {
-        if (Utils.isFocusParkingView(node)) {
-            return copyNode(node);
-        }
-        // No need to search in focus areas because FocusParkingViews are outside of focus areas.
-        if (Utils.isFocusArea(node)) {
-            return null;
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) {
-                AccessibilityNodeInfo focusParkingView = findFocusParkingView(child);
-                child.recycle();
-                if (focusParkingView != null) {
-                    return focusParkingView;
-                }
-            }
-        }
-        return null;
+        return mTreeTraverser.depthFirstSearch(node, /* skipPredicate= */ Utils::isFocusArea,
+                /* targetPredicate= */ Utils::isFocusParkingView);
     }
 
     /**
@@ -443,20 +431,7 @@ class Navigator {
      * recycling the result.
      */
     private AccessibilityNodeInfo findFirstFocusArea(@NonNull AccessibilityNodeInfo node) {
-        if (Utils.isFocusArea(node)) {
-            return copyNode(node);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo childNode = node.getChild(i);
-            if (childNode != null) {
-                AccessibilityNodeInfo focusArea = findFirstFocusArea(childNode);
-                childNode.recycle();
-                if (focusArea != null) {
-                    return focusArea;
-                }
-            }
-        }
-        return null;
+        return mTreeTraverser.depthFirstSearch(node, Utils::isFocusArea);
     }
 
     /**
@@ -465,20 +440,7 @@ class Navigator {
      * recycling result.
      */
     private AccessibilityNodeInfo findDepthFirstFocus(@NonNull AccessibilityNodeInfo node) {
-        if (Utils.canTakeFocus(node)) {
-            return copyNode(node);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) {
-                AccessibilityNodeInfo result = findDepthFirstFocus(child);
-                child.recycle();
-                if (result != null) {
-                    return result;
-                }
-            }
-        }
-        return null;
+        return mTreeTraverser.depthFirstSearch(node, Utils::canTakeFocus);
     }
 
     /**
@@ -627,19 +589,8 @@ class Navigator {
      */
     @Nullable
     AccessibilityNodeInfo findScrollableContainer(@NonNull AccessibilityNodeInfo node) {
-        if (Utils.isScrollableContainer(node)) {
-            return copyNode(node);
-        }
-        if (Utils.isFocusArea(node)) {
-            return null;
-        }
-        AccessibilityNodeInfo parent = node.getParent();
-        if (parent == null) {
-            return null;
-        }
-        AccessibilityNodeInfo scrollableContainer = findScrollableContainer(parent);
-        parent.recycle();
-        return scrollableContainer;
+        return mTreeTraverser.findNodeOrAncestor(node, /* stopPredicate= */ Utils::isFocusArea,
+                /* targetPredicate= */ Utils::isScrollableContainer);
     }
 
     /**
@@ -705,41 +656,19 @@ class Navigator {
      */
     @Nullable
     AccessibilityNodeInfo findFirstFocusableDescendant(@NonNull AccessibilityNodeInfo node) {
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo childNode = node.getChild(i);
-            if (childNode != null) {
-                AccessibilityNodeInfo result = Utils.canTakeFocus(childNode)
-                        ? copyNode(childNode)
-                        : findFirstFocusableDescendant(childNode);
-                childNode.recycle();
-                if (result != null) {
-                    return result;
-                }
-            }
-        }
-        return null;
+        return mTreeTraverser.depthFirstSearch(node,
+                candidateNode -> candidateNode != node && Utils.canTakeFocus(candidateNode));
     }
 
     /**
      * Returns the last descendant of {@code node} which can take focus. The nodes are searched in
-     * in reverse depth-first order, not including {@code node} itself. If no descendant can take
+     * reverse depth-first order, not including {@code node} itself. If no descendant can take
      * focus, null is returned. The caller is responsible for recycling the result.
      */
     @Nullable
     AccessibilityNodeInfo findLastFocusableDescendant(@NonNull AccessibilityNodeInfo node) {
-        for (int i = node.getChildCount() - 1; i >= 0; i--) {
-            AccessibilityNodeInfo childNode = node.getChild(i);
-            if (childNode != null) {
-                AccessibilityNodeInfo result = Utils.canTakeFocus(childNode)
-                        ? copyNode(childNode)
-                        : findLastFocusableDescendant(childNode);
-                childNode.recycle();
-                if (result != null) {
-                    return result;
-                }
-            }
-        }
-        return null;
+        return mTreeTraverser.reverseDepthFirstSearch(node,
+                candidateNode -> candidateNode != node && Utils.canTakeFocus(candidateNode));
     }
 
     /**
@@ -752,17 +681,7 @@ class Navigator {
      */
     private void addFocusAreas(@NonNull AccessibilityNodeInfo rootNode,
             @NonNull List<AccessibilityNodeInfo> results) {
-        if (Utils.isFocusArea(rootNode)) {
-            results.add(copyNode(rootNode));
-        } else {
-            for (int i = 0; i < rootNode.getChildCount(); i++) {
-                AccessibilityNodeInfo childNode = rootNode.getChild(i);
-                if (childNode != null) {
-                    addFocusAreas(childNode, results);
-                    childNode.recycle();
-                }
-            }
-        }
+        mTreeTraverser.depthFirstSelect(rootNode, Utils::isFocusArea, results);
     }
 
     /**
@@ -771,16 +690,7 @@ class Navigator {
      */
     private void addFocusDescendants(@NonNull AccessibilityNodeInfo node,
             @NonNull List<AccessibilityNodeInfo> results) {
-        if (Utils.canTakeFocus(node)) {
-            results.add(copyNode(node));
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) {
-                addFocusDescendants(child, results);
-                child.recycle();
-            }
-        }
+        mTreeTraverser.depthFirstSelect(node, Utils::canTakeFocus, results);
     }
 
     /**
@@ -820,33 +730,27 @@ class Navigator {
 
     /**
      * Returns whether the given {@code node} is a candidate from {@code sourceBounds} to the given
-     * {@code direction}. The candidate could be a non-focusable view container, or a focusable
-     * view.
+     * {@code direction}. To be a candidate, the node or one of its descendants must be able to take
+     * focus and must be considered a candidate by {@link FocusFinder#isCandidate}.
      */
-    private static boolean isCandidate(@NonNull Rect sourceBounds,
+    private boolean isCandidate(@NonNull Rect sourceBounds,
             @NonNull AccessibilityNodeInfo node,
             int direction) {
-        // If the node can take focus (it represents a focusable view inside a FocusArea), returns
-        // whether the node itself is a candidate.
-        if (Utils.canTakeFocus(node)) {
-            Rect candidateBounds = new Rect();
-            node.getBoundsInScreen(candidateBounds);
-            return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
-        }
-        // Otherwise (it represents a non-focusable view container, such as a FocusArea, or a
-        // non-focusable ViewGroup inside a FocusArea), returns whether the node contains at
-        // least one candidate focusable view.
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (node != null) {
-                if (isCandidate(sourceBounds, child, direction)) {
-                    child.recycle();
-                    return true;
-                }
-                child.recycle();
+        AccessibilityNodeInfo candidate = mTreeTraverser.depthFirstSearch(node, candidateNode -> {
+            // First check if the node can take focus.
+            if (!Utils.canTakeFocus(candidateNode)) {
+                return false;
             }
+            // The node represents a focusable view in the FocusArea, so check the geometry.
+            Rect candidateBounds = new Rect();
+            candidateNode.getBoundsInScreen(candidateBounds);
+            return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
+        });
+        if (candidate == null) {
+            return false;
         }
-        return false;
+        candidate.recycle();
+        return true;
     }
 
     private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
@@ -861,16 +765,23 @@ class Navigator {
      */
     @NonNull
     private AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
-        if (Utils.isFocusArea(node)) {
-            return copyNode(node);
-        }
-        AccessibilityNodeInfo parentNode = node.getParent();
-        if (parentNode == null) {
+        TreeTraverser.NodePredicate isFocusAreaOrRoot = candidateNode -> {
+            if (Utils.isFocusArea(candidateNode)) {
+                // The candidateNode is a focus area.
+                return true;
+            }
+            AccessibilityNodeInfo parent = candidateNode.getParent();
+            if (parent == null) {
+                // The candidateNode is the root node.
+                return true;
+            }
+            parent.recycle();
+            return false;
+        };
+        AccessibilityNodeInfo result = mTreeTraverser.findNodeOrAncestor(node, isFocusAreaOrRoot);
+        if (!Utils.isFocusArea(result)) {
             L.w("Couldn't find ancestor focus area for given node: " + node);
-            return copyNode(node);
         }
-        AccessibilityNodeInfo result = getAncestorFocusArea(parentNode);
-        parentNode.recycle();
         return result;
     }
 
