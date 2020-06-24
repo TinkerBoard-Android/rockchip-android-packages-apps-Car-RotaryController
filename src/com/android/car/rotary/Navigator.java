@@ -407,8 +407,9 @@ class Navigator {
     private AccessibilityNodeInfo findFirstFocus(@NonNull AccessibilityNodeInfo rootNode) {
         AccessibilityNodeInfo focusArea = findFirstFocusArea(rootNode);
         if (focusArea == null) {
-            L.e("No FocusArea in the tree");
-            return null;
+            L.w("No FocusArea in the tree");
+            // rootNode is an implicit focus area if no explicit FocusAreas are specified.
+            focusArea = copyNode(rootNode);
         }
 
         AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
