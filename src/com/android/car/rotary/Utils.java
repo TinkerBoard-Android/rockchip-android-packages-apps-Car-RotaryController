@@ -106,6 +106,27 @@ class Utils {
         return false;
     }
 
+    /**
+     * Returns whether the given {@code node} has focus (i.e. the node or one of its descendants is
+     * focused).
+     */
+    static boolean hasFocus(@NonNull AccessibilityNodeInfo node) {
+        if (node.isFocused()) {
+            return true;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo childNode = node.getChild(i);
+            if (childNode != null) {
+                boolean result = hasFocus(childNode);
+                childNode.recycle();
+                if (result) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
     static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
