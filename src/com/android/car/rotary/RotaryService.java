@@ -1119,35 +1119,47 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
-    /**
-     * Clears the current rotary focus if {@code targetFocus} is in a different window.
-     * If we really clear focus in the current window, Android will re-focus a view in the current
-     * window automatically, resulting in the current window and the target window being focused
-     * simultaneously. To avoid that we don't really clear the focus. Instead, we "park" the focus
-     * on a FocusParkingView in the current window. FocusParkingView is transparent no matter
-     * whether it's focused or not, so it's invisible to the user.
-     */
+    /** Clears the current rotary focus if {@code targetFocus} is in a different window. */
     private void maybeClearFocusInCurrentWindow(@NonNull AccessibilityNodeInfo targetFocus) {
         if (mFocusedNode == null || !mFocusedNode.isFocused()
                 || mFocusedNode.getWindowId() == targetFocus.getWindowId()) {
             return;
         }
+        if (clearFocusInCurrentWindow()) {
+            setFocusedNode(null);
+        }
+    }
 
+    /**
+     * Clears the current rotary focus.
+     * <p>
+     * If we really clear focus in the current window, Android will re-focus a view in the current
+     * window automatically, resulting in the current window and the target window being focused
+     * simultaneously. To avoid that we don't really clear the focus. Instead, we "park" the focus
+     * on a FocusParkingView in the current window. FocusParkingView is transparent no matter
+     * whether it's focused or not, so it's invisible to the user.
+     *
+     * @return whether the FocusParkingView was focused successfully
+     */
+    private boolean clearFocusInCurrentWindow() {
+        if (mFocusedNode == null) {
+            L.e("Don't call clearFocusInCurrentWindow() when mFocusedNode is null");
+            return false;
+        }
         AccessibilityWindowInfo window = mFocusedNode.getWindow();
         if (window == null) {
             L.w("Failed to get window of " + mFocusedNode);
-            return;
+            return false;
         }
         AccessibilityNodeInfo focusParkingView = mNavigator.findFocusParkingView(window);
-        window.recycle();
         if (focusParkingView == null) {
             L.e("No FocusParkingView in " + window);
-            return;
+            window.recycle();
+            return false;
         }
-
+        window.recycle();
         boolean result = focusParkingView.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
         if (result) {
-            setFocusedNode(null);
             if (mFocusParkingView != null) {
                 L.e("mFocusParkingView should be null but is " + mFocusParkingView);
                 Utils.recycleNode(mFocusParkingView);
@@ -1156,8 +1168,8 @@ public class RotaryService extends AccessibilityService implements
         } else {
             L.w("Failed to perform ACTION_FOCUS on " + focusParkingView);
         }
-
         focusParkingView.recycle();
+        return result;
     }
 
     /**
@@ -1294,13 +1306,33 @@ public class RotaryService extends AccessibilityService implements
         }
         if (targetNode.isFocused()) {
             L.w("targetNode is already focused: " + targetNode);
-        } else {
-            boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-            if (!result) {
-                L.w("Failed to perform ACTION_FOCUS on node " + targetNode);
-                return result;
-            }
+            setFocusedNode(targetNode);
+            return true;
         }
+        boolean focusCleared = false;
+        if (Utils.hasFocus(targetNode)){
+            // One of targetNode's descendants is already focused, so we can't perform ACTION_FOCUS
+            // on targetNode directly. The workaround is to clear the focus first (by focusing on
+            // the FocusParkingView), then focus on targetNode.
+            L.d("One of targetNode's descendants is already focused: " + targetNode);
+            if (!clearFocusInCurrentWindow()) {
+                return false;
+            }
+            focusCleared = true;
+        }
+        // Now we can perform ACTION_FOCUS on targetNode since it doesn't have focus, or its
+        // descendant's focus has been cleared.
+        boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        if (!result) {
+            L.w("Failed to perform ACTION_FOCUS on node " + targetNode);
+            // Previously we cleared the focus of targetNode's descendant, which won't reset the
+            // focused node to null. So we need to reset it manually.
+            if (focusCleared) {
+                setFocusedNode(null);
+            }
+            return false;
+        }
+
         setFocusedNode(targetNode);
         return true;
     }
