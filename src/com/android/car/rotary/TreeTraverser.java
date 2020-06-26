@@ -65,6 +65,7 @@ class TreeTraverser {
             currentNode.recycle();
             currentNode = parentNode;
         }
+        Utils.recycleNode(currentNode);
         return null;
     }
 
