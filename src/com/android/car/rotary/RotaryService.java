@@ -1264,9 +1264,15 @@ public class RotaryService extends AccessibilityService implements
             L.d("Exit direct manipulation mode since there is no focused node");
         }
 
-        Utils.recycleNode(mPreviousFocusedNode);
-        mPreviousFocusedNode = copyNode(mFocusedNode);
-        Utils.recycleNode(mFocusedNode);
+        // Recycle mPreviousFocusedNode only when it's not the same with focusedNode.
+        if (mPreviousFocusedNode != focusedNode) {
+            Utils.recycleNode(mPreviousFocusedNode);
+        } else {
+            // TODO(b/159949186)
+            L.e("mPreviousFocusedNode shouldn't be the same with focusedNode " + focusedNode);
+        }
+
+        mPreviousFocusedNode = mFocusedNode;
         mFocusedNode = copyNode(focusedNode);
 
         // Set mScrollableContainer to the scrollable container which contains mFocusedNode, if any.
