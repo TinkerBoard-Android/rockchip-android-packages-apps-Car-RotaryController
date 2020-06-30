@@ -33,16 +33,20 @@ public class WindowBuilderTest {
         AccessibilityNodeInfo root = new NodeBuilder().build();
         Rect bounds = new Rect(100, 200, 300, 400);
         AccessibilityWindowInfo window = new WindowBuilder()
+                .setId(0x42)
                 .setRoot(root)
                 .setBoundsInScreen(bounds)
                 .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
                 .build();
+
+        assertThat(window.getId()).isEqualTo(0x42);
 
         assertThat(window.getRoot()).isSameAs(root);
 
         Rect boundsInScreen = new Rect();
         window.getBoundsInScreen(boundsInScreen);
         assertThat(boundsInScreen).isEqualTo(bounds);
+
         assertThat(window.getType()).isEqualTo(AccessibilityWindowInfo.TYPE_SYSTEM);
     }
 }

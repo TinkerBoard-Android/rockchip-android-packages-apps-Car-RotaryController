@@ -187,4 +187,20 @@ class Utils {
             }
         }
     }
+
+    /**
+     * Returns a reference to the window with ID {@code windowId} or null if not found.
+     * <p>
+     * <strong>Note:</strong> Do not recycle the result.
+     */
+    @Nullable
+    static AccessibilityWindowInfo findWindowWithId(@NonNull List<AccessibilityWindowInfo> windows,
+            int windowId) {
+        for (AccessibilityWindowInfo window : windows) {
+            if (window.getId() == windowId) {
+                return window;
+            }
+        }
+        return null;
+    }
 }

@@ -1073,6 +1073,134 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
+     *    ********* app window **********
+     *    *                             *
+     *    *  === target focus area ===  *
+     *    *  =                       =  *
+     *    *  =       [view1]         =  *
+     *    *  =                       =  *
+     *    *  =    [target view]      =  *
+     *    *  =                       =  *
+     *    *  =       [view3]         =  *
+     *    *  =                       =  *
+     *    *  =========================  *
+     *    *                             *
+     *    *******************************
+     *
+     *    ********* IME window **********
+     *    *                             *
+     *    *  === source focus area ===  *
+     *    *  =                       =  *
+     *    *  =    [source view]      =  *
+     *    *  =                       =  *
+     *    *  =========================  *
+     *    *                             *
+     *    *******************************
+     * </pre>
+     */
+    @Test
+    public void testNudgeOutOfIme() {
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+
+        int appWindowId = 0x42;
+        Rect appWindowBounds = new Rect(0, 0, 400, 300);
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setId(appWindowId)
+                .setBoundsInScreen(appWindowBounds)
+                .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
+                .build();
+        windows.add(appWindow);
+        AccessibilityNodeInfo appRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(appWindow)
+                .setWindowId(appWindowId)
+                .setBoundsInScreen(appWindowBounds)
+                .build();
+        setRootNodeForWindow(appRoot, appWindow);
+        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(appWindow)
+                .setWindowId(appWindowId)
+                .setParent(appRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 400, 300))
+                .build();
+        AccessibilityNodeInfo view1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(appWindow)
+                .setWindowId(appWindowId)
+                .setParent(targetFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 400, 100))
+                .build();
+        AccessibilityNodeInfo targetView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(appWindow)
+                .setWindowId(appWindowId)
+                .setParent(targetFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 100, 400, 200))
+                .build();
+        AccessibilityNodeInfo view3 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(appWindow)
+                .setWindowId(appWindowId)
+                .setParent(targetFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 200, 400, 300))
+                .build();
+
+        int imeWindowId = 0x39;
+        Rect imeWindowBounds = new Rect(0, 300, 400, 400);
+        AccessibilityWindowInfo imeWindow = new WindowBuilder()
+                .setId(imeWindowId)
+                .setBoundsInScreen(imeWindowBounds)
+                .setType(AccessibilityWindowInfo.TYPE_INPUT_METHOD)
+                .build();
+        windows.add(imeWindow);
+        AccessibilityNodeInfo imeRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(imeWindow)
+                .setWindowId(imeWindowId)
+                .setBoundsInScreen(imeWindowBounds)
+                .build();
+        setRootNodeForWindow(imeRoot, imeWindow);
+        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(imeWindow)
+                .setWindowId(imeWindowId)
+                .setParent(imeRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 300, 400, 400))
+                .build();
+        AccessibilityNodeInfo sourceView = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(imeWindow)
+                .setWindowId(imeWindowId)
+                .setParent(sourceFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 300, 400, 400))
+                .build();
+
+        // Nudge up from sourceView with the targetView already focused, and it should go to
+        // targetView. This is what happens when the user nudges up from the IME to go back to the
+        // EditText they were editing.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_UP, targetView);
+        assertThat(target).isSameAs(targetView);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      * <pre>
      *                   root
