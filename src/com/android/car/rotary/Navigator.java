@@ -764,7 +764,7 @@ class Navigator {
      * result.
      */
     @NonNull
-    private AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
+    AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
         TreeTraverser.NodePredicate isFocusAreaOrRoot = candidateNode -> {
             if (Utils.isFocusArea(candidateNode)) {
                 // The candidateNode is a focus area.

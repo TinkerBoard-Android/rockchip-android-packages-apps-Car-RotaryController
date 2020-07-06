@@ -15,6 +15,9 @@
  */
 package com.android.car.rotary;
 
+import static android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED;
@@ -23,8 +26,10 @@ import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SCROLLED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOWS_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_REMOVED;
-import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
+import static android.view.accessibility.AccessibilityNodeInfo.ACTION_DISMISS;
+import static android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS;
+import static android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
@@ -38,6 +43,7 @@ import android.content.res.Resources;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Display;
@@ -54,6 +60,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
+import com.android.car.ui.utils.RotaryConstants;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -136,6 +143,12 @@ public class RotaryService extends AccessibilityService implements
      * com.android.car.ui.FocusParkingView} is focused.
      */
     private AccessibilityNodeInfo mFocusedNode = null;
+
+    /**
+     * The focus area that contains the {@link #mFocusedNode}. It's null if {@link #mFocusedNode} is
+     * null.
+     */
+    private AccessibilityNodeInfo mFocusArea = null;
 
     /**
      * The previously focused node, if any. It's null if no nodes were focused or a {@link
@@ -374,7 +387,7 @@ public class RotaryService extends AccessibilityService implements
         if (Build.IS_DEBUGGABLE) {
             AccessibilityServiceInfo serviceInfo = getServiceInfo();
             // Filter testing KeyEvents from a keyboard.
-            serviceInfo.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+            serviceInfo.flags |= FLAG_REQUEST_FILTER_KEY_EVENTS;
             setServiceInfo(serviceInfo);
         }
 
@@ -761,10 +774,7 @@ public class RotaryService extends AccessibilityService implements
 
         // Case 3: the focus is not in application window and the focused node doesn't support
         // direct manipulation, perform click or long click on the focused node.
-        boolean result = mFocusedNode.performAction(
-                longClick
-                ? AccessibilityNodeInfo.ACTION_LONG_CLICK
-                : AccessibilityNodeInfo.ACTION_CLICK);
+        boolean result = mFocusedNode.performAction(longClick ? ACTION_LONG_CLICK : ACTION_CLICK);
         if (!result) {
             L.w("Failed to perform " + (longClick ? "ACTION_LONG_CLICK" : "ACTION_CLICK")
                     + " on " + mFocusedNode);
@@ -939,15 +949,13 @@ public class RotaryService extends AccessibilityService implements
     private static void performScrollAction(@NonNull AccessibilityNodeInfo targetNode,
             boolean clockwise) {
         // TODO(b/155823126): Add config to let OEMs determine the mapping.
-        int actionToPerform = clockwise
-                ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
-        int supportedActions = targetNode.getActions();
-        if ((actionToPerform & supportedActions) == 0) {
+        AccessibilityNodeInfo.AccessibilityAction actionToPerform =
+                clockwise ? ACTION_SCROLL_FORWARD : ACTION_SCROLL_BACKWARD;
+        if (!targetNode.getActionList().contains(actionToPerform)) {
             L.w("Node " + targetNode + " doesn't support action " + actionToPerform);
             return;
         }
-        boolean result = targetNode.performAction(actionToPerform);
+        boolean result = targetNode.performAction(actionToPerform.getId());
         if (!result) {
             L.w("Failed to perform action " + actionToPerform + " on " + targetNode);
         }
@@ -1114,6 +1122,7 @@ public class RotaryService extends AccessibilityService implements
         mLastTouchedNode = Utils.refreshNode(mLastTouchedNode);
         mScrollableContainer = Utils.refreshNode(mScrollableContainer);
         mPreviousFocusedNode = Utils.refreshNode(mPreviousFocusedNode);
+        mFocusArea = Utils.refreshNode(mFocusArea);
     }
 
     /**
@@ -1191,7 +1200,7 @@ public class RotaryService extends AccessibilityService implements
             return false;
         }
         window.recycle();
-        boolean result = focusParkingView.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        boolean result = focusParkingView.performAction(ACTION_FOCUS);
         if (result) {
             if (mFocusParkingView != null) {
                 L.e("mFocusParkingView should be null but is " + mFocusParkingView);
@@ -1274,6 +1283,8 @@ public class RotaryService extends AccessibilityService implements
 
         mPreviousFocusedNode = mFocusedNode;
         mFocusedNode = copyNode(focusedNode);
+        Utils.recycleNode(mFocusArea);
+        mFocusArea = mFocusedNode == null ? null : mNavigator.getAncestorFocusArea(mFocusedNode);
 
         // Set mScrollableContainer to the scrollable container which contains mFocusedNode, if any.
         // Skip if mFocusedNode is a FocusParkingView. The FocusParkingView is focused when the
@@ -1340,6 +1351,20 @@ public class RotaryService extends AccessibilityService implements
      *         {@link AccessibilityNodeInfo#ACTION_FOCUS}
      */
     private boolean performFocusAction(@NonNull AccessibilityNodeInfo targetNode) {
+        return performFocusAction(targetNode, /* arguments= */ null);
+    }
+
+    /**
+     * Performs {@link AccessibilityNodeInfo#ACTION_FOCUS} on the given {@code targetNode}.
+     *
+     * @param targetNode the node to perform action on
+     * @param arguments optional bundle with additional arguments
+     *
+     * @return true if {@code targetNode} was focused already or became focused after performing
+     *         {@link AccessibilityNodeInfo#ACTION_FOCUS}
+     */
+    private boolean performFocusAction(
+            @NonNull AccessibilityNodeInfo targetNode, @Nullable Bundle arguments) {
         if (targetNode.equals(mFocusedNode)) {
             return true;
         }
@@ -1349,19 +1374,19 @@ public class RotaryService extends AccessibilityService implements
             return true;
         }
         boolean focusCleared = false;
-        if (Utils.hasFocus(targetNode)){
+        if (!Utils.isFocusArea(targetNode) && Utils.hasFocus(targetNode)){
             // One of targetNode's descendants is already focused, so we can't perform ACTION_FOCUS
-            // on targetNode directly. The workaround is to clear the focus first (by focusing on
-            // the FocusParkingView), then focus on targetNode.
+            // on targetNode directly unless it's a FocusArea. The workaround is to clear the focus
+            // first (by focusing on the FocusParkingView), then focus on targetNode.
             L.d("One of targetNode's descendants is already focused: " + targetNode);
             if (!clearFocusInCurrentWindow()) {
                 return false;
             }
             focusCleared = true;
         }
-        // Now we can perform ACTION_FOCUS on targetNode since it doesn't have focus, or its
-        // descendant's focus has been cleared.
-        boolean result = targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        // Now we can perform ACTION_FOCUS on targetNode since it doesn't have focus, its
+        // descendant's focus has been cleared, or it's a FocusArea.
+        boolean result = targetNode.performAction(ACTION_FOCUS, arguments);
         if (!result) {
             L.w("Failed to perform ACTION_FOCUS on node " + targetNode);
             // Previously we cleared the focus of targetNode's descendant, which won't reset the
@@ -1372,6 +1397,14 @@ public class RotaryService extends AccessibilityService implements
             return false;
         }
 
+        // Set the focused node.
+        // 1. If targetNode doesn't represent a FocusArea, the focused node is targetNode.
+        // 2. If targetNode represents a FocusArea, when ACTION_FOCUS is performed successfully,
+        //    targetNode won't get focused. Instead, one of its descendants will get focused. Since
+        //    performAction() is an IPC, we can't decide which descendant is focused for now. We can
+        //    just set the targetNode as focused node (or don't set). This is not an issue because
+        //    we will receive TYPE_VIEW_FOCUSED event later and we will set the focused node
+        //    properly when handling the event.
         setFocusedNode(targetNode);
         return true;
     }
@@ -1427,8 +1460,23 @@ public class RotaryService extends AccessibilityService implements
             L.d("Move focus to the previously focused node");
             return;
         }
-        // TODO(b/158797952): do 2,3.
-        if (focusParkingView.performAction(AccessibilityNodeInfo.ACTION_DISMISS)) {
+        mFocusArea = Utils.refreshNode(mFocusArea);
+        if (mFocusArea != null) {
+            Bundle bundle = new Bundle();
+            bundle.putInt(RotaryConstants.FOCUS_ACTION_TYPE, RotaryConstants.FOCUS_DEFAULT);
+            if (performFocusAction(mFocusArea, bundle)) {
+                L.d("Move focus to the default focus of the current FocusArea");
+                return;
+            }
+
+            bundle.clear();
+            bundle.putInt(RotaryConstants.FOCUS_ACTION_TYPE, RotaryConstants.FOCUS_FIRST);
+            if (performFocusAction(mFocusArea, bundle)) {
+                L.d("Move focus to the first focusable view in the current FocusArea");
+                return;
+            }
+        }
+        if (focusParkingView.performAction(ACTION_DISMISS)) {
             L.d("Move focus to the default focus in the window");
             return;
         }
