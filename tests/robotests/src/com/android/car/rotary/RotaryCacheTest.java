@@ -37,6 +37,7 @@ public class RotaryCacheTest {
     private static final int FOCUS_AREA_CACHE_SIZE = 5;
     private static final int FOCUS_WINDOW_CACHE_SIZE = 5;
     private static final int CACHE_TIME_OUT_MS = 10000;
+    private static final int ACTIVE_WINDOW_ID = 42;
 
     private RotaryCache mRotaryCache;
 
@@ -69,7 +70,7 @@ public class RotaryCacheTest {
 
         mFocusArea = createNode();
         mTargetFocusArea = createNode();
-        mFocusedNode = createFocusNode();
+        mFocusedNode = createFocusNodeInWindow(ACTIVE_WINDOW_ID);
 
         mValidTime = CACHE_TIME_OUT_MS - 1;
         mExpiredTime = CACHE_TIME_OUT_MS + 1;
@@ -268,14 +269,14 @@ public class RotaryCacheTest {
         mRotaryCache.saveWindowFocus(mFocusedNode, 0);
 
         // In the cache.
-        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(mValidTime);
+        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID, mValidTime);
         assertThat(node).isEqualTo(mFocusedNode);
     }
 
     @Test
     public void testGetWindowFocusNotInTheCache() {
         // Not in the cache.
-        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(mValidTime);
+        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID, mValidTime);
         assertThat(node).isNull();
     }
 
@@ -285,30 +286,50 @@ public class RotaryCacheTest {
         mRotaryCache.saveWindowFocus(mFocusedNode, 0);
 
         // Expired cache.
-        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(mExpiredTime);
+        AccessibilityNodeInfo node =
+                mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID, mExpiredTime);
         assertThat(node).isNull();
     }
 
     @Test
     public void testGetWindowFocusNotInViewTree() {
         // Save a window focus that is no longer in the view tree.
-        AccessibilityNodeInfo node =
-                new NodeBuilder().setInViewTree(false).setFocusable(true).build();
+        AccessibilityNodeInfo node = new NodeBuilder()
+                .setInViewTree(false)
+                .setFocusable(true)
+                .setWindowId(ACTIVE_WINDOW_ID)
+                .build();
         mRotaryCache.saveWindowFocus(node, 0);
 
-        AccessibilityNodeInfo result = mRotaryCache.getMostRecentFocus(mValidTime);
+        AccessibilityNodeInfo result =
+                mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID, mValidTime);
         assertThat(result).isNull();
     }
 
     @Test
     public void testGetWindowFocusCannotTakeFocus() {
         // Save a window focus that is still in the view tree but can't take focus.
-        AccessibilityNodeInfo node =
-                new NodeBuilder().setInViewTree(true).setFocusable(false).build();
+        AccessibilityNodeInfo node = new NodeBuilder()
+                .setInViewTree(true)
+                .setFocusable(false)
+                .setWindowId(ACTIVE_WINDOW_ID)
+                .build();
         mRotaryCache.saveWindowFocus(node, 0);
 
-        AccessibilityNodeInfo result = mRotaryCache.getMostRecentFocus(mValidTime);
+        AccessibilityNodeInfo result =
+                mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID, mValidTime);
         assertThat(result).isNull();
+    }
+
+    @Test
+    public void testGetWindowFocusWithWrongId() {
+        // Save a window focus.
+        mRotaryCache.saveWindowFocus(mFocusedNode, 0);
+
+        // In the cache.
+        AccessibilityNodeInfo node =
+                mRotaryCache.getMostRecentFocus(ACTIVE_WINDOW_ID + 1, mValidTime);
+        assertThat(node).isNull();
     }
 
     @Test
@@ -324,7 +345,7 @@ public class RotaryCacheTest {
         mRotaryCache.saveWindowFocus(node2InWindow2, 0);
 
         // The most recent node should be the second node in the second window.
-        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(mValidTime);
+        AccessibilityNodeInfo node = mRotaryCache.getMostRecentFocus(2, mValidTime);
         assertThat(node).isEqualTo(node2InWindow2);
     }
 
@@ -343,6 +364,7 @@ public class RotaryCacheTest {
                 .build();
     }
 
+    /** Creates a node that is in the view tree and can take focus with given {@code windowId}. */
     private AccessibilityNodeInfo createFocusNodeInWindow(int windowId) {
         return new NodeBuilder()
                 .setWindowId(windowId)

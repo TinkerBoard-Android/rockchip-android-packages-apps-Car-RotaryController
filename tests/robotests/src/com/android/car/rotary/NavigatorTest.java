@@ -78,7 +78,7 @@ public class NavigatorTest {
                 mHunWindowBounds.right,
                 /* showHunOnBottom= */ false);
 
-        // Utils#copyNode() doesn't work when passed a mock node, so we create a mock method
+        // NodeCopier#copyNode() doesn't work when passed a mock node, so we create a mock method
         // which returns the passed node itself rather than a copy. As a result, nodes created by
         // the mock method (such as |target| in testFindRotateTarget()) shouldn't be recycled.
         doAnswer(returnsFirstArg()).when(mNodeCopier).copy(any(AccessibilityNodeInfo.class));
