@@ -16,7 +16,10 @@
 package com.android.car.rotary;
 
 import static android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+import static android.provider.Settings.Secure.DEFAULT_INPUT_METHOD;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED;
@@ -25,6 +28,7 @@ import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SCROLLED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOWS_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
+import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_ADDED;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_REMOVED;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_DISMISS;
@@ -32,21 +36,30 @@ import static android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
+import android.database.ContentObserver;
+import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -55,6 +68,7 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -145,6 +159,13 @@ public class RotaryService extends AccessibilityService implements
     private AccessibilityNodeInfo mFocusedNode = null;
 
     /**
+     * The node being edited by the IME, if any. When focus moves to the IME, if it's moving from an
+     * editable node, we leave it focused. This variable is used to keep track of it so that we can
+     * return to it when the user nudges out of the IME.
+     */
+    private AccessibilityNodeInfo mEditNode = null;
+
+    /**
      * The focus area that contains the {@link #mFocusedNode}. It's null if {@link #mFocusedNode} is
      * null.
      */
@@ -190,6 +211,16 @@ public class RotaryService extends AccessibilityService implements
      * #mIgnoreViewClickedNode} in {@link SystemClock#uptimeMillis}.
      */
     private long mIgnoreViewClickedUntil;
+
+    /** Component name of rotary IME. Empty if none. */
+    private String mRotaryInputMethod;
+
+    /** Component name of IME used in touch mode. Null until first observed. */
+    @Nullable
+    private String mTouchInputMethod;
+
+    /** Observer to update {@link #mTouchInputMethod} when the user switches IMEs. */
+    private ContentObserver mInputMethodObserver;
 
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
@@ -339,6 +370,8 @@ public class RotaryService extends AccessibilityService implements
                 hunLeft,
                 hunRight,
                 showHunOnBottom);
+
+        mRotaryInputMethod = res.getString(R.string.rotary_input_method);
     }
 
     /**
@@ -392,6 +425,12 @@ public class RotaryService extends AccessibilityService implements
         }
 
         mInputManager = getSystemService(InputManager.class);
+
+        // Add an overlay to capture touch events.
+        addTouchOverlay();
+
+        // Register an observer to update mTouchInputMethod whenever the user switches IMEs.
+        registerInputMethodObserver();
     }
 
     @Override
@@ -401,6 +440,7 @@ public class RotaryService extends AccessibilityService implements
 
     @Override
     public void onDestroy() {
+        unregisterInputMethodObserver();
         if (mCarInputManager != null) {
             mCarInputManager.releaseInputEventCapture(CarInputManager.TARGET_DISPLAY_TYPE_MAIN);
         }
@@ -439,7 +479,17 @@ public class RotaryService extends AccessibilityService implements
                 break;
             }
             case TYPE_WINDOWS_CHANGED: {
-                handleWindowsChangedEvent(event);
+                // Ignore these events if we're in touch mode.
+                if (!mInRotaryMode) {
+                    return;
+                }
+
+                if ((event.getWindowChanges() & WINDOWS_CHANGE_REMOVED) != 0) {
+                    handleWindowRemovedEvent(event);
+                }
+                if ((event.getWindowChanges() & WINDOWS_CHANGE_ADDED) != 0) {
+                    handleWindowAddedEvent(event);
+                }
                 break;
             }
             default:
@@ -493,6 +543,89 @@ public class RotaryService extends AccessibilityService implements
     public void onCaptureStateChanged(int targetDisplayId,
             @android.annotation.NonNull @CarInputManager.InputTypeEnum int[] activeInputTypes) {
         // Do nothing.
+    }
+
+    /**
+     * Adds an overlay to capture touch events. The overlay has zero width and height so
+     * it doesn't prevent other windows from receiving touch events. It sets
+     * {@link WindowManager.LayoutParams#FLAG_WATCH_OUTSIDE_TOUCH} so it receives
+     * {@link MotionEvent#ACTION_OUTSIDE} events for touches anywhere on the screen. This
+     * is used to exit rotary mode when the user touches the screen, even if the touch
+     * isn't considered a click.
+     */
+    private void addTouchOverlay() {
+        FrameLayout frameLayout = new FrameLayout(this);
+        FrameLayout.LayoutParams frameLayoutParams =
+                new FrameLayout.LayoutParams(/* width= */ 0, /* height= */ 0);
+        frameLayout.setLayoutParams(frameLayoutParams);
+        frameLayout.setOnTouchListener((view, event) -> {
+            // We're trying to identify real touches from the user's fingers, but using the rotary
+            // controller to press keys in the rotary IME also triggers this touch listener, so we
+            // ignore these touches.
+            if (mIgnoreViewClickedNode == null
+                    || event.getEventTime() >= mIgnoreViewClickedUntil) {
+                onTouchEvent();
+            }
+            return false;
+        });
+        WindowManager.LayoutParams windowLayoutParams = new WindowManager.LayoutParams(
+                /* w= */ 0,
+                /* h= */ 0,
+                TYPE_APPLICATION_OVERLAY,
+                FLAG_NOT_FOCUSABLE | FLAG_WATCH_OUTSIDE_TOUCH,
+                PixelFormat.TRANSPARENT);
+        windowLayoutParams.gravity = Gravity.RIGHT | Gravity.TOP;
+        WindowManager windowManager = getSystemService(WindowManager.class);
+        windowManager.addView(frameLayout, windowLayoutParams);
+    }
+
+    private void onTouchEvent() {
+        if (!mInRotaryMode) {
+            return;
+        }
+
+        // Enter touch mode once the user touches the screen.
+        setInRotaryMode(false);
+
+        // Explicitly clear focus when user uses touch.
+        if (mFocusedNode != null) {
+            clearFocusInCurrentWindow();
+        }
+    }
+
+    /**
+     * Registers an observer to updates {@link #mTouchInputMethod} whenever the user switches IMEs.
+     */
+    private void registerInputMethodObserver() {
+        if (mInputMethodObserver != null) {
+            throw new IllegalStateException("Input method observer already registered");
+        }
+        ContentResolver contentResolver = getContentResolver();
+        mInputMethodObserver = new ContentObserver(new Handler(Looper.myLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                // Either the user switched input methods or we did. In the former case, update
+                // mTouchInputMethod so we can switch back after switching to the rotary input
+                // method.
+                String inputMethod =
+                        Settings.Secure.getString(contentResolver, DEFAULT_INPUT_METHOD);
+                if (inputMethod != null && !inputMethod.equals(mRotaryInputMethod)) {
+                    mTouchInputMethod = inputMethod;
+                }
+            }
+        };
+        contentResolver.registerContentObserver(
+                Settings.Secure.getUriFor(DEFAULT_INPUT_METHOD),
+                /* notifyForDescendants= */ false,
+                mInputMethodObserver);
+    }
+
+    /** Unregisters the observer registered by {@link #registerInputMethodObserver}. */
+    private void unregisterInputMethodObserver() {
+        if (mInputMethodObserver != null) {
+            getContentResolver().unregisterContentObserver(mInputMethodObserver);
+            mInputMethodObserver = null;
+        }
     }
 
     private static boolean isValidDisplayId(int displayId) {
@@ -549,6 +682,9 @@ public class RotaryService extends AccessibilityService implements
                 } else if (mCenterButtonRepeatCount == 1) {
                     handleCenterButtonEvent(action, /* longClick= */ true);
                 }
+                return true;
+            case KeyEvent.KEYCODE_G:
+                handleCenterButtonEvent(action, /* longClick= */ true);
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (mInDirectManipulationMode) {
@@ -623,9 +759,8 @@ public class RotaryService extends AccessibilityService implements
     private void handleViewClickedEvent(@NonNull AccessibilityEvent event) {
         // A view was clicked. If we triggered the click via performAction(ACTION_CLICK) or
         // by injecting KEYCODE_DPAD_CENTER, we ignore it. Otherwise, we assume the user
-        // touched the screen. In this case, we exit rotary mode if necessary, update
-        // mLastTouchedNode, and clear the focus if the user touched a view in a different
-        // window.
+        // touched the screen. In this case, we update mLastTouchedNode, and clear the focus
+        // if the user touched a view in a different window.
         // To decide whether the click was triggered by us, we can compare the source node
         // in the event with mIgnoreViewClickedNode. If they're equal, the click was
         // triggered by us. But there is a corner case. If a dialog shows up after we
@@ -640,17 +775,9 @@ public class RotaryService extends AccessibilityService implements
                 && event.getEventTime() < mIgnoreViewClickedUntil
                 && ((sourceNode == null) || mIgnoreViewClickedNode.equals(sourceNode))) {
             setIgnoreViewClickedNode(null);
-        } else {
-            // Enter touch mode once the user touches the screen.
-            mInRotaryMode = false;
-            if (sourceNode != null) {
-                // Explicitly clear focus when user uses touch in another window.
-                maybeClearFocusInCurrentWindow(sourceNode);
-
-                if (!sourceNode.equals(mLastTouchedNode)) {
-                    setLastTouchedNode(sourceNode);
-                }
-            }
+        } else if (sourceNode != null && !sourceNode.equals(mLastTouchedNode)) {
+            // Update mLastTouchedNode.
+            setLastTouchedNode(sourceNode);
         }
         Utils.recycleNode(sourceNode);
     }
@@ -714,21 +841,78 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleNode(sourceNode);
     }
 
-    /** Handles {@link AccessibilityEvent#TYPE_WINDOWS_CHANGED} event. */
-    private void handleWindowsChangedEvent(@NonNull AccessibilityEvent event) {
-        if ((event.getWindowChanges() & WINDOWS_CHANGE_REMOVED) != 0
-                && mInRotaryMode
-                && mFocusedNode != null
-                && mFocusedNode.getWindowId() == event.getWindowId()) {
-            // The window containing the focused node is gone. Restore focus to the last
-            // focused node in the last focused window.
-            setFocusedNode(null);
-            AccessibilityNodeInfo newFocus = mNavigator.getMostRecentFocus();
-            if (newFocus != null) {
-                performFocusAction(newFocus);
-                newFocus.recycle();
-            }
+    /**
+     * Handles a {@link AccessibilityEvent#TYPE_WINDOWS_CHANGED} event indicating that a window was
+     * removed. Attempts to restore the most recent focus when the window containing
+     * {@link #mFocusedNode} is removed.
+     */
+    private void handleWindowRemovedEvent(@NonNull AccessibilityEvent event) {
+        // We only care about this event when the window that was removed contains the focused node.
+        // Ignore other events.
+        if (mFocusedNode == null || mFocusedNode.getWindowId() != event.getWindowId()) {
+            return;
         }
+
+        // Restore focus to the last focused node in the last focused window.
+        setFocusedNode(null);
+        AccessibilityNodeInfo newFocus = mNavigator.getMostRecentFocus();
+        if (newFocus != null) {
+            // If the user closed the IME, focus will return to the most recent focus which will be
+            // the node being edited. In this case, we no longer need to keep track of it.
+            mEditNode = Utils.refreshNode(mEditNode);
+            if (newFocus.equals(mEditNode)) {
+                setEditNode(null);
+            }
+            performFocusAction(newFocus);
+            newFocus.recycle();
+        }
+    }
+
+    /**
+     * Handles a {@link AccessibilityEvent#TYPE_WINDOWS_CHANGED} event indicating that a window was
+     * added. Moves focus to the IME window when it appears.
+     */
+    private void handleWindowAddedEvent(@NonNull AccessibilityEvent event) {
+        // We only care about this event when the window that was added doesn't contains the focused
+        // node. Ignore other events.
+        if (mFocusedNode != null && mFocusedNode.getWindowId() == event.getWindowId()) {
+            return;
+        }
+
+        // We only care about this event when the new window is an IME. Ignore other events.
+        List<AccessibilityWindowInfo> windows = getWindows();
+        AccessibilityWindowInfo window = Utils.findWindowWithId(windows, event.getWindowId());
+        if (window == null) {
+            L.w("Can't find added window");
+            Utils.recycleWindows(windows);
+            return;
+        }
+        if (window.getType() != TYPE_INPUT_METHOD) {
+            Utils.recycleWindows(windows);
+            return;
+        }
+
+        // Move focus to the IME.
+        AccessibilityNodeInfo root = window.getRoot();
+        if (root == null) {
+            L.w("No root node in " + window);
+            Utils.recycleWindows(windows);
+            return;
+        }
+        // TODO: Use app:defaultFocus
+        AccessibilityNodeInfo nodeToFocus = mNavigator.findFirstFocusDescendant(root);
+        if (nodeToFocus != null) {
+            L.d("Move focus to IME");
+            // If the focused node is editable, save it so that we can return to it when the user
+            // nudges out of the IME.
+            if  (mFocusedNode != null && mFocusedNode.isEditable()) {
+                setEditNode(mFocusedNode);
+            }
+            performFocusAction(nodeToFocus);
+            nodeToFocus.recycle();
+        }
+        root.recycle();
+        Utils.recycleWindows(windows);
     }
 
     private static int getKeyCode(KeyEvent event) {
@@ -811,12 +995,19 @@ public class RotaryService extends AccessibilityService implements
         // If the focused node is not in direct manipulation mode, move the focus.
         // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
         List<AccessibilityWindowInfo> windows = getWindows();
+        mEditNode = Utils.refreshNode(mEditNode);
         AccessibilityNodeInfo targetNode =
-                mNavigator.findNudgeTarget(windows, mFocusedNode, direction);
+                mNavigator.findNudgeTarget(windows, mFocusedNode, direction, mEditNode);
         Utils.recycleWindows(windows);
         if (targetNode == null) {
             L.w("Failed to find nudge target");
             return;
+        }
+
+        // If the user is nudging out of the IME to the node being edited, we no longer need to keep
+        // track of the node being edited.
+        if (targetNode.equals(mEditNode)) {
+            setEditNode(null);
         }
 
         // Android doesn't clear focus automatically when focus is set in another window.
@@ -971,7 +1162,7 @@ public class RotaryService extends AccessibilityService implements
             L.w("Failed to get window of " + node);
             return false;
         }
-        boolean result = window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION;
+        boolean result = window.getType() == TYPE_APPLICATION;
         Utils.recycleWindow(window);
         return result;
     }
@@ -1119,6 +1310,7 @@ public class RotaryService extends AccessibilityService implements
      */
     private void refreshSavedNodes() {
         mFocusedNode = Utils.refreshNode(mFocusedNode);
+        mEditNode = Utils.refreshNode(mEditNode);
         mLastTouchedNode = Utils.refreshNode(mLastTouchedNode);
         mScrollableContainer = Utils.refreshNode(mScrollableContainer);
         mPreviousFocusedNode = Utils.refreshNode(mPreviousFocusedNode);
@@ -1143,7 +1335,7 @@ public class RotaryService extends AccessibilityService implements
      */
     private boolean initFocus() {
         refreshSavedNodes();
-        mInRotaryMode = true;
+        setInRotaryMode(true);
         if (mFocusedNode != null) {
             return false;
         }
@@ -1161,12 +1353,31 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
-    /** Clears the current rotary focus if {@code targetFocus} is in a different window. */
+    /**
+     * Clears the current rotary focus if {@code targetFocus} is in a different window unless focus
+     * is moving from an editable field to the IME.
+     */
     private void maybeClearFocusInCurrentWindow(@NonNull AccessibilityNodeInfo targetFocus) {
         if (mFocusedNode == null || !mFocusedNode.isFocused()
                 || mFocusedNode.getWindowId() == targetFocus.getWindowId()) {
             return;
         }
+
+        // If we're moving from an editable node to the IME, don't clear focus, but save the
+        // editable node so that we can return to it when the user nudges out of the IME.
+        if (mFocusedNode.isEditable()) {
+            AccessibilityWindowInfo targetWindow = targetFocus.getWindow();
+            if (targetWindow != null) {
+                boolean isTargetInIme = targetWindow.getType() == TYPE_INPUT_METHOD;
+                targetWindow.recycle();
+                if (isTargetInIme) {
+                    L.d("Leaving editable field focused");
+                    setEditNode(mFocusedNode);
+                    return;
+                }
+            }
+        }
+
         if (clearFocusInCurrentWindow()) {
             setFocusedNode(null);
         }
@@ -1273,6 +1484,9 @@ public class RotaryService extends AccessibilityService implements
             L.d("Exit direct manipulation mode since there is no focused node");
         }
 
+        // Close the IME when navigating from an editable view to a non-editable view.
+        maybeCloseIme(focusedNode);
+
         // Recycle mPreviousFocusedNode only when it's not the same with focusedNode.
         if (mPreviousFocusedNode != focusedNode) {
             Utils.recycleNode(mPreviousFocusedNode);
@@ -1300,6 +1514,60 @@ public class RotaryService extends AccessibilityService implements
         if (mFocusedNode != null) {
             mNavigator.saveFocusedNode(mFocusedNode);
         }
+    }
+
+    private void setEditNode(@Nullable AccessibilityNodeInfo editNode) {
+        if ((mEditNode == null && editNode == null) ||
+                (mEditNode != null && mEditNode.equals(editNode))) {
+            return;
+        }
+        Utils.recycleNode(mEditNode);
+        mEditNode = copyNode(editNode);
+    }
+
+    /**
+     * Closes the IME if {@code newFocusedNode} isn't editable and isn't in the IME, and the
+     * previously focused node is editable.
+     */
+    private void maybeCloseIme(@Nullable AccessibilityNodeInfo newFocusedNode) {
+        // The previously focused node is {@link #mFocusedNode} unless it's null, in which case
+        // it's {@link #mPreviousFocusedNode}. This logic is needed because {@link #mFocusedNode}
+        // is null briefly when navigating between windows.
+        AccessibilityNodeInfo prevNode = mFocusedNode != null ? mFocusedNode : mPreviousFocusedNode;
+
+        // Don't close the IME unless we're moving from an editable view to a non-editable view.
+        if (prevNode == null || newFocusedNode == null
+                || !prevNode.isEditable() || newFocusedNode.isEditable()) {
+            return;
+        }
+
+        // Don't close the IME if we're navigating to the IME.
+        AccessibilityWindowInfo nextWindow = newFocusedNode.getWindow();
+        if (nextWindow != null && nextWindow.getType() == TYPE_INPUT_METHOD) {
+            Utils.recycleWindow(nextWindow);
+            return;
+        }
+
+        // To close the IME, we'll ask the FocusParkingView in the previous window to perform an
+        // action, so first we need to find the FocusParkingView.
+        Utils.recycleWindow(nextWindow);
+        AccessibilityWindowInfo prevWindow = prevNode.getWindow();
+        if (prevWindow == null) {
+            return;
+        }
+        AccessibilityNodeInfo focusParkingView = mNavigator.findFocusParkingView(prevWindow);
+        if (focusParkingView == null) {
+            L.e("No FocusParkingView in " + prevWindow);
+            prevWindow.recycle();
+            return;
+        }
+
+        // Ask the FocusParkingView to perform the action to close the IME.
+        prevWindow.recycle();
+        if (!focusParkingView.performAction(AccessibilityNodeInfo.ACTION_COLLAPSE)) {
+            L.w("Failed to close IME");
+        }
+        focusParkingView.recycle();
     }
 
     private void setScrollableContainer(@Nullable AccessibilityNodeInfo scrollableContainer) {
@@ -1341,6 +1609,32 @@ public class RotaryService extends AccessibilityService implements
         mIgnoreViewClickedNode = copyNode(node);
         if (node != null) {
             mIgnoreViewClickedUntil = SystemClock.uptimeMillis() + mIgnoreViewClickedMs;
+        }
+    }
+
+    /**
+     * Sets {@link #mInRotaryMode}, toggling IMEs when the value changes and a rotary input method
+     * has been configured.
+     */
+    private void setInRotaryMode(boolean inRotaryMode) {
+        if (inRotaryMode == mInRotaryMode) {
+            return;
+        }
+        mInRotaryMode = inRotaryMode;
+        if (mRotaryInputMethod.isEmpty()) {
+            L.w("No rotary IME configured");
+            return;
+        }
+        if (!inRotaryMode && mTouchInputMethod == null) {
+            L.w("Touch IME not observed");
+            return;
+        }
+        // Switch to the rotary IME or the IME in use before we switched to the rotary IME.
+        String newIme = inRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
+        boolean result =
+                Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
+        if (!result) {
+            L.w("Failed to switch IME: %s", newIme);
         }
     }
 
