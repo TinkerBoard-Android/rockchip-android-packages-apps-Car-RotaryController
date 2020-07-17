@@ -64,4 +64,7 @@
     <integer name="ignore_view_clicked_ms">200</integer>
     <!-- How many milliseconds to wait for TYPE_VIEW_SCROLLED events after scrolling. -->
     <integer name="after_scroll_timeout_ms">200</integer>
+    <!-- How many milliseconds to wait for TYPE_VIEW_FOCUSED events after performing ACTION_FOCUS.
+    -->
+    <integer name="after_focus_timeout_ms">200</integer>
 </resources>

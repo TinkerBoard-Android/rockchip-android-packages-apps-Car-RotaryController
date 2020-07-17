@@ -96,11 +96,12 @@ class Navigator {
     }
 
     /**
-     * Returns the most recently focused valid node or {@code null} if there are no valid nodes
-     * saved by {@link #saveFocusedNode}. The caller is responsible for recycling the result.
+     * Returns the most recently focused valid node in window {@code windowId}, or {@code null} if
+     * there are no valid nodes saved by {@link #saveFocusedNode}. The caller is responsible for
+     * recycling the result.
      */
-    AccessibilityNodeInfo getMostRecentFocus() {
-        return mRotaryCache.getMostRecentFocus(SystemClock.elapsedRealtime());
+    AccessibilityNodeInfo getMostRecentFocus(int windowId) {
+        return mRotaryCache.getMostRecentFocus(windowId, SystemClock.elapsedRealtime());
     }
 
     /**
@@ -802,7 +803,7 @@ class Navigator {
      */
     @NonNull
     AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
-        TreeTraverser.NodePredicate isFocusAreaOrRoot = candidateNode -> {
+        NodePredicate isFocusAreaOrRoot = candidateNode -> {
             if (Utils.isFocusArea(candidateNode)) {
                 // The candidateNode is a focus area.
                 return true;
@@ -816,7 +817,7 @@ class Navigator {
             return false;
         };
         AccessibilityNodeInfo result = mTreeTraverser.findNodeOrAncestor(node, isFocusAreaOrRoot);
-        if (!Utils.isFocusArea(result)) {
+        if (result == null || !Utils.isFocusArea(result)) {
             L.w("Couldn't find ancestor focus area for given node: " + node);
         }
         return result;
