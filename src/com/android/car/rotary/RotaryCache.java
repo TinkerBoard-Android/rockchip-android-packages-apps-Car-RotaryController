@@ -295,18 +295,15 @@ class RotaryCache {
         }
 
         /**
-         * Returns the most recently focused valid node or {@code null} if there are no valid
-         * nodes in the cache. The caller is responsible for recycling the result.
+         * Returns the most recently focused valid node in window {@code windowId}, or {@code null}
+         * if there are no valid nodes in the cache. The caller is responsible for recycling the
+         * result.
          */
         @Nullable
-        AccessibilityNodeInfo getMostRecentValidNode(long elapsedRealtime) {
-            Map<Integer, FocusWindowHistory> snapshot = snapshot();
-            List<FocusWindowHistory> focusWindowHistories = new ArrayList<>(snapshot.values());
-            Collections.reverse(focusWindowHistories);
-            for (FocusWindowHistory focusWindowHistory : focusWindowHistories) {
-                if (isValidEntry(focusWindowHistory, elapsedRealtime)) {
-                    return copyNode(focusWindowHistory.mNode);
-                }
+        AccessibilityNodeInfo getMostRecentValidNode(int windowId, long elapsedRealtime) {
+            FocusWindowHistory focusWindowHistory = get(windowId);
+            if (focusWindowHistory != null && isValidEntry(focusWindowHistory, elapsedRealtime)) {
+                return copyNode(focusWindowHistory.mNode);
             }
             return null;
         }
@@ -428,12 +425,13 @@ class RotaryCache {
     }
 
     /**
-     * Returns the most recently focused valid node or {@code null} if there are no valid nodes
-     * saved by {@link #saveWindowFocus}. The caller is responsible for recycling the result.
+     * Returns the most recently focused valid node in window {@code windowId}, or {@code null} if
+     * there are no valid nodes saved by {@link #saveWindowFocus}. The caller is responsible for
+     * recycling the result.
      */
     @Nullable
-    AccessibilityNodeInfo getMostRecentFocus(long elapsedRealtime) {
-        return mFocusWindowCache.getMostRecentValidNode(elapsedRealtime);
+    AccessibilityNodeInfo getMostRecentFocus(int windowId, long elapsedRealtime) {
+        return mFocusWindowCache.getMostRecentValidNode(windowId, elapsedRealtime);
     }
 
     /** Returns the direction opposite the given {@code direction} */

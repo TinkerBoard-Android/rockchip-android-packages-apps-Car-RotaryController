@@ -23,8 +23,6 @@ import static org.mockito.Mockito.doAnswer;
 
 import android.view.accessibility.AccessibilityNodeInfo;
 
-import com.android.car.rotary.TreeTraverser.NodePredicate;
-
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
