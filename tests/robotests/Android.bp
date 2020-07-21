@@ -11,7 +11,7 @@ android_robolectric_test {
     // Include the testing libraries
     libs: [
         "android.car",
-        "android.test.base",
+        "android.test.base.impl",
     ],
     static_libs: [
         "car-ui-lib",
