@@ -1875,8 +1875,8 @@ public class RotaryService extends AccessibilityService implements
 
     /**
      * This method is called when Android focused a FocusParkingView (i.e. {@code fpv})
-     * automatically. It moves focus from the given {@code fpv} to a view near the
-     * previously focused view, which is chosen in the following order:
+     * automatically. It moves focus from the given {@code fpv} to a view within the same window,
+     * which is chosen in the following order:
      * <ol>
      *   <li> the previously focused view ({@link #mPreviousFocusedNode}), if any
      *   <li> the default focus (app:defaultFocus) in the FocusArea that contains {@link
@@ -1889,8 +1889,9 @@ public class RotaryService extends AccessibilityService implements
      * </ol>
      */
     private void onFocusParkingViewFocusedAutomatically(@NonNull AccessibilityNodeInfo fpv) {
+        int windowId = fpv.getWindowId();
         mPreviousFocusedNode = Utils.refreshNode(mPreviousFocusedNode);
-        if (mPreviousFocusedNode != null) {
+        if (mPreviousFocusedNode != null && mPreviousFocusedNode.getWindowId() == windowId) {
             boolean success = performFocusAction(mPreviousFocusedNode);
             if (success) {
                 L.d("Move focus to the previously focused node");
@@ -1899,7 +1900,7 @@ public class RotaryService extends AccessibilityService implements
         }
 
         mFocusArea = Utils.refreshNode(mFocusArea);
-        if (mFocusArea != null) {
+        if (mFocusArea != null && mFocusArea.getWindowId() == windowId) {
             Bundle bundle = new Bundle();
             bundle.putInt(RotaryConstants.FOCUS_ACTION_TYPE, RotaryConstants.FOCUS_DEFAULT);
             boolean success = performFocusAction(mFocusArea, bundle);
