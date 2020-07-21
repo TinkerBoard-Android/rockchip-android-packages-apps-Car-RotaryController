@@ -82,17 +82,34 @@ class Utils {
         return null;
     }
 
-    /** Returns whether the given {@code node} can be focused by a rotary controller. */
+    /**
+     * Returns whether the given {@code node} can be focused by rotating or nudging the rotary
+     * controller.
+     * <ul>
+     *     <li>To be reachable via the rotary controller, a node must be able to perform {@link
+     *         AccessibilityNodeInfo#ACTION_FOCUS}, which requires the node to be visible to the
+     *         user, focusable, and enabled.
+     *     <li>In addition, though a {@link FocusParkingView} can perform {@link
+     *         AccessibilityNodeInfo#ACTION_FOCUS}, it can't be reached directly via the rotary
+     *         controller.
+     *     <li>If a node is a focusable container, it can be reached via the rotary controller only
+     *         when it has no descendants to take focus.
+     * </ul>
+     *
+     */
     static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
         return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
-                && !isFocusParkingView(node);
+                && !isFocusParkingView(node)
+                && (!isScrollableContainer(node) || !descendantCanTakeFocus(node));
     }
 
     /** Returns whether the given {@code node} or its descendants can take focus. */
     static boolean canHaveFocus(@NonNull AccessibilityNodeInfo node) {
-        if (canTakeFocus(node)) {
-            return true;
-        }
+        return canTakeFocus(node) || descendantCanTakeFocus(node);
+    }
+
+    /** Returns whether the given {@code node}'s descendants can take focus. */
+    static boolean descendantCanTakeFocus(@NonNull AccessibilityNodeInfo node) {
         for (int i = 0; i < node.getChildCount(); i++) {
             AccessibilityNodeInfo childNode = node.getChild(i);
             if (childNode != null) {
