@@ -735,7 +735,8 @@ public class RotaryService extends AccessibilityService implements
         // scrolling pushed the focused view out of the viewport. When this happens, focus the
         // scrollable container.
         boolean isFpv = Utils.isFocusParkingView(sourceNode);
-        if (isFpv && mFocusedNode != null && mScrollableContainer != null) {
+        if (isFpv && mFocusedNode != null && mScrollableContainer != null
+                && SystemClock.uptimeMillis() < mAfterScrollActionUntil) {
             mScrollableContainer = Utils.refreshNode(mScrollableContainer);
             if (mScrollableContainer != null) {
                 L.d("Moving focus from FocusParkingView to scrollable container");
@@ -823,8 +824,9 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // Update mLastTouchedNode.
-        if (!sourceNode.equals(mLastTouchedNode)) {
+        // Update mLastTouchedNode if the clicked view can take focus. If a view can't take focus,
+        // performing focus action on it or calling focusSearch() on it will fail.
+        if (!sourceNode.equals(mLastTouchedNode) && Utils.canTakeFocus(sourceNode)) {
             setLastTouchedNode(sourceNode);
         }
         sourceNode.recycle();
@@ -1155,7 +1157,7 @@ public class RotaryService extends AccessibilityService implements
             }
             Utils.recycleNode(result.node);
         } else {
-            L.w("Failed to find rotate target");
+            L.w("Failed to find rotate target from " + mFocusedNode);
         }
 
         // If navigation didn't consume all of rotationCount and the focused node either is a
@@ -1413,7 +1415,12 @@ public class RotaryService extends AccessibilityService implements
         refreshSavedNodes();
         setInRotaryMode(true);
         if (mFocusedNode != null) {
-            return false;
+            if (mFocusedNode.isFocused()) {
+                return false;
+            }
+            // mFocusedNode is still in the view tree, but its state has changed and it's not
+            // focused any more. In this case we should set mFocusedNode to null.
+            setFocusedNode(null);
         }
         if (mScrollableContainer != null) {
             if (performFocusAction(mScrollableContainer)) {
@@ -1589,6 +1596,7 @@ public class RotaryService extends AccessibilityService implements
         maybeCloseIme(focusedNode);
 
         Utils.recycleNode(mPreviousFocusedNode);
+        mFocusedNode = Utils.refreshNode(mFocusedNode);
         mPreviousFocusedNode = copyNode(mFocusedNode);
         L.d("mPreviousFocusedNode set to: " + mPreviousFocusedNode);
 
