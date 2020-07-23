@@ -15,6 +15,8 @@
  */
 package com.android.car.rotary;
 
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
@@ -32,7 +34,6 @@ import androidx.annotation.NonNull;
 import com.android.car.rotary.Navigator.FindRotateTargetResult;
 import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
-import com.android.car.ui.utils.RotaryConstants;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -136,24 +137,19 @@ public class NavigatorTest {
         when(button3.focusSearch(direction)).thenReturn(null);
 
         // Rotate once, the focus should move from button1 to button2.
-        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, null, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isSameAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button3.
-        target = mNavigator.findRotateTarget(button1, null, direction, 2);
+        target = mNavigator.findRotateTarget(button1, direction, 2);
         assertThat(target.node).isSameAs(button3);
         assertThat(target.advancedCount).isEqualTo(2);
 
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
-        target = mNavigator.findRotateTarget(button1, null, direction, 3);
+        target = mNavigator.findRotateTarget(button1, direction, 3);
         assertThat(target.node).isSameAs(button3);
         assertThat(target.advancedCount).isEqualTo(2);
-
-        // Rotate once, skipping button2; the focus should move to button3.
-        target = mNavigator.findRotateTarget(button1, button2, direction, 1);
-        assertThat(target.node).isSameAs(button3);
-        assertThat(target.advancedCount).isEqualTo(1);
     }
 
     /**
@@ -206,7 +202,7 @@ public class NavigatorTest {
         when(focusParkingView.focusSearch(direction)).thenReturn(button1);
 
         // Rotate at the end of focus area, no wrap-around should happen.
-        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, null, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
     }
 
@@ -252,8 +248,97 @@ public class NavigatorTest {
         when(focusParkingView.focusSearch(direction)).thenReturn(button1);
 
         // Rotate at the end of focus area, no wrap-around should happen.
-        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, null, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *                          root
+     *                         /  |  \
+     *                       /    |    \
+     *                     /      |      \
+     *              button1  scrollable   button2
+     *                        container
+     *                            |
+     *                      non-focusable
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetReturnScrollableContainer() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .build();
+        AccessibilityNodeInfo nonFocusable = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(scrollableContainer);
+        when(scrollableContainer.focusSearch(direction)).thenReturn(button2);
+
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
+        assertThat(target.node).isSameAs(scrollableContainer);
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *                          root
+     *                         /  |  \
+     *                       /    |    \
+     *                     /      |      \
+     *              button1  scrollable   button2
+     *                        container
+     *                            |
+     *                        focusable
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetSkipScrollableContainer() {
+        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
+        AccessibilityNodeInfo button1 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo button2 = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(root)
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .build();
+        AccessibilityNodeInfo focusable = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setParent(scrollableContainer)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(scrollableContainer);
+        when(scrollableContainer.focusSearch(direction)).thenReturn(button2);
+
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
+        assertThat(target.node).isSameAs(button2);
     }
 
     /**
@@ -294,7 +379,7 @@ public class NavigatorTest {
                 .setNodeList(mNodeList)
                 .setParent(focusArea)
                 .setFocusable(true)
-                .setContentDescription(RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE)
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
                 .setActionList(new ArrayList<>(Collections.singletonList(
                         AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)))
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
@@ -322,18 +407,18 @@ public class NavigatorTest {
         when(button3.focusSearch(direction)).thenReturn(null);
 
         // Rotate once, the focus should move from button1 to button2.
-        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, null, direction, 1);
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isSameAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button2 since button3 is out of
         // bounds.
-        target = mNavigator.findRotateTarget(button1, null, direction, 2);
+        target = mNavigator.findRotateTarget(button1, direction, 2);
         assertThat(target.node).isSameAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate three times should do the same.
-        target = mNavigator.findRotateTarget(button1, null, direction, 3);
+        target = mNavigator.findRotateTarget(button1, direction, 3);
         assertThat(target.node).isSameAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
     }
@@ -1201,6 +1286,204 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
+     *    **********leftWindow*********    ****************rightWindow*****************
+     *    *                           *    *                                          *
+     *    *  ===left focus area===    *    *    ==========right focus area========    *
+     *    *  =                   =    *    *    =                                =    *
+     *    *  =                   =    *    *    =  ....scrollableContainer.....  =    *
+     *    *  =                   =    *    *    =  .                          .  =    *
+     *    *  =      left         =    *    *    =  .    non-focusable         .  =    *
+     *    *  =                   =    *    *    =  .                          .  =    *
+     *    *  =                   =    *    *    =  ............................  =    *
+     *    *  =                   =    *    *    =                                =    *
+     *    *  =====================    *    *    ==================================    *
+     *    *                           *    *                                          *
+     *    *****************************    ********************************************
+     * </pre>
+     */
+    @Test
+    public void testFindNudgeTargetReturnScrollableContainer() {
+        // There are 2 windows. This is the left window.
+        Rect leftWindowBounds = new Rect(0, 0, 400, 400);
+        AccessibilityWindowInfo leftWindow = new WindowBuilder()
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        AccessibilityNodeInfo leftRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        setRootNodeForWindow(leftRoot, leftWindow);
+
+        // Left focus area and its view inside.
+        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 400, 400))
+                .build();
+        AccessibilityNodeInfo left = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(leftFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 400, 400))
+                .build();
+
+        // Right window.
+        Rect rightWindowBounds = new Rect(400, 0, 800, 400);
+        AccessibilityWindowInfo rightWindow = new WindowBuilder()
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        AccessibilityNodeInfo rightRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        setRootNodeForWindow(rightRoot, rightWindow);
+
+        // Right focus area and its view inside.
+        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(rightRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(rightFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .build();
+        AccessibilityNodeInfo nonFocusable = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(scrollableContainer)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(leftWindow);
+        windows.add(rightWindow);
+
+        // Nudge from left window to right window.
+        AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
+        assertThat(target).isSameAs(scrollableContainer);
+    }
+
+
+    /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
+     *    **********leftWindow*********    ****************rightWindow*****************
+     *    *                           *    *                                          *
+     *    *  ===left focus area===    *    *    ==========right focus area========    *
+     *    *  =                   =    *    *    =                                =    *
+     *    *  =                   =    *    *    =  ....scrollableContainer.....  =    *
+     *    *  =                   =    *    *    =  .                          .  =    *
+     *    *  =      left         =    *    *    =  .       focusable          .  =    *
+     *    *  =                   =    *    *    =  .                          .  =    *
+     *    *  =                   =    *    *    =  ............................  =    *
+     *    *  =                   =    *    *    =                                =    *
+     *    *  =====================    *    *    ==================================    *
+     *    *                           *    *                                          *
+     *    *****************************    ********************************************
+     * </pre>
+     */
+    @Test
+    public void testFindNudgeTargetSkipScrollableContainer() {
+        // There are 2 windows. This is the left window.
+        Rect leftWindowBounds = new Rect(0, 0, 400, 400);
+        AccessibilityWindowInfo leftWindow = new WindowBuilder()
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        AccessibilityNodeInfo leftRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setBoundsInScreen(leftWindowBounds)
+                .build();
+        setRootNodeForWindow(leftRoot, leftWindow);
+
+        // Left focus area and its view inside.
+        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(leftRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(0, 0, 400, 400))
+                .build();
+        AccessibilityNodeInfo left = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(leftWindow)
+                .setParent(leftFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(0, 0, 400, 400))
+                .build();
+
+        // Right window.
+        Rect rightWindowBounds = new Rect(400, 0, 800, 400);
+        AccessibilityWindowInfo rightWindow = new WindowBuilder()
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        AccessibilityNodeInfo rightRoot = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setBoundsInScreen(rightWindowBounds)
+                .build();
+        setRootNodeForWindow(rightRoot, rightWindow);
+
+        // Right focus area and its view inside.
+        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(rightRoot)
+                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .build();
+        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(rightFocusArea)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .build();
+        AccessibilityNodeInfo focusable = new NodeBuilder()
+                .setNodeList(mNodeList)
+                .setWindow(rightWindow)
+                .setParent(scrollableContainer)
+                .setFocusable(true)
+                .setVisibleToUser(true)
+                .setEnabled(true)
+                .setBoundsInScreen(new Rect(400, 0, 800, 400))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(leftWindow);
+        windows.add(rightWindow);
+
+        // Nudge from left window to right window.
+        AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
+        assertThat(target).isSameAs(focusable);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      * <pre>
      *                   root
@@ -1357,7 +1640,7 @@ public class NavigatorTest {
                 .setNodeList(mNodeList)
                 .setParent(focusArea)
                 .setFocusable(true)
-                .setContentDescription(RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE)
+                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
                 .build();
         AccessibilityNodeInfo container = new NodeBuilder()
                 .setNodeList(mNodeList)

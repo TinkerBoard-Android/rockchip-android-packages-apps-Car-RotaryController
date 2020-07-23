@@ -298,13 +298,9 @@ class Navigator {
      * Returns the target focusable for a rotate. The caller is responsible for recycling the node
      * in the result.
      *
-     * <p>If {@code skipNode} isn't null, this node will be skipped. This is used when the focus is
-     * inside a scrollable container to avoid moving the focus to the scrollable container itself.
-     *
      * <p>Limits navigation to focusable views within a scrollable container's viewport, if any.
      *
      * @param sourceNode    the current focus
-     * @param skipNode      a node to skip - optional
      * @param direction     rotate direction, must be {@link View#FOCUS_FORWARD} or {@link
      *                      View#FOCUS_BACKWARD}
      * @param rotationCount the number of "ticks" to rotate. Only count nodes that can take focus
@@ -318,17 +314,13 @@ class Navigator {
      *         given {@code direction}, {@code null} is returned.
      */
     @Nullable
-    FindRotateTargetResult findRotateTarget(@NonNull AccessibilityNodeInfo sourceNode,
-            @Nullable AccessibilityNodeInfo skipNode, int direction, int rotationCount) {
+    FindRotateTargetResult findRotateTarget(
+            @NonNull AccessibilityNodeInfo sourceNode, int direction, int rotationCount) {
         int advancedCount = 0;
         AccessibilityNodeInfo currentFocusArea = getAncestorFocusArea(sourceNode);
         AccessibilityNodeInfo targetNode = copyNode(sourceNode);
         for (int i = 0; i < rotationCount; i++) {
             AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(direction);
-            if (skipNode != null && skipNode.equals(nextTargetNode)) {
-                Utils.recycleNode(nextTargetNode);
-                nextTargetNode = skipNode.focusSearch(direction);
-            }
             AccessibilityNodeInfo targetFocusArea =
                     nextTargetNode == null ? null : getAncestorFocusArea(nextTargetNode);
 
@@ -337,6 +329,16 @@ class Navigator {
             // focus area in the window, including when the root node is treated as a focus area.
             if (nextTargetNode != null && currentFocusArea.equals(targetFocusArea)
                     && !Utils.isFocusParkingView(nextTargetNode)) {
+                // If nextTargetNode is a scrollable container with descendants that can take focus,
+                // skip it, and search for the next target.
+                if (Utils.isScrollableContainer(nextTargetNode)
+                        && Utils.descendantCanTakeFocus(nextTargetNode)) {
+                    Utils.recycleNode(targetNode);
+                    Utils.recycleNode(targetFocusArea);
+                    targetNode = nextTargetNode;
+                    --i;
+                    continue;
+                }
                 // If we're navigating through a scrolling view that can scroll in the specified
                 // direction and the next view is off-screen, don't advance to it. (We'll scroll
                 // instead.)
