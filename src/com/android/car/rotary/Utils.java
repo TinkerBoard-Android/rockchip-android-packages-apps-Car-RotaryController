@@ -40,10 +40,10 @@ import java.util.List;
  * generally pass ownership to the caller. Such methods should never return a reference to one of
  * their parameters or the caller will recycle it twice.
  */
-class Utils {
+final class Utils {
 
-    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
-    private static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+    static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
 
     private Utils() {
     }
@@ -83,22 +83,28 @@ class Utils {
     }
 
     /**
-     * Returns whether the given {@code node} can be focused by rotating or nudging the rotary
-     * controller.
+     * Returns whether the given {@code node} can perform focus action.
+     * <p>
+     * A node can perform focus action means RotaryService can call performFocusAction() with the
+     * node.
+     */
+    static boolean canPerformFocus(@NonNull AccessibilityNodeInfo node) {
+        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled();
+    }
+
+    /**
+     * Returns whether the given {@code node} can be focused by the rotary controller.
      * <ul>
-     *     <li>To be reachable via the rotary controller, a node must be able to perform {@link
-     *         AccessibilityNodeInfo#ACTION_FOCUS}, which requires the node to be visible to the
-     *         user, focusable, and enabled.
-     *     <li>In addition, though a {@link FocusParkingView} can perform {@link
-     *         AccessibilityNodeInfo#ACTION_FOCUS}, it can't be reached directly via the rotary
-     *         controller.
-     *     <li>If a node is a focusable container, it can be reached via the rotary controller only
-     *         when it has no descendants to take focus.
+     *     <li>To be a focus candidate, a node must be able to perform focus action.
+     *     <li>A {@link FocusParkingView} is not a focus candidate.
+     *     <li>A focusable container with descendants to take focus is not a focus candidate. We
+     *         skip the container because we want to focus on its element directly. We don't skip a
+     *         scrollable container without descendants that can take focus because we want to focus
+     *         on it, thus we can scroll it when the rotary controller is rotated.
      * </ul>
-     *
      */
     static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
-        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled()
+        return canPerformFocus(node)
                 && !isFocusParkingView(node)
                 && (!isScrollableContainer(node) || !descendantCanTakeFocus(node));
     }

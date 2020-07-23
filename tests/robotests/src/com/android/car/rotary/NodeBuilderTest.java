@@ -15,64 +15,135 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
+
+import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
+import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import android.graphics.Rect;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
-import com.android.car.ui.FocusArea;
-
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
-import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 public class NodeBuilderTest {
 
-    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    private static final String CLASS_NAME = "class_name";
+    private static final String CONTENT_DESCRIPTION = "content_description";
+
+    private NodeBuilder mNodeBuilder;
+
+    @Before
+    public void setUp() {
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
+    }
 
     @Test
-    public void testBuildNode() {
+    public void testBuildDefaultNode() {
+        AccessibilityNodeInfo node = mNodeBuilder.build();
+        assertThat(node.isFocusable()).isTrue();
+        assertThat(node.isVisibleToUser()).isTrue();
+        assertThat(node.refresh()).isTrue();
+        assertThat(node.isEnabled()).isTrue();
+    }
+
+    @Test
+    public void testSetFocusable() {
+        AccessibilityNodeInfo node = mNodeBuilder.setFocusable(false).build();
+        assertThat(node.isFocusable()).isFalse();
+    }
+
+    @Test
+    public void testSetVisibleToUser() {
+        AccessibilityNodeInfo node = mNodeBuilder.setVisibleToUser(false).build();
+        assertThat(node.isVisibleToUser()).isFalse();
+    }
+
+    @Test
+    public void testSetInViewTree() {
+        AccessibilityNodeInfo node = mNodeBuilder.setInViewTree(false).build();
+        assertThat(node.refresh()).isFalse();
+    }
+
+    @Test
+    public void testSetEnabled() {
+        AccessibilityNodeInfo node = mNodeBuilder.setEnabled(false).build();
+        assertThat(node.isEnabled()).isFalse();
+    }
+
+    @Test
+    public void testSetWindow() {
         AccessibilityWindowInfo window = new WindowBuilder().build();
-        List<AccessibilityNodeInfo> nodeList = new ArrayList<>();
-        Rect bounds = new Rect(100, 200, 300, 400);
-        AccessibilityNodeInfo parent = new NodeBuilder()
-                .setNodeList(nodeList)
-                .setWindow(window)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .setInViewTree(true)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .setBoundsInScreen(bounds)
-                .build();
+        AccessibilityNodeInfo node = mNodeBuilder.setWindow(window).build();
+        assertThat(node.getWindow()).isSameAs(window);
+    }
 
-        assertThat(parent.getWindow()).isSameAs(window);
-        assertThat(parent.getClassName()).isEqualTo(FOCUS_AREA_CLASS_NAME);
-        assertThat(parent.isFocusable()).isTrue();
-        assertThat(parent.isVisibleToUser()).isTrue();
-        assertThat(parent.refresh()).isTrue();
-        assertThat(parent.isEnabled()).isTrue();
+    @Test
+    public void testSetBoundsInScreen() {
+        Rect setBounds = new Rect(100, 200, 300, 400);
+        AccessibilityNodeInfo node = mNodeBuilder.setBoundsInScreen(setBounds).build();
+        Rect retrievedBounds = new Rect();
+        node.getBoundsInScreen(retrievedBounds);
+        assertThat(retrievedBounds).isEqualTo(setBounds);
+    }
 
-        Rect boundsInScreen = new Rect();
-        parent.getBoundsInScreen(boundsInScreen);
-        assertThat(boundsInScreen).isEqualTo(bounds);
+    @Test
+    public void testSetClassName() {
+        AccessibilityNodeInfo node = mNodeBuilder.setClassName(CLASS_NAME).build();
+        assertThat(node.getClassName().toString()).isEqualTo(CLASS_NAME);
+    }
 
-        AccessibilityNodeInfo child1 = new NodeBuilder()
-                .setNodeList(nodeList)
-                .setParent(parent).build();
-        AccessibilityNodeInfo child2 = new NodeBuilder()
-                .setNodeList(nodeList)
-                .setParent(parent).build();
+    @Test
+    public void testSetContentDescription() {
+        AccessibilityNodeInfo node =
+                mNodeBuilder.setContentDescription(CONTENT_DESCRIPTION).build();
+        assertThat(node.getContentDescription().toString()).isEqualTo(CONTENT_DESCRIPTION);
+    }
+
+    @Test
+    public void testSetParent() {
+        AccessibilityNodeInfo parent = mNodeBuilder.build();
+        AccessibilityNodeInfo child1 = mNodeBuilder.setParent(parent).build();
+        AccessibilityNodeInfo child2 = mNodeBuilder.setParent(parent).build();
 
         assertThat(child1.getParent()).isSameAs(parent);
         assertThat(parent.getChildCount()).isEqualTo(2);
         assertThat(parent.getChild(0)).isSameAs(child1);
         assertThat(parent.getChild(1)).isSameAs(child2);
         assertThat(parent.getChild(2)).isNull();
+    }
+
+    @Test
+    public void testSetActions() {
+        AccessibilityNodeInfo node = mNodeBuilder.setActions(ACTION_SCROLL_FORWARD).build();
+        assertThat(node.getActionList()).containsExactly(ACTION_SCROLL_FORWARD);
+    }
+
+    @Test
+    public void testSetFocusArea() {
+        AccessibilityNodeInfo node = mNodeBuilder.setFocusArea().build();
+        assertThat(node.getClassName().toString()).isEqualTo(FOCUS_AREA_CLASS_NAME);
+        assertThat(node.isFocusable()).isFalse();
+    }
+
+    @Test
+    public void testSetFpv() {
+        AccessibilityNodeInfo node = mNodeBuilder.setFpv().build();
+        assertThat(node.getClassName().toString()).isEqualTo(FOCUS_PARKING_VIEW_CLASS_NAME);
+    }
+
+    @Test
+    public void testSetScrollableContainer() {
+        AccessibilityNodeInfo node = mNodeBuilder.setScrollableContainer().build();
+        assertThat(node.getContentDescription().toString()).isEqualTo(ROTARY_VERTICALLY_SCROLLABLE);
     }
 }
