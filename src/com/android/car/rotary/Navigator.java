@@ -329,10 +329,16 @@ class Navigator {
             // focus area in the window, including when the root node is treated as a focus area.
             if (nextTargetNode != null && currentFocusArea.equals(targetFocusArea)
                     && !Utils.isFocusParkingView(nextTargetNode)) {
-                // If nextTargetNode is a scrollable container with descendants that can take focus,
-                // skip it, and search for the next target.
-                if (Utils.isScrollableContainer(nextTargetNode)
-                        && Utils.descendantCanTakeFocus(nextTargetNode)) {
+                // We need to skip nextTargetNode if:
+                // 1. it can't perform focus action (focusSearch() may return a node with zero
+                //    width and height),
+                // 2. or it is a scrollable container with descendants that can take focus. We skip
+                //    the container because we want to focus on its element directly. We don't skip
+                //    a scrollable container without descendants that can take focus because we want
+                //    to focus on it, thus we can scroll it when the rotary controller is rotated.
+                if (!Utils.canPerformFocus(nextTargetNode)
+                        || (Utils.isScrollableContainer(nextTargetNode)
+                            && Utils.descendantCanTakeFocus(nextTargetNode))) {
                     Utils.recycleNode(targetNode);
                     Utils.recycleNode(targetFocusArea);
                     targetNode = nextTargetNode;

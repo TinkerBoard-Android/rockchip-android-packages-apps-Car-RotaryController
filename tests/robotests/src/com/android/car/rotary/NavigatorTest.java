@@ -15,13 +15,10 @@
  */
 package com.android.car.rotary;
 
-import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
+import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Rect;
@@ -32,39 +29,26 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import androidx.annotation.NonNull;
 
 import com.android.car.rotary.Navigator.FindRotateTargetResult;
-import com.android.car.ui.FocusArea;
-import com.android.car.ui.FocusParkingView;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 public class NavigatorTest {
-    private static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
-    private static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
-
-    @Mock
-    private NodeCopier mNodeCopier;
 
     private Rect mHunWindowBounds;
-
+    private NodeBuilder mNodeBuilder;
     private Navigator mNavigator;
-
-    private List<AccessibilityNodeInfo> mNodeList;
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         mHunWindowBounds = new Rect(50, 10, 950, 200);
-
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
         mNavigator = new Navigator(
                 /* focusHistoryCacheType= */ RotaryCache.CACHE_TYPE_NEVER_EXPIRE,
                 /* focusHistoryCacheSize= */ 10,
@@ -78,21 +62,13 @@ public class NavigatorTest {
                 mHunWindowBounds.left,
                 mHunWindowBounds.right,
                 /* showHunOnBottom= */ false);
-
-        // NodeCopier#copyNode() doesn't work when passed a mock node, so we create a mock method
-        // which returns the passed node itself rather than a copy. As a result, nodes created by
-        // the mock method (such as |target| in testFindRotateTarget()) shouldn't be recycled.
-        doAnswer(returnsFirstArg()).when(mNodeCopier).copy(any(AccessibilityNodeInfo.class));
-
-        mNavigator.setNodeCopier(mNodeCopier);
-
-        mNodeList = new ArrayList<>();
+        mNavigator.setNodeCopier(MockNodeCopierProvider.get());
     }
 
     @Test
     public void testSetRootNodeForWindow() {
         AccessibilityWindowInfo window = new WindowBuilder().build();
-        AccessibilityNodeInfo root = new NodeBuilder().build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
         setRootNodeForWindow(root, window);
 
         assertThat(window.getRoot()).isSameAs(root);
@@ -111,25 +87,12 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTarget() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder.setParent(root).setFocusArea().build();
 
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(focusArea).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(focusArea).build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(button2);
@@ -166,35 +129,12 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTargetNoWrapAround() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusParkingView = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo focusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(root).setFpv().build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder.setParent(root).setFocusArea().build();
 
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(focusArea).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(button2);
@@ -218,29 +158,10 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTargetNoWrapAround2() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusParkingView = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(root).setFpv().build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(button2);
@@ -259,6 +180,35 @@ public class NavigatorTest {
      *                         /  |  \
      *                       /    |    \
      *                     /      |      \
+     *               button1   invisible  button2
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetSkipNodeThatCannotPerformFocus() {
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo invisible = mNodeBuilder
+                .setParent(root)
+                .setVisibleToUser(false)
+                .build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(invisible);
+        when(invisible.focusSearch(direction)).thenReturn(button2);
+
+        // Rotate from button1, it should skip the invisible view.
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
+        assertThat(target.node).isSameAs(button2);
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *                          root
+     *                         /  |  \
+     *                       /    |    \
+     *                     /      |      \
      *              button1  scrollable   button2
      *                        container
      *                            |
@@ -267,25 +217,16 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTargetReturnScrollableContainer() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setParent(root)
+                .setScrollableContainer()
                 .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
-                .build();
-        AccessibilityNodeInfo nonFocusable = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo nonFocusable = mNodeBuilder
+                .setFocusable(false)
                 .setParent(scrollableContainer)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .build();
 
         int direction = View.FOCUS_FORWARD;
@@ -311,27 +252,14 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTargetSkipScrollableContainer() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setParent(root)
+                .setScrollableContainer()
                 .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
-                .build();
-        AccessibilityNodeInfo focusable = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(scrollableContainer)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo focusable = mNodeBuilder.setParent(scrollableContainer).build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(scrollableContainer);
@@ -368,35 +296,28 @@ public class NavigatorTest {
      */
     @Test
     public void testFindRotateTargetInScrollableContainer() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setParent(focusArea)
-                .setFocusable(true)
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
-                .setActionList(new ArrayList<>(Collections.singletonList(
-                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)))
+                .setScrollableContainer()
+                .setActions(ACTION_SCROLL_FORWARD)
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
 
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button1 = mNodeBuilder
                 .setParent(scrollableContainer)
                 .setBoundsInScreen(new Rect(0, 0, 100, 50))
                 .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button2 = mNodeBuilder
                 .setParent(scrollableContainer)
                 .setBoundsInScreen(new Rect(0, 50, 100, 100))
                 .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button3 = mNodeBuilder
                 .setParent(scrollableContainer)
                 .setBoundsInScreen(new Rect(0, 100, 100, 150))
                 .build();
@@ -469,93 +390,64 @@ public class NavigatorTest {
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
         // We must specify window and boundsInScreen for each node when finding nudge target.
-        AccessibilityNodeInfo leftRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftRoot = mNodeBuilder
                 .setWindow(leftWindow)
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
         setRootNodeForWindow(leftRoot, leftWindow);
 
         // Left window has 3 vertically aligned focus areas.
-        AccessibilityNodeInfo topLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topLeft = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
-        AccessibilityNodeInfo middleLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo middleLeft = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 400, 400, 800))
                 .build();
-        AccessibilityNodeInfo bottomLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomLeft = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 800, 400, 1200))
-                .setInViewTree(true)
                 .build();
 
         // Each focus area but middleLeft has 2 horizontally aligned views that can take focus.
-        AccessibilityNodeInfo topLeft1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topLeft1 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(topLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 200, 400))
                 .build();
-        AccessibilityNodeInfo topLeft2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topLeft2 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(topLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(200, 0, 400, 400))
                 .build();
-        AccessibilityNodeInfo bottomLeft1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomLeft1 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(bottomLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .setInViewTree(true)
                 .setBoundsInScreen(new Rect(0, 800, 200, 1200))
                 .build();
-        AccessibilityNodeInfo bottomLeft2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomLeft2 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(bottomLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(200, 800, 400, 1200))
                 .build();
 
         // middleLeft focus area has 2 disabled views, so that it will be skipped when nudging.
-        AccessibilityNodeInfo middleLeft1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo middleLeft1 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(bottomLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
-                .setInViewTree(true)
                 .setBoundsInScreen(new Rect(0, 400, 200, 800))
                 .build();
-        AccessibilityNodeInfo middleLeft2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo middleLeft2 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(bottomLeft)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
                 .setBoundsInScreen(new Rect(200, 400, 400, 800))
                 .build();
@@ -565,30 +457,24 @@ public class NavigatorTest {
         AccessibilityWindowInfo rightWindow = new WindowBuilder()
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
-        AccessibilityNodeInfo rightRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightRoot = mNodeBuilder
                 .setWindow(rightWindow)
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
         setRootNodeForWindow(rightRoot, rightWindow);
 
         // Right window has 1 focus area.
-        AccessibilityNodeInfo topRight = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topRight = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
 
         // The focus area has 1 view that can take focus.
-        AccessibilityNodeInfo topRight1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topRight1 = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(topRight)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(400, 0, 600, 400))
                 .build();
 
@@ -647,40 +533,30 @@ public class NavigatorTest {
         AccessibilityWindowInfo leftWindow = new WindowBuilder()
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
-        AccessibilityNodeInfo leftRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftRoot = mNodeBuilder
                 .setWindow(leftWindow)
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
         setRootNodeForWindow(leftRoot, leftWindow);
 
         // Left focus area and its view inside.
-        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftFocusArea = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 300, 400))
                 .build();
-        AccessibilityNodeInfo left = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo left = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 300, 400))
                 .build();
 
         // Left focus parking view.
-        AccessibilityNodeInfo parking1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo parking1 = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftFocusArea)
-                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
+                .setFpv()
                 .setBoundsInScreen(new Rect(350, 0, 351, 1))
                 .build();
 
@@ -689,40 +565,30 @@ public class NavigatorTest {
         AccessibilityWindowInfo rightWindow = new WindowBuilder()
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
-        AccessibilityNodeInfo rightRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightRoot = mNodeBuilder
                 .setWindow(rightWindow)
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
         setRootNodeForWindow(rightRoot, rightWindow);
 
         // Right focus area and its view inside.
-        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightFocusArea = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(500, 0, 800, 400))
                 .build();
-        AccessibilityNodeInfo right = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo right = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(500, 0, 800, 400))
                 .build();
 
         // Right focus parking view.
-        AccessibilityNodeInfo parking2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo parking2 = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightFocusArea)
-                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
+                .setFpv()
                 .setBoundsInScreen(new Rect(450, 0, 451, 1))
                 .build();
 
@@ -779,31 +645,23 @@ public class NavigatorTest {
                 .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
                 .build();
         // We must specify window and boundsInScreen for each node when finding nudge target.
-        AccessibilityNodeInfo hunRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo hunRoot = mNodeBuilder
                 .setWindow(hunWindow)
                 .setBoundsInScreen(mHunWindowBounds)
+                .setFocusable(false)
                 .build();
         setRootNodeForWindow(hunRoot, hunWindow);
 
         // HUN window has two views that can take focus (directly in the root).
-        AccessibilityNodeInfo hunLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo hunLeft = mNodeBuilder
                 .setWindow(hunWindow)
                 .setParent(hunRoot)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(mHunWindowBounds.left, mHunWindowBounds.top,
                         mHunWindowBounds.centerX(), mHunWindowBounds.bottom))
                 .build();
-        AccessibilityNodeInfo hunRight = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo hunRight = mNodeBuilder
                 .setWindow(hunWindow)
                 .setParent(hunRoot)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(mHunWindowBounds.centerX(), mHunWindowBounds.top,
                         mHunWindowBounds.right, mHunWindowBounds.bottom))
                 .build();
@@ -813,66 +671,48 @@ public class NavigatorTest {
         AccessibilityWindowInfo mainWindow = new WindowBuilder()
                 .setBoundsInScreen(mainWindowBounds)
                 .build();
-        AccessibilityNodeInfo mainRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo mainRoot = mNodeBuilder
                 .setWindow(mainWindow)
                 .setBoundsInScreen(mainWindowBounds)
+                .setFocusable(false)
                 .build();
         setRootNodeForWindow(mainRoot, mainWindow);
 
         // Main window has two focus areas.
-        AccessibilityNodeInfo topFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topFocusArea = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(mainRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 1000, 500))
                 .build();
-        AccessibilityNodeInfo bottomFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomFocusArea = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(mainRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 500, 1000, 1000))
                 .build();
 
         // The top focus area has two views that can take focus.
-        AccessibilityNodeInfo topLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topLeft = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(topFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 500, 500))
                 .build();
-        AccessibilityNodeInfo topRight = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo topRight = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(topFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(500, 0, 1000, 500))
                 .build();
 
         // The bottom focus area has two views that can take focus.
-        AccessibilityNodeInfo bottomLeft = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomLeft = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(bottomFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 500, 500, 1000))
                 .build();
-        AccessibilityNodeInfo bottomRight = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo bottomRight = mNodeBuilder
                 .setWindow(mainWindow)
                 .setParent(bottomFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(500, 500, 1000, 1000))
                 .build();
 
@@ -898,6 +738,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
      * In the same window
      *
      *            ======focus area 1===========
@@ -911,6 +752,7 @@ public class NavigatorTest {
      *    =====source focus area=====
      *    = *    source view      * =
      *    ===========================
+     * </pre>
      */
     @Test
     public void testNudgeToFocusAreaWithNoCandidates() {
@@ -918,66 +760,50 @@ public class NavigatorTest {
         AccessibilityWindowInfo window = new WindowBuilder()
                 .setBoundsInScreen(windowBounds)
                 .build();
-        AccessibilityNodeInfo root = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder
                 .setWindow(window)
                 .setBoundsInScreen(windowBounds)
                 .build();
         setRootNodeForWindow(root, window);
 
         // Currently focused view.
-        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceFocusArea = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 400, 400, 500))
                 .build();
-        AccessibilityNodeInfo sourceView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceView = mNodeBuilder
                 .setWindow(window)
                 .setParent(sourceFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 400, 400, 500))
                 .build();
 
         // focusArea1 is a better candidate than focusArea2 for a nudge to right, but its descendant
         // view is not a candidate.
-        AccessibilityNodeInfo focusArea1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo focusArea1 = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(200, 0, 600, 100))
                 .build();
-        AccessibilityNodeInfo view1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo view1 = mNodeBuilder
                 .setWindow(window)
                 .setParent(focusArea1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(599, 0, 600, 100))
                 .build();
 
         // focusArea2 is a worse candidate than focusArea1 for a nudge to right, but its descendant
         // view is a candidate.
-        AccessibilityNodeInfo focusArea2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo focusArea2 = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(200, 200, 600, 300))
                 .build();
-        AccessibilityNodeInfo view2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo view2 = mNodeBuilder
                 .setWindow(window)
                 .setParent(focusArea2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(200, 200, 201, 300))
                 .build();
 
@@ -992,6 +818,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
      * In the same window
      *
      *    =====source focus area=====
@@ -1005,6 +832,7 @@ public class NavigatorTest {
      *    =   -                  -  =
      *    =   ---view container---  =
      *    ===========================
+     * </pre>
      */
     @Test
     public void testNudgeToFocusAreaWithIndirectChild() {
@@ -1012,55 +840,42 @@ public class NavigatorTest {
         AccessibilityWindowInfo window = new WindowBuilder()
                 .setBoundsInScreen(windowBounds)
                 .build();
-        AccessibilityNodeInfo root = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder
                 .setWindow(window)
                 .setBoundsInScreen(windowBounds)
                 .build();
         setRootNodeForWindow(root, window);
 
         // Currently focused view.
-        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceFocusArea = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
-        AccessibilityNodeInfo sourceView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceView = mNodeBuilder
                 .setWindow(window)
                 .setParent(sourceFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
 
         // Target view.
-        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetFocusArea = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
         // viewContainer is non-focusable.
-        AccessibilityNodeInfo viewContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo viewContainer = mNodeBuilder
                 .setWindow(window)
                 .setParent(targetFocusArea)
-                .setVisibleToUser(true)
-                .setEnabled(true)
+                .setFocusable(false)
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
-        AccessibilityNodeInfo targetView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetView = mNodeBuilder
                 .setWindow(window)
                 .setParent(viewContainer)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
 
@@ -1075,6 +890,7 @@ public class NavigatorTest {
 
     /**
      * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
      * In the same window
      *
      *    =====source focus area=====
@@ -1088,6 +904,7 @@ public class NavigatorTest {
      *    =   -                  -  =
      *    =   ---view container---  =
      *    ===========================
+     * </pre>
      */
     @Test
     public void testNudgeToFocusAreaWithNestedFocusableChild() {
@@ -1095,56 +912,41 @@ public class NavigatorTest {
         AccessibilityWindowInfo window = new WindowBuilder()
                 .setBoundsInScreen(windowBounds)
                 .build();
-        AccessibilityNodeInfo root = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder
                 .setWindow(window)
                 .setBoundsInScreen(windowBounds)
                 .build();
         setRootNodeForWindow(root, window);
 
         // Currently focused view.
-        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceFocusArea = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
-        AccessibilityNodeInfo sourceView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceView = mNodeBuilder
                 .setWindow(window)
                 .setParent(sourceFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 100, 100))
                 .build();
 
         // Target view.
-        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetFocusArea = mNodeBuilder
                 .setWindow(window)
                 .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
         // viewContainer is focusable.
-        AccessibilityNodeInfo viewContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo viewContainer = mNodeBuilder
                 .setWindow(window)
                 .setParent(targetFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
-        AccessibilityNodeInfo targetView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetView = mNodeBuilder
                 .setWindow(window)
                 .setParent(viewContainer)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 100, 100, 200))
                 .build();
 
@@ -1197,49 +999,35 @@ public class NavigatorTest {
                 .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
                 .build();
         windows.add(appWindow);
-        AccessibilityNodeInfo appRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo appRoot = mNodeBuilder
                 .setWindow(appWindow)
                 .setWindowId(appWindowId)
                 .setBoundsInScreen(appWindowBounds)
                 .build();
         setRootNodeForWindow(appRoot, appWindow);
-        AccessibilityNodeInfo targetFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetFocusArea = mNodeBuilder
                 .setWindow(appWindow)
                 .setWindowId(appWindowId)
                 .setParent(appRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 400, 300))
                 .build();
-        AccessibilityNodeInfo view1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo view1 = mNodeBuilder
                 .setWindow(appWindow)
                 .setWindowId(appWindowId)
                 .setParent(targetFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 400, 100))
                 .build();
-        AccessibilityNodeInfo targetView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo targetView = mNodeBuilder
                 .setWindow(appWindow)
                 .setWindowId(appWindowId)
                 .setParent(targetFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 100, 400, 200))
                 .build();
-        AccessibilityNodeInfo view3 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo view3 = mNodeBuilder
                 .setWindow(appWindow)
                 .setWindowId(appWindowId)
                 .setParent(targetFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 200, 400, 300))
                 .build();
 
@@ -1251,29 +1039,23 @@ public class NavigatorTest {
                 .setType(AccessibilityWindowInfo.TYPE_INPUT_METHOD)
                 .build();
         windows.add(imeWindow);
-        AccessibilityNodeInfo imeRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo imeRoot = mNodeBuilder
                 .setWindow(imeWindow)
                 .setWindowId(imeWindowId)
                 .setBoundsInScreen(imeWindowBounds)
                 .build();
         setRootNodeForWindow(imeRoot, imeWindow);
-        AccessibilityNodeInfo sourceFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceFocusArea = mNodeBuilder
                 .setWindow(imeWindow)
                 .setWindowId(imeWindowId)
                 .setParent(imeRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 300, 400, 400))
                 .build();
-        AccessibilityNodeInfo sourceView = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo sourceView = mNodeBuilder
                 .setWindow(imeWindow)
                 .setWindowId(imeWindowId)
                 .setParent(sourceFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 300, 400, 400))
                 .build();
 
@@ -1310,28 +1092,22 @@ public class NavigatorTest {
         AccessibilityWindowInfo leftWindow = new WindowBuilder()
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
-        AccessibilityNodeInfo leftRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftRoot = mNodeBuilder
                 .setWindow(leftWindow)
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
         setRootNodeForWindow(leftRoot, leftWindow);
 
         // Left focus area and its view inside.
-        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftFocusArea = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
-        AccessibilityNodeInfo left = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo left = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
 
@@ -1340,37 +1116,29 @@ public class NavigatorTest {
         AccessibilityWindowInfo rightWindow = new WindowBuilder()
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
-        AccessibilityNodeInfo rightRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightRoot = mNodeBuilder
                 .setWindow(rightWindow)
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
         setRootNodeForWindow(rightRoot, rightWindow);
 
         // Right focus area and its view inside.
-        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightFocusArea = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .setScrollableContainer()
                 .build();
-        AccessibilityNodeInfo nonFocusable = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo nonFocusable = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(scrollableContainer)
-                .setVisibleToUser(true)
-                .setEnabled(true)
+                .setFocusable(false)
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
 
@@ -1409,28 +1177,22 @@ public class NavigatorTest {
         AccessibilityWindowInfo leftWindow = new WindowBuilder()
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
-        AccessibilityNodeInfo leftRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftRoot = mNodeBuilder
                 .setWindow(leftWindow)
                 .setBoundsInScreen(leftWindowBounds)
                 .build();
         setRootNodeForWindow(leftRoot, leftWindow);
 
         // Left focus area and its view inside.
-        AccessibilityNodeInfo leftFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo leftFocusArea = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
-        AccessibilityNodeInfo left = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo left = mNodeBuilder
                 .setWindow(leftWindow)
                 .setParent(leftFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(0, 0, 400, 400))
                 .build();
 
@@ -1439,38 +1201,28 @@ public class NavigatorTest {
         AccessibilityWindowInfo rightWindow = new WindowBuilder()
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
-        AccessibilityNodeInfo rightRoot = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightRoot = mNodeBuilder
                 .setWindow(rightWindow)
                 .setBoundsInScreen(rightWindowBounds)
                 .build();
         setRootNodeForWindow(rightRoot, rightWindow);
 
         // Right focus area and its view inside.
-        AccessibilityNodeInfo rightFocusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo rightFocusArea = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightRoot)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
+                .setFocusArea()
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(rightFocusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .setScrollableContainer()
                 .build();
-        AccessibilityNodeInfo focusable = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo focusable = mNodeBuilder
                 .setWindow(rightWindow)
                 .setParent(scrollableContainer)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
                 .setBoundsInScreen(new Rect(400, 0, 800, 400))
                 .build();
 
@@ -1497,47 +1249,14 @@ public class NavigatorTest {
      */
     @Test
     public void testFindFirstFocusDescendant() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusArea1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
-        AccessibilityNodeInfo focusArea2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.setFocusable(false).build();
+        AccessibilityNodeInfo focusArea1 = mNodeBuilder.setParent(root).setFocusArea().build();
+        AccessibilityNodeInfo focusArea2 = mNodeBuilder.setParent(root).setFocusArea().build();
 
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setNodeList(mNodeList)
-                .setParent(focusArea2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(focusArea1).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea1).build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(focusArea2).build();
+        AccessibilityNodeInfo button4 = mNodeBuilder.setParent(focusArea2).build();
 
         int direction = View.FOCUS_FORWARD;
 
@@ -1566,35 +1285,12 @@ public class NavigatorTest {
      */
     @Test
     public void testFindFirstFocusDescendantWithFocusParkingView() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusParkingView = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_PARKING_VIEW_CLASS_NAME)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo focusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.setFocusable(false).build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(root).setFpv().build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder.setParent(root).setFocusArea().build();
 
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(focusArea).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
 
         int direction = View.FOCUS_FORWARD;
 
@@ -1630,30 +1326,15 @@ public class NavigatorTest {
      */
     @Test
     public void testFindScrollableContainer() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo focusArea = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .setClassName(FOCUS_AREA_CLASS_NAME)
-                .build();
-        AccessibilityNodeInfo scrollableContainer = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder.setParent(root).setFocusArea().build();
+        AccessibilityNodeInfo scrollableContainer = mNodeBuilder
                 .setParent(focusArea)
-                .setFocusable(true)
-                .setContentDescription(ROTARY_VERTICALLY_SCROLLABLE)
+                .setScrollableContainer()
                 .build();
-        AccessibilityNodeInfo container = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(scrollableContainer)
-                .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(focusArea)
-                .build();
+        AccessibilityNodeInfo container = mNodeBuilder.setParent(scrollableContainer).build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
 
         AccessibilityNodeInfo target = mNavigator.findScrollableContainer(button1);
         assertThat(target).isSameAs(scrollableContainer);
@@ -1675,43 +1356,13 @@ public class NavigatorTest {
      */
     @Test
     public void testFindPreviousFocusableDescendant() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo container1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo container2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo container1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo container2 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(container2).build();
+        AccessibilityNodeInfo button4 = mNodeBuilder.setParent(container2).build();
 
         int direction = View.FOCUS_BACKWARD;
         when(button4.focusSearch(direction)).thenReturn(button3);
@@ -1744,43 +1395,13 @@ public class NavigatorTest {
      */
     @Test
     public void testFindNextFocusableDescendant() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo container1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo container2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(root)
-                .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo container1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo container2 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(container2).build();
+        AccessibilityNodeInfo button4 = mNodeBuilder.setParent(container2).build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(button2);
@@ -1813,43 +1434,25 @@ public class NavigatorTest {
      */
     @Test
     public void testFindFirstFocusableDescendant() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo container1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.setFocusable(false).build();
+        AccessibilityNodeInfo container1 = mNodeBuilder
                 .setParent(root)
+                .setFocusable(false)
                 .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button1 = mNodeBuilder
                 .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
                 .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button2 = mNodeBuilder
                 .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
                 .build();
-        AccessibilityNodeInfo container2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo container2 = mNodeBuilder
                 .setParent(root)
+                .setFocusable(false)
                 .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(container2).build();
+        AccessibilityNodeInfo button4 = mNodeBuilder.setParent(container2).build();
 
         AccessibilityNodeInfo target = mNavigator.findFirstFocusableDescendant(root);
         assertThat(target).isSameAs(button3);
@@ -1870,41 +1473,23 @@ public class NavigatorTest {
      */
     @Test
     public void testFindLastFocusableDescendant() {
-        AccessibilityNodeInfo root = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo container1 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo root = mNodeBuilder.setFocusable(false).build();
+        AccessibilityNodeInfo container1 = mNodeBuilder
                 .setParent(root)
+                .setFocusable(false)
                 .build();
-        AccessibilityNodeInfo button1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo button2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(container1)
-                .setFocusable(true)
-                .setVisibleToUser(true)
-                .setEnabled(true)
-                .build();
-        AccessibilityNodeInfo container2 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(container1).build();
+        AccessibilityNodeInfo container2 = mNodeBuilder
                 .setParent(root)
+                .setFocusable(false)
                 .build();
-        AccessibilityNodeInfo button3 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button3 = mNodeBuilder
                 .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
                 .build();
-        AccessibilityNodeInfo button4 = new NodeBuilder()
-                .setNodeList(mNodeList)
+        AccessibilityNodeInfo button4 = mNodeBuilder
                 .setParent(container2)
-                .setFocusable(true)
-                .setVisibleToUser(true)
                 .setEnabled(false)
                 .build();
 

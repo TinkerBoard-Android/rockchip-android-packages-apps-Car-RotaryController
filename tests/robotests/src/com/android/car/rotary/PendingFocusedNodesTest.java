@@ -17,11 +17,7 @@ package com.android.car.rotary;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +29,8 @@ import org.junit.runner.RunWith;
 import org.mockito.Spy;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.ArrayList;
+
 @RunWith(RobolectricTestRunner.class)
 public class PendingFocusedNodesTest {
     private static final long TIMEOUT_MS = 200;
@@ -41,6 +39,8 @@ public class PendingFocusedNodesTest {
     @Spy
     private PendingFocusedNodes mPendingFocusedNodes;
 
+    private NodeBuilder mNodeBuilder;
+
     private AccessibilityNodeInfo mNode1;
     private AccessibilityNodeInfo mNode2;
 
@@ -48,13 +48,12 @@ public class PendingFocusedNodesTest {
     public void setUp() {
         mPendingFocusedNodes = spy(new PendingFocusedNodes(TIMEOUT_MS));
         doReturn(UPTIME_MS).when(mPendingFocusedNodes).getUptimeMs();
+        mPendingFocusedNodes.setNodeCopier(MockNodeCopierProvider.get());
 
-        NodeCopier nodeCopier = mock(NodeCopier.class);
-        doAnswer(returnsFirstArg()).when(nodeCopier).copy(any(AccessibilityNodeInfo.class));
-        mPendingFocusedNodes.setNodeCopier(nodeCopier);
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
 
-        mNode1 = new NodeBuilder().setInViewTree(true).build();
-        mNode2 = new NodeBuilder().setInViewTree(true).build();
+        mNode1 = mNodeBuilder.build();
+        mNode2 = mNodeBuilder.build();
     }
 
     @Test
@@ -91,7 +90,7 @@ public class PendingFocusedNodesTest {
 
     @Test
     public void testRefreshRemovesNodeNotInViewTree() {
-        AccessibilityNodeInfo node = new NodeBuilder().setInViewTree(false).build();
+        AccessibilityNodeInfo node = mNodeBuilder.setInViewTree(false).build();
         mPendingFocusedNodes.put(node);
         mPendingFocusedNodes.refresh();
         assertThat(mPendingFocusedNodes.isEmpty()).isTrue();
@@ -100,30 +99,24 @@ public class PendingFocusedNodesTest {
     @Test
     public void testRemoveIf() {
         mPendingFocusedNodes.put(mNode1);
-        AccessibilityNodeInfo focusable1 = new NodeBuilder()
-                .setFocusable(true)
-                .setInViewTree(true)
-                .build();
-        AccessibilityNodeInfo focusable2 = new NodeBuilder()
-                .setFocusable(true)
-                .setInViewTree(true)
-                .build();
-        mPendingFocusedNodes.put(focusable1);
-        mPendingFocusedNodes.put(focusable2);
+        AccessibilityNodeInfo disabled1 = mNodeBuilder.setEnabled(false).build();
+        AccessibilityNodeInfo disabled2 = mNodeBuilder.setEnabled(false).build();
+        mPendingFocusedNodes.put(disabled1);
+        mPendingFocusedNodes.put(disabled2);
 
-        boolean removed = mPendingFocusedNodes.removeFirstIf(node -> node.isFocusable());
+        boolean removed = mPendingFocusedNodes.removeFirstIf(node -> !node.isEnabled());
         assertThat(removed).isTrue();
         assertThat(mPendingFocusedNodes.size()).isEqualTo(2);
         assertThat(mPendingFocusedNodes.contains(mNode1)).isTrue();
 
-        removed = mPendingFocusedNodes.removeFirstIf(node -> node.isFocusable());
+        removed = mPendingFocusedNodes.removeFirstIf(node -> !node.isEnabled());
         assertThat(removed).isTrue();
         assertThat(mPendingFocusedNodes.size()).isEqualTo(1);
-        assertThat(mPendingFocusedNodes.contains(focusable1)).isFalse();
-        assertThat(mPendingFocusedNodes.contains(focusable2)).isFalse();
+        assertThat(mPendingFocusedNodes.contains(disabled1)).isFalse();
+        assertThat(mPendingFocusedNodes.contains(disabled2)).isFalse();
         assertThat(mPendingFocusedNodes.contains(mNode1)).isTrue();
 
-        removed = mPendingFocusedNodes.removeFirstIf(node -> node.isEnabled());
+        removed = mPendingFocusedNodes.removeFirstIf(node -> !node.isFocusable());
         assertThat(removed).isFalse();
         assertThat(mPendingFocusedNodes.contains(mNode1)).isTrue();
     }
