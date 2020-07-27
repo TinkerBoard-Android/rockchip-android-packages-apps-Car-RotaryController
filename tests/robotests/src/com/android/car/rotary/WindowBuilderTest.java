@@ -15,6 +15,8 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import android.graphics.Rect;
@@ -25,28 +27,37 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.ArrayList;
+
 @RunWith(RobolectricTestRunner.class)
 public class WindowBuilderTest {
 
     @Test
-    public void testBuildWindow() {
-        AccessibilityNodeInfo root = new NodeBuilder().build();
-        Rect bounds = new Rect(100, 200, 300, 400);
-        AccessibilityWindowInfo window = new WindowBuilder()
-                .setId(0x42)
-                .setRoot(root)
-                .setBoundsInScreen(bounds)
-                .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
-                .build();
-
+    public void testSetId() {
+        AccessibilityWindowInfo window = new WindowBuilder().setId(0x42).build();
         assertThat(window.getId()).isEqualTo(0x42);
+    }
 
+    @Test
+    public void testSetRoot() {
+        AccessibilityNodeInfo root = new NodeBuilder(new ArrayList<>()).build();
+        AccessibilityWindowInfo window = new WindowBuilder().setRoot(root).build();
         assertThat(window.getRoot()).isSameAs(root);
+    }
 
-        Rect boundsInScreen = new Rect();
-        window.getBoundsInScreen(boundsInScreen);
-        assertThat(boundsInScreen).isEqualTo(bounds);
+    @Test
+    public void testSetBoundsInScreen() {
+        Rect setBounds = new Rect(100, 200, 300, 400);
+        AccessibilityWindowInfo window = new WindowBuilder().setBoundsInScreen(setBounds).build();
+        Rect retrievedBounds = new Rect();
+        window.getBoundsInScreen(retrievedBounds);
+        assertThat(retrievedBounds).isEqualTo(setBounds);
+    }
 
-        assertThat(window.getType()).isEqualTo(AccessibilityWindowInfo.TYPE_SYSTEM);
+    @Test
+    public void testSetType() {
+        AccessibilityWindowInfo window =
+                new WindowBuilder().setType(TYPE_SYSTEM).build();
+        assertThat(window.getType()).isEqualTo(TYPE_SYSTEM);
     }
 }
