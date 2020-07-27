@@ -318,17 +318,18 @@ class Navigator {
             @NonNull AccessibilityNodeInfo sourceNode, int direction, int rotationCount) {
         int advancedCount = 0;
         AccessibilityNodeInfo currentFocusArea = getAncestorFocusArea(sourceNode);
-        AccessibilityNodeInfo targetNode = copyNode(sourceNode);
-        for (int i = 0; i < rotationCount; i++) {
-            AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(direction);
-            AccessibilityNodeInfo targetFocusArea =
-                    nextTargetNode == null ? null : getAncestorFocusArea(nextTargetNode);
+        AccessibilityNodeInfo candidate = copyNode(sourceNode);
+        AccessibilityNodeInfo target = null;
+        while (advancedCount < rotationCount) {
+            AccessibilityNodeInfo nextCandidate = candidate.focusSearch(direction);
+            AccessibilityNodeInfo candidateFocusArea =
+                    nextCandidate == null ? null : getAncestorFocusArea(nextCandidate);
 
-            // Only advance to nextTargetNode if it's in the same focus area and it isn't a
+            // Only advance to nextCandidate if it's in the same focus area and it isn't a
             // FocusParkingView. The second condition prevents wrap-around when there is only one
             // focus area in the window, including when the root node is treated as a focus area.
-            if (nextTargetNode != null && currentFocusArea.equals(targetFocusArea)
-                    && !Utils.isFocusParkingView(nextTargetNode)) {
+            if (nextCandidate != null && currentFocusArea.equals(candidateFocusArea)
+                    && !Utils.isFocusParkingView(nextCandidate)) {
                 // We need to skip nextTargetNode if:
                 // 1. it can't perform focus action (focusSearch() may return a node with zero
                 //    width and height),
@@ -336,21 +337,20 @@ class Navigator {
                 //    the container because we want to focus on its element directly. We don't skip
                 //    a scrollable container without descendants that can take focus because we want
                 //    to focus on it, thus we can scroll it when the rotary controller is rotated.
-                if (!Utils.canPerformFocus(nextTargetNode)
-                        || (Utils.isScrollableContainer(nextTargetNode)
-                            && Utils.descendantCanTakeFocus(nextTargetNode))) {
-                    Utils.recycleNode(targetNode);
-                    Utils.recycleNode(targetFocusArea);
-                    targetNode = nextTargetNode;
-                    --i;
+                if (!Utils.canPerformFocus(nextCandidate)
+                        || (Utils.isScrollableContainer(nextCandidate)
+                        && Utils.descendantCanTakeFocus(nextCandidate))) {
+                    Utils.recycleNode(candidate);
+                    Utils.recycleNode(candidateFocusArea);
+                    candidate = nextCandidate;
                     continue;
                 }
                 // If we're navigating through a scrolling view that can scroll in the specified
                 // direction and the next view is off-screen, don't advance to it. (We'll scroll
-                // instead.)
+                // the remaining count instead.)
                 Rect nextTargetBounds = new Rect();
-                nextTargetNode.getBoundsInScreen(nextTargetBounds);
-                AccessibilityNodeInfo scrollableContainer = findScrollableContainer(targetNode);
+                nextCandidate.getBoundsInScreen(nextTargetBounds);
+                AccessibilityNodeInfo scrollableContainer = findScrollableContainer(candidate);
                 AccessibilityNodeInfo.AccessibilityAction scrollAction =
                         direction == View.FOCUS_FORWARD
                                 ? ACTION_SCROLL_FORWARD
@@ -361,29 +361,33 @@ class Navigator {
                     scrollableContainer.getBoundsInScreen(scrollBounds);
                     boolean intersects = nextTargetBounds.intersect(scrollBounds);
                     if (!intersects) {
-                        Utils.recycleNode(nextTargetNode);
-                        Utils.recycleNode(targetFocusArea);
+                        Utils.recycleNode(nextCandidate);
+                        Utils.recycleNode(candidateFocusArea);
                         break;
                     }
                 }
                 Utils.recycleNode(scrollableContainer);
 
-                Utils.recycleNode(targetNode);
-                Utils.recycleNode(targetFocusArea);
-                targetNode = nextTargetNode;
+                Utils.recycleNode(candidate);
+                Utils.recycleNode(candidateFocusArea);
+                candidate = nextCandidate;
+                Utils.recycleNode(target);
+                target = copyNode(candidate);
                 advancedCount++;
             } else {
-                Utils.recycleNode(nextTargetNode);
-                Utils.recycleNode(targetFocusArea);
+                Utils.recycleNode(nextCandidate);
+                Utils.recycleNode(candidateFocusArea);
                 break;
             }
         }
-        Utils.recycleNode(currentFocusArea);
-        if (sourceNode.equals(targetNode)) {
-            targetNode.recycle();
+        currentFocusArea.recycle();
+        candidate.recycle();
+        if (sourceNode.equals(target)) {
+            L.e("Wrap-around on the same node");
+            target.recycle();
             return null;
         }
-        return new FindRotateTargetResult(targetNode, advancedCount);
+        return target == null ? null : new FindRotateTargetResult(target, advancedCount);
     }
 
     /**
