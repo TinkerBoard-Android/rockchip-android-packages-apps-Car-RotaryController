@@ -303,6 +303,22 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *             node
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetWithOneNode() {
+        AccessibilityNodeInfo node = mNodeBuilder.build();
+        int direction = View.FOCUS_BACKWARD;
+        when(node.focusSearch(direction)).thenReturn(node);
+
+        FindRotateTargetResult target = mNavigator.findRotateTarget(node, direction, 1);
+        assertThat(target).isNull();
+    }
+
+    /**
      * Tests {@link Navigator#findRotateTarget} in the following layout:
      * <pre>
      *     ============ focus area ============
