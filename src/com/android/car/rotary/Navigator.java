@@ -325,11 +325,16 @@ class Navigator {
             AccessibilityNodeInfo candidateFocusArea =
                     nextCandidate == null ? null : getAncestorFocusArea(nextCandidate);
 
-            // Only advance to nextCandidate if it's in the same focus area and it isn't a
-            // FocusParkingView. The second condition prevents wrap-around when there is only one
-            // focus area in the window, including when the root node is treated as a focus area.
+            // Only advance to nextCandidate if:
+            // 1. it's in the same focus area,
+            // 2. and it isn't a FocusParkingView (this is to prevent wrap-around when there is only
+            //    one focus area in the window, including when the root node is treated as a focus
+            //    area),
+            // 3. and nextCandidate is different from candidate (if sourceNode is the first
+            //    focusable node in the window, searching backward will return sourceNode itself).
             if (nextCandidate != null && currentFocusArea.equals(candidateFocusArea)
-                    && !Utils.isFocusParkingView(nextCandidate)) {
+                    && !Utils.isFocusParkingView(nextCandidate)
+                    && !nextCandidate.equals(candidate)) {
                 // We need to skip nextTargetNode if:
                 // 1. it can't perform focus action (focusSearch() may return a node with zero
                 //    width and height),
