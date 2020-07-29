@@ -857,10 +857,10 @@ public class RotaryService extends AccessibilityService implements
                 if (target == null) {
                     break;
                 }
-                L.d("Focusing %s after scroll",
-                        mAfterScrollAction == AfterScrollAction.FOCUS_PREVIOUS
-                                ? "previous"
-                                : "next");
+                L.d("Focusing "
+                        + (mAfterScrollAction == AfterScrollAction.FOCUS_PREVIOUS
+                            ? "previous" : "next")
+                        + " after scroll");
                 if (performFocusAction(target)) {
                     mAfterScrollAction = AfterScrollAction.NONE;
                 }
@@ -876,8 +876,9 @@ public class RotaryService extends AccessibilityService implements
                 if (target == null) {
                     break;
                 }
-                L.d("Focusing %s after scroll",
-                        mAfterScrollAction == AfterScrollAction.FOCUS_FIRST ? "first" : "last");
+                L.d("Focusing "
+                        + (mAfterScrollAction == AfterScrollAction.FOCUS_FIRST ? "first" : "last")
+                        + " after scroll");
                 if (performFocusAction(target)) {
                     mAfterScrollAction = AfterScrollAction.NONE;
                 }
@@ -1745,7 +1746,7 @@ public class RotaryService extends AccessibilityService implements
         boolean result =
                 Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
         if (!result) {
-            L.w("Failed to switch IME: %s", newIme);
+            L.w("Failed to switch IME: " + newIme);
         }
     }
 
