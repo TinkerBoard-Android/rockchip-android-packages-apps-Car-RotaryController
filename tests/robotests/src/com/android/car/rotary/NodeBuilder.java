@@ -19,6 +19,10 @@ import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDO
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
 import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_LEFT_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_TOP_PADDING;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import static org.mockito.Mockito.any;
@@ -27,6 +31,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -78,6 +83,9 @@ class NodeBuilder {
     /** The action list for this node. */
     @NonNull
     private List<AccessibilityNodeInfo.AccessibilityAction> mActionList = new ArrayList<>();
+    /** The extras of this node. */
+    @NonNull
+    private Bundle mExtras = new Bundle();
 
     NodeBuilder(@NonNull List<AccessibilityNodeInfo> nodeList) {
         mNodeList = nodeList;
@@ -85,9 +93,7 @@ class NodeBuilder {
 
     AccessibilityNodeInfo build() {
         // Make a copy of the current NodeBuilder.
-        NodeBuilder builder = copy();
-        // Clear the state of the current NodeBuilder so that it can be reused.
-        clear();
+        NodeBuilder builder = cut();
 
         AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
 
@@ -141,6 +147,7 @@ class NodeBuilder {
         when(node.refresh()).thenReturn(builder.mInViewTree);
         when(node.getContentDescription()).thenReturn(builder.mContentDescription);
         when(node.getActionList()).thenReturn(builder.mActionList);
+        when(node.getExtras()).thenReturn(builder.mExtras);
 
         builder.mNodeList.add(node);
         return node;
@@ -205,6 +212,14 @@ class NodeBuilder {
         return setClassName(FOCUS_AREA_CLASS_NAME).setFocusable(false);
     }
 
+    NodeBuilder setFocusAreaHighlightPadding(int left, int top, int right, int bottom) {
+        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_LEFT_PADDING, left);
+        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_TOP_PADDING, top);
+        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING, right);
+        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING, bottom);
+        return this;
+    }
+
     NodeBuilder setFpv() {
         return setClassName(FOCUS_PARKING_VIEW_CLASS_NAME);
     }
@@ -213,8 +228,12 @@ class NodeBuilder {
         return setContentDescription(ROTARY_VERTICALLY_SCROLLABLE);
     }
 
-    /** Creates a NodeBuilder with the same states. */
-    private NodeBuilder copy() {
+    /**
+     * Creates a copy of the current NodeBuilder, and clears the states of the current NodeBuilder
+     * except for {@link #mNodeList}.
+     */
+    private NodeBuilder cut() {
+        // Create a copy.
         NodeBuilder copy = new NodeBuilder(this.mNodeList);
         copy.mWindow = mWindow;
         copy.mWindowId = mWindowId;
@@ -227,11 +246,9 @@ class NodeBuilder {
         copy.mInViewTree = mInViewTree;
         copy.mContentDescription = mContentDescription;
         copy.mActionList = mActionList;
-        return copy;
-    }
+        copy.mExtras = mExtras;
 
-    /** Clears all the states but {@link #mNodeList}. */
-    private void clear() {
+        // Clear the states so that it doesn't infect the next NodeBuilder we create.
         mWindow = null;
         mWindowId = UNDEFINED_WINDOW_ID;
         mParent = null;
@@ -243,5 +260,8 @@ class NodeBuilder {
         mInViewTree = true;
         mContentDescription = null;
         mActionList = new ArrayList<>();
+        mExtras = new Bundle();
+
+        return copy;
     }
 }

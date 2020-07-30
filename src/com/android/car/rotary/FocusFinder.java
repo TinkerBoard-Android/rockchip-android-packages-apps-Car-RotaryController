@@ -68,8 +68,6 @@ class FocusFinder {
      *  <li> and one of the following conditions must be true:
      *  <ul>
      *   <li> {@code destRect.right} is on the left of {@code srcRect.right}
-     *   <li> {@code destRect.right} equals {@code srcRect.right}, and {@code destRect} and {@code
-     *        srcRect} overlap in Y axis (an edge case)
      *   <li> {@code destRect.right} equals or is on the left of {@code srcRect.left} (an edge case
      *        for an empty {@code srcRect}, which is used in some cases when searching from a point
      *        on the screen)
@@ -84,27 +82,17 @@ class FocusFinder {
     static boolean isCandidate(Rect srcRect, Rect destRect, int direction) {
         switch (direction) {
             case View.FOCUS_LEFT:
-                return srcRect.left > destRect.left
-                        && (srcRect.right > destRect.right
-                        || (srcRect.right == destRect.right && overlapOnYAxis(srcRect,
-                        destRect))
-                        || srcRect.left >= destRect.right);
+                return (srcRect.right > destRect.right || srcRect.left >= destRect.right)
+                        && srcRect.left > destRect.left;
             case View.FOCUS_RIGHT:
-                return srcRect.right < destRect.right
-                        && (srcRect.left < destRect.left
-                        || (srcRect.left == destRect.left && overlapOnYAxis(srcRect, destRect))
-                        || srcRect.right <= destRect.left);
+                return (srcRect.left < destRect.left || srcRect.right <= destRect.left)
+                        && srcRect.right < destRect.right;
             case View.FOCUS_UP:
-                return srcRect.top > destRect.top
-                        && (srcRect.bottom > destRect.bottom
-                        || (srcRect.bottom == destRect.bottom && overlapOnXAxis(srcRect,
-                        destRect))
-                        || srcRect.top >= destRect.bottom);
+                return (srcRect.bottom > destRect.bottom || srcRect.top >= destRect.bottom)
+                        && srcRect.top > destRect.top;
             case View.FOCUS_DOWN:
-                return srcRect.bottom < destRect.bottom
-                        && (srcRect.top < destRect.top
-                        || (srcRect.top == destRect.top && overlapOnXAxis(srcRect, destRect))
-                        || srcRect.bottom <= destRect.top);
+                return (srcRect.top < destRect.top || srcRect.bottom <= destRect.top)
+                        && srcRect.bottom < destRect.bottom;
         }
         throw new IllegalArgumentException("direction must be one of "
                 + "{FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, FOCUS_RIGHT}.");
@@ -295,21 +283,5 @@ class FocusFinder {
         }
         throw new IllegalArgumentException("direction must be one of "
                 + "{FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, FOCUS_RIGHT}.");
-    }
-
-    /**
-     * Projects {@code rect1} and {@code rect2} onto Y axis, and returns whether the two projected
-     * intervals overlap. The overlap length must be > 0, otherwise it's not considered overlap.
-     */
-    private static boolean overlapOnYAxis(Rect rect1, Rect rect2) {
-        return rect1.bottom > rect2.top && rect1.top < rect2.bottom;
-    }
-
-    /**
-     * Projects {@code rect1} and {@code rect2} onto X axis, and returns whether the two projected
-     * intervals overlap. The overlap length must be > 0, otherwise it's not considered overlap.
-     */
-    private static boolean overlapOnXAxis(Rect rect1, Rect rect2) {
-        return rect1.left < rect2.right && rect1.right > rect2.left;
     }
 }

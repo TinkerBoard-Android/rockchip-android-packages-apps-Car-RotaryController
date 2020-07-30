@@ -79,24 +79,6 @@ public class FocusFinderTest extends AndroidTestCase {
     }
 
     @Test
-    public void testLeftOverlapNotCandidateForRightIfTheyDoNotOverlap() {
-        assertIsNotCandidate(
-                View.FOCUS_RIGHT,
-                //       L  T   R   B
-                new Rect(0, 50, 50, 100),
-                new Rect(0, 0, 100, 20));
-    }
-
-    @Test
-    public void testLeftOverlapIsCandidateForRightIfTheyOverlapVertically() {
-        assertDirectionIsCandidate(
-                View.FOCUS_RIGHT,
-                //       L  T   R   B
-                new Rect(0, 50, 50, 100),
-                new Rect(0, 50, 100, 100));
-    }
-
-    @Test
     public void testOverlappingIsCandidateWhenBothEdgesAreInDirection() {
         assertDirectionIsCandidate(
                 View.FOCUS_DOWN,
@@ -106,16 +88,13 @@ public class FocusFinderTest extends AndroidTestCase {
     }
 
     @Test
-    public void testTopEdgeOfDestAtTopOfSrcIsCandidateForDown() {
-        assertDirectionIsCandidate(
+    public void testTopEdgeOfDestAtOrAboveTopOfSrcNotCandidateForDown() {
+        assertIsNotCandidate(
                 View.FOCUS_DOWN,
                 //       L  T   R   B
                 new Rect(0, 0, 50, 50),
                 new Rect(0, 0, 50, 51));
-    }
 
-    @Test
-    public void testTopEdgeOfDestAboveTopOfSrcNotCandidateForDown() {
         assertIsNotCandidate(
                 View.FOCUS_DOWN,
                 //       L  T   R   B
