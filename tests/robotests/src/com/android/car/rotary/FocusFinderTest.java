@@ -43,6 +43,26 @@ public class FocusFinderTest extends AndroidTestCase {
     }
 
     @Test
+    public void testInDirection() {
+        final Rect src = new Rect(100, 100, 200, 200);
+
+        assertIsInDirection(View.FOCUS_LEFT, src, new Rect(99, 100, 300, 200));
+        assertIsInDirection(View.FOCUS_RIGHT, src, new Rect(0, 50, 201, 60));
+        assertIsInDirection(View.FOCUS_UP, src, new Rect(50, 99, 60, 300));
+        assertIsInDirection(View.FOCUS_DOWN, src, new Rect(50, 0, 60, 201));
+    }
+
+    @Test
+    public void testNotInDirection() {
+        final Rect src = new Rect(100, 100, 200, 200);
+
+        assertIsNotInDirection(View.FOCUS_LEFT, src, new Rect(100, 300, 150, 400));
+        assertIsNotInDirection(View.FOCUS_RIGHT, src, new Rect(150, 300, 200, 400));
+        assertIsNotInDirection(View.FOCUS_UP, src, new Rect(300, 100, 400, 150));
+        assertIsNotInDirection(View.FOCUS_DOWN, src, new Rect(300, 150, 400, 200));
+    }
+
+    @Test
     public void testBelowNotCandidateForDirectionUp() {
         assertIsNotCandidate(View.FOCUS_UP,
                 new Rect(0, 30, 10, 40),   // src  (left, top, right, bottom)
@@ -242,9 +262,9 @@ public class FocusFinderTest extends AndroidTestCase {
         assertBetterCandidate(View.FOCUS_UP, src, aboveLeftOfBeam, aboveInBeam);
     }
 
-    /** A non-candidate (even a much closer one) is always a worse choice than a real candidate. */
+    /** A non-candidate is not excluded when searching for a better candidate. */
     @Test
-    public void testSomeCandidateBetterThanNonCandidate() {
+    public void testNonCandidateCanBeBetterCandidate() {
         Rect src = new Rect(0, 0, 50, 50); // (left, top, right, bottom)
 
         Rect nonCandidate = new Rect(src);
@@ -256,7 +276,7 @@ public class FocusFinderTest extends AndroidTestCase {
         candidate.offset(-(4 * src.width()), 0);
         assertDirectionIsCandidate(View.FOCUS_LEFT, src, candidate);
 
-        assertBetterCandidate(View.FOCUS_LEFT, src, candidate, nonCandidate);
+        assertBetterCandidate(View.FOCUS_LEFT, src, nonCandidate, candidate);
     }
 
     /** Grabbed from {@link android.widget.focus.VerticalFocusSearchTest#testSearchFromMidLeft()} */
@@ -473,6 +493,20 @@ public class FocusFinderTest extends AndroidTestCase {
                 "expected %s is at least partially in direction %s of %s ",
                 dest, directionStr, src);
         assertTrue(assertMsg, FocusFinder.isPartiallyInDirection(src, dest, direction));
+    }
+
+    private void assertIsInDirection(int direction, Rect src, Rect dest) {
+        String directionStr = validateAndGetStringFor(direction);
+        final String assertMsg = String.format("expected part of %s is in direction %s of %s ",
+                dest, directionStr, src);
+        assertTrue(assertMsg, FocusFinder.isInDirection(src, dest, direction));
+    }
+
+    private void assertIsNotInDirection(int direction, Rect src, Rect dest) {
+        String directionStr = validateAndGetStringFor(direction);
+        final String assertMsg = String.format("expected no part of %s is in direction %s of %s ",
+                dest, directionStr, src);
+        assertFalse(assertMsg, FocusFinder.isInDirection(src, dest, direction));
     }
 
     private void assertBeamsOverlap(int direction, Rect rect1, Rect rect2) {
