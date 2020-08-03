@@ -19,11 +19,16 @@ import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityActi
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
 import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_LEFT_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_TOP_PADDING;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -133,6 +138,22 @@ public class NodeBuilderTest {
         AccessibilityNodeInfo node = mNodeBuilder.setFocusArea().build();
         assertThat(node.getClassName().toString()).isEqualTo(FOCUS_AREA_CLASS_NAME);
         assertThat(node.isFocusable()).isFalse();
+    }
+
+    @Test
+    public void testSetFocusAreaHighlightPadding() {
+        int left = 10;
+        int top = 20;
+        int right = 30;
+        int bottom = 40;
+        AccessibilityNodeInfo node = mNodeBuilder
+                .setFocusAreaHighlightPadding(left, top, right, bottom)
+                .build();
+        Bundle extras = node.getExtras();
+        assertThat(extras.getInt(FOCUS_AREA_HIGHLIGHT_LEFT_PADDING)).isEqualTo(left);
+        assertThat(extras.getInt(FOCUS_AREA_HIGHLIGHT_TOP_PADDING)).isEqualTo(top);
+        assertThat(extras.getInt(FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING)).isEqualTo(right);
+        assertThat(extras.getInt(FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING)).isEqualTo(bottom);
     }
 
     @Test

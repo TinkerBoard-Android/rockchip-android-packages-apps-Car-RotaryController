@@ -1285,6 +1285,88 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
+     * In the same window
+     *
+     *          ==========focus area 1============
+     *          =  .......highlight............  =
+     *          =  .        *view1*           .  =
+     *          =  .......paddings.............  =
+     *          =                                =
+     *          =  ========focus area 2========  =
+     *          =  =         *view2*          =  =
+     *          =  ============================  =
+     *          =                                =
+     *          =                                =
+     *          =                                =
+     *          =                                =
+     *          ==================================
+     *
+     *          ===========focus area 3===========
+     *          =            *view3*             =
+     *          ==================================
+     * </pre>
+     */
+    @Test
+    public void testFindNudgeTargetWithFocusAreaHighlightPadding() {
+        Rect windowBounds = new Rect(0, 0, 100, 100);
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setBoundsInScreen(windowBounds)
+                .build();
+        AccessibilityNodeInfo root = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(windowBounds)
+                .build();
+        setRootNodeForWindow(root, window);
+
+        AccessibilityNodeInfo focusArea1 = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setFocusAreaHighlightPadding(0, 0, 0, 70)
+                .setBoundsInScreen(new Rect(0, 0, 100, 80))
+                .build();
+        AccessibilityNodeInfo view1 = mNodeBuilder
+                .setWindow(window)
+                .setParent(focusArea1)
+                .setBoundsInScreen(new Rect(0, 0, 100, 10))
+                .build();
+
+        AccessibilityNodeInfo focusArea2 = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setBoundsInScreen(new Rect(0, 10, 100, 20))
+                .build();
+        AccessibilityNodeInfo view2 = mNodeBuilder
+                .setWindow(window)
+                .setParent(focusArea2)
+                .setBoundsInScreen(new Rect(0, 10, 100, 20))
+                .build();
+
+        AccessibilityNodeInfo focusArea3 = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setBoundsInScreen(new Rect(0, 90, 100, 100))
+                .build();
+        AccessibilityNodeInfo view3 = mNodeBuilder
+                .setWindow(window)
+                .setParent(focusArea3)
+                .setBoundsInScreen(new Rect(0, 90, 100, 100))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge up from view3, it should go to view2.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, view3, View.FOCUS_UP);
+        assertThat(target).isSameAs(view2);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusDescendant} in the following node tree:
      * <pre>
      *                   root
