@@ -58,6 +58,29 @@ class FocusFinder {
     }
 
     /**
+     * Returns whether part of {@code destRect} is in {@code direction} of {@code srcRect}.
+     *
+     * @param srcRect   the source rectangle
+     * @param destRect  the destination rectangle
+     * @param direction must be {@link View#FOCUS_UP}, {@link View#FOCUS_DOWN},
+     *                  {@link View#FOCUS_LEFT}, or {@link View#FOCUS_RIGHT}
+     */
+    static boolean isInDirection(Rect srcRect, Rect destRect, int direction) {
+        switch (direction) {
+            case View.FOCUS_LEFT:
+                return destRect.left < srcRect.left;
+            case View.FOCUS_RIGHT:
+                return destRect.right > srcRect.right;
+            case View.FOCUS_UP:
+                return destRect.top < srcRect.top;
+            case View.FOCUS_DOWN:
+                return destRect.bottom > srcRect.bottom;
+        }
+        throw new IllegalArgumentException("direction must be "
+                + "FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, or FOCUS_RIGHT.");
+    }
+
+    /**
      * Returns whether {@code destRect} is a candidate for the next focus given the {@code
      * direction}.
      *
@@ -102,6 +125,12 @@ class FocusFinder {
      * Returns whether {@code rect1} is a better candidate than {@code rect2} for a focus search in
      * a particular {@code direction} from a {@code source} rect.  This is the core routine that
      * determines the order of focus searching.
+     * <p>
+     * Note: this method doesn't check whether {@code rect1} and {@code rect2} are candidates in the
+     * first place, because the strategy to determine a candidate varies: geometry is used for
+     * focusable views, while view hierarchy and geometry are used for focus areas. The caller is
+     * responsible for using a proper strategy to exclude the non-candidates before calling this
+     * method.
      *
      * @param direction must be {@link View#FOCUS_UP},{@link View#FOCUS_DOWN},
      *                  {@link View#FOCUS_LEFT},or {@link View#FOCUS_RIGHT}
@@ -110,16 +139,6 @@ class FocusFinder {
      * @param rect2     the current best candidate
      */
     static boolean isBetterCandidate(int direction, Rect source, Rect rect1, Rect rect2) {
-        // To be a better candidate, need to at least be a candidate in the first place.
-        if (!isCandidate(source, rect1, direction)) {
-            return false;
-        }
-
-        // We know that rect1 is a candidate. If rect2 is not a candidate, rect1 is better.
-        if (!isCandidate(source, rect2, direction)) {
-            return true;
-        }
-
         // If rect1 is better by beam, it wins.
         if (beamBeats(direction, source, rect1, rect2)) {
             return true;

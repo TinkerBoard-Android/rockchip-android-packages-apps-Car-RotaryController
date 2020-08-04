@@ -870,6 +870,94 @@ public class NavigatorTest {
      * <pre>
      * In the same window
      *
+     *          =======app bar focus area=========
+     *          =             *tab*              =
+     *          ==================================
+     *          =====browse list focus area ======
+     *          =                                =
+     *          =                                =
+     *          =         *list item 1*          =
+     *          =                                =
+     *          =                                =
+     *          =  ===control bar focus area===  =
+     *          =  =   *control bar button*   =  =
+     *          =  ============================  =
+     *          =                                =
+     *          =        *list item 2*           =
+     *          ==================================
+     * </pre>
+     */
+    @Test
+    public void testNudgeToOverlappedFocusArea() {
+        Rect windowBounds = new Rect(0, 0, 100, 100);
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setBoundsInScreen(windowBounds)
+                .build();
+        AccessibilityNodeInfo root = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(windowBounds)
+                .build();
+        setRootNodeForWindow(root, window);
+
+        AccessibilityNodeInfo appBarFocusArea = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setBoundsInScreen(new Rect(0, 0, 100, 10))
+                .build();
+        AccessibilityNodeInfo tab = mNodeBuilder
+                .setWindow(window)
+                .setParent(appBarFocusArea)
+                .setBoundsInScreen(new Rect(0, 0, 100, 10))
+                .build();
+
+        AccessibilityNodeInfo browseListFocusArea = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setBoundsInScreen(new Rect(0, 10, 100, 100))
+                .build();
+        AccessibilityNodeInfo listItem1 = mNodeBuilder
+                .setWindow(window)
+                .setParent(browseListFocusArea)
+                .setBoundsInScreen(new Rect(0, 40, 100, 50))
+                .build();
+        AccessibilityNodeInfo listItem2 = mNodeBuilder
+                .setWindow(window)
+                .setParent(browseListFocusArea)
+                .setBoundsInScreen(new Rect(0, 90, 100, 100))
+                .build();
+
+        AccessibilityNodeInfo ControlBarFocusArea = mNodeBuilder
+                .setWindow(window)
+                .setParent(root)
+                .setFocusArea()
+                .setBoundsInScreen(new Rect(0, 80, 100, 90))
+                .build();
+        AccessibilityNodeInfo controlButton = mNodeBuilder
+                .setWindow(window)
+                .setParent(ControlBarFocusArea)
+                .setBoundsInScreen(new Rect(0, 80, 100, 90))
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge up from controlButton, it should go to listItem1.
+        AccessibilityNodeInfo target
+                = mNavigator.findNudgeTarget(windows, controlButton, View.FOCUS_UP);
+        assertThat(target).isSameAs(listItem1);
+
+        // Nudge up from listItem1, it should go to tab.
+        target = mNavigator.findNudgeTarget(windows, listItem1, View.FOCUS_UP);
+        assertThat(target).isSameAs(tab);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTarget} in the following layout:
+     * <pre>
+     * In the same window
+     *
      *    =====source focus area=====
      *    = *    source view      * =
      *    ===========================
