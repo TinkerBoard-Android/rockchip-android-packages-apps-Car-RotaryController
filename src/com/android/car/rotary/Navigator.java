@@ -768,11 +768,14 @@ class Navigator {
             return null;
         }
         Rect sourceBounds = getBoundsInScreen(sourceNode);
+        AccessibilityNodeInfo sourceFocusArea = getAncestorFocusArea(sourceNode);
+        Rect sourceFocusAreaBounds = getBoundsInScreen(sourceFocusArea);
+        sourceFocusArea.recycle();
         AccessibilityNodeInfo bestNode = null;
         Rect bestBounds = new Rect();
 
         for (AccessibilityNodeInfo candidate : candidates) {
-            if (isCandidate(sourceBounds, candidate, direction)) {
+            if (isCandidate(sourceBounds, sourceFocusAreaBounds, candidate, direction)) {
                 Rect candidateBounds = getBoundsInScreen(candidate);
                 if (bestNode == null || FocusFinder.isBetterCandidate(
                         direction, sourceBounds, candidateBounds, bestBounds)) {
@@ -786,22 +789,42 @@ class Navigator {
 
     /**
      * Returns whether the given {@code node} is a candidate from {@code sourceBounds} to the given
-     * {@code direction}. To be a candidate, the node or one of its descendants must be able to take
-     * focus and must be considered a candidate by {@link FocusFinder#isCandidate}.
+     * {@code direction}.
+     * <p>
+     * To be a candidate, the node
+     * <ul>
+     *     <li>must be considered a candidate by {@link FocusFinder#isCandidate} if it represents a
+     *         focusable view within a focus area
+     *     <li>must be in the {@code direction} of the {@code sourceFocusAreaBounds} and one of its
+     *         focusable descendants must be a candidate if it represents a focus area
+     * </ul>
      */
     private boolean isCandidate(@NonNull Rect sourceBounds,
+            @NonNull Rect sourceFocusAreaBounds,
             @NonNull AccessibilityNodeInfo node,
             int direction) {
-        AccessibilityNodeInfo candidate = mTreeTraverser.depthFirstSearch(node, candidateNode -> {
-            // First check if the node can take focus.
-            if (!Utils.canTakeFocus(candidateNode)) {
-                return false;
-            }
-            // The node represents a focusable view in the FocusArea, so check the geometry.
-            Rect candidateBounds = new Rect();
-            candidateNode.getBoundsInScreen(candidateBounds);
-            return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
-        });
+        AccessibilityNodeInfo candidate = mTreeTraverser.depthFirstSearch(node,
+                /* skipPredicate= */ candidateNode -> {
+                    if (Utils.canTakeFocus(candidateNode)) {
+                        return false;
+                    }
+                    // If a node can't take focus, it represents a focus area. If the focus area is
+                    // not in the given direction of the source focus area, it's not a candidate,
+                    // so we should return true to stop searching.
+                    Rect candidateBounds = getBoundsInScreen(candidateNode);
+                    return !FocusFinder.isInDirection(
+                            sourceFocusAreaBounds, candidateBounds, direction);
+                },
+                /* targetPredicate= */ candidateNode -> {
+                    // If a node can't take focus, it represents a focus area, so we return false to
+                    // skip the node and let it search its descendants.
+                    if (!Utils.canTakeFocus(candidateNode)) {
+                        return false;
+                    }
+                    // The node represents a focusable view in a focus area, so check the geometry.
+                    Rect candidateBounds = getBoundsInScreen(candidateNode);
+                    return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
+                });
         if (candidate == null) {
             return false;
         }
