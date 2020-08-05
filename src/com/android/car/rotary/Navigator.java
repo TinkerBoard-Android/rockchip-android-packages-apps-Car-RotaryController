@@ -808,12 +808,14 @@ class Navigator {
                     if (Utils.canTakeFocus(candidateNode)) {
                         return false;
                     }
-                    // If a node can't take focus, it represents a focus area. If the focus area is
-                    // not in the given direction of the source focus area, it's not a candidate,
-                    // so we should return true to stop searching.
+                    // If a node can't take focus, it represents a focus area. If the focus area
+                    // doesn't intersect with sourceFocusAreaBounds, and it's not in the given
+                    // direction of sourceFocusAreaBounds, it's not a candidate, so we should return
+                    // true to stop searching.
                     Rect candidateBounds = getBoundsInScreen(candidateNode);
-                    return !FocusFinder.isInDirection(
-                            sourceFocusAreaBounds, candidateBounds, direction);
+                    return !candidateBounds.intersect(sourceFocusAreaBounds)
+                            && !FocusFinder.isInDirection(
+                                sourceFocusAreaBounds, candidateBounds, direction);
                 },
                 /* targetPredicate= */ candidateNode -> {
                     // If a node can't take focus, it represents a focus area, so we return false to
