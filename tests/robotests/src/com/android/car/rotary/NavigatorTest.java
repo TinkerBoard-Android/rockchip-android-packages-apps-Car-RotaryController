@@ -951,6 +951,26 @@ public class NavigatorTest {
         // Nudge up from listItem1, it should go to tab.
         target = mNavigator.findNudgeTarget(windows, listItem1, View.FOCUS_UP);
         assertThat(target).isSameAs(tab);
+
+        // Disable cache.
+        mNavigator = new Navigator(
+                /* focusHistoryCacheType= */ RotaryCache.CACHE_TYPE_DISABLED,
+                /* focusHistoryCacheSize= */ 10,
+                /* focusHistoryExpirationTimeMs= */ 0,
+                /* focusAreaHistoryCacheType= */ RotaryCache.CACHE_TYPE_DISABLED,
+                /* focusAreaHistoryCacheSize= */ 5,
+                /* focusAreaHistoryExpirationTimeMs= */ 0,
+                /* focusWindowCacheType= */ RotaryCache.CACHE_TYPE_DISABLED,
+                /* focusWindowCacheSize= */ 5,
+                /* focusWindowExpirationTimeMs= */ 0,
+                mHunWindowBounds.left,
+                mHunWindowBounds.right,
+                /* showHunOnBottom= */ false);
+        mNavigator.setNodeCopier(MockNodeCopierProvider.get());
+
+        // Nudge down from listItem1, it should go to controlButton.
+        target = mNavigator.findNudgeTarget(windows, listItem1, View.FOCUS_DOWN);
+        assertThat(target).isSameAs(controlButton);
     }
 
     /**
