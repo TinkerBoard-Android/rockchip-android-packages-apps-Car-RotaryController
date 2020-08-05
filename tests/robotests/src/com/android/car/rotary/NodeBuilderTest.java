@@ -59,6 +59,9 @@ public class NodeBuilderTest {
         assertThat(node.isVisibleToUser()).isTrue();
         assertThat(node.refresh()).isTrue();
         assertThat(node.isEnabled()).isTrue();
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        assertThat(bounds.isEmpty()).isFalse();
     }
 
     @Test

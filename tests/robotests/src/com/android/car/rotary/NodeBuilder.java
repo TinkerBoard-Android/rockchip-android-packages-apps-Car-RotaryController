@@ -48,6 +48,8 @@ import java.util.List;
  */
 class NodeBuilder {
 
+    private static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 100, 100);
+
     /**
      * A list of mock nodes created via NodeBuilder. This list is used for searching for a
      * node's child nodes.
@@ -66,9 +68,9 @@ class NodeBuilder {
     /** The class this node comes from. */
     @Nullable
     private String mClassName;
+    @NonNull
     /** The node bounds in screen coordinates. */
-    @Nullable
-    private Rect mBoundsInScreen;
+    private Rect mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
     /** Whether this node is focusable. */
     private boolean mFocusable = true;
     /** Whether this node is visible to the user. */
@@ -132,14 +134,11 @@ class NodeBuilder {
 
         when(node.getClassName()).thenReturn(builder.mClassName);
 
-        if (builder.mBoundsInScreen != null) {
-            // Mock AccessibilityNodeInfo#getBoundsInScreen(Rect).
-            doAnswer(invocation -> {
-                Object[] args = invocation.getArguments();
-                ((Rect) args[0]).set(builder.mBoundsInScreen);
-                return null;
-            }).when(node).getBoundsInScreen(any(Rect.class));
-        }
+        doAnswer(invocation -> {
+            Object[] args = invocation.getArguments();
+            ((Rect) args[0]).set(builder.mBoundsInScreen);
+            return null;
+        }).when(node).getBoundsInScreen(any(Rect.class));
 
         when(node.isFocusable()).thenReturn(builder.mFocusable);
         when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
@@ -173,7 +172,7 @@ class NodeBuilder {
         return this;
     }
 
-    NodeBuilder setBoundsInScreen(@Nullable Rect boundsInScreen) {
+    NodeBuilder setBoundsInScreen(@NonNull Rect boundsInScreen) {
         mBoundsInScreen = boundsInScreen;
         return this;
     }
@@ -253,7 +252,7 @@ class NodeBuilder {
         mWindowId = UNDEFINED_WINDOW_ID;
         mParent = null;
         mClassName = null;
-        mBoundsInScreen = null;
+        mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
         mFocusable = true;
         mVisibleToUser = true;
         mEnabled = true;
