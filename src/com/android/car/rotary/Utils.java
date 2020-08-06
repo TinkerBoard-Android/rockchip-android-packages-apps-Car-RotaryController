@@ -19,6 +19,7 @@ package com.android.car.rotary;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_HORIZONTALLY_SCROLLABLE;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
+import android.graphics.Rect;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -83,13 +84,19 @@ final class Utils {
     }
 
     /**
-     * Returns whether the given {@code node} can perform focus action.
+     * Returns whether RotaryService can call {@code performFocusAction()} with the given
+     * {@code node}.
      * <p>
-     * A node can perform focus action means RotaryService can call performFocusAction() with the
-     * node.
+     * We don't check if the node is visible because we want to allow nodes scrolled off the screen
+     * to be focused.
      */
     static boolean canPerformFocus(@NonNull AccessibilityNodeInfo node) {
-        return node.isVisibleToUser() && node.isFocusable() && node.isEnabled();
+        if (!node.isFocusable() || !node.isEnabled()) {
+            return false;
+        }
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        return !bounds.isEmpty();
     }
 
     /**

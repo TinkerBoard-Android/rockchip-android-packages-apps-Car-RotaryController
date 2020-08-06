@@ -180,11 +180,11 @@ public class NavigatorTest {
      *                         /  |  \
      *                       /    |    \
      *                     /      |      \
-     *               button1   invisible  button2
+     *               button1   invisible   button2
      * </pre>
      */
     @Test
-    public void testFindRotateTargetSkipNodeThatCannotPerformFocus() {
+    public void testFindRotateTargetDoesNotSkipInvisibleNode() {
         AccessibilityNodeInfo root = mNodeBuilder.build();
         AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
         AccessibilityNodeInfo invisible = mNodeBuilder
@@ -197,7 +197,36 @@ public class NavigatorTest {
         when(button1.focusSearch(direction)).thenReturn(invisible);
         when(invisible.focusSearch(direction)).thenReturn(button2);
 
-        // Rotate from button1, it should skip the invisible view.
+        // Rotate from button1, it shouldn't skip the invisible view.
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
+        assertThat(target.node).isSameAs(invisible);
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *                          root
+     *                         /  |  \
+     *                       /    |    \
+     *                     /      |      \
+     *               button1   empty   button2
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetSkipNodeThatCannotPerformFocus() {
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo empty = mNodeBuilder
+                .setParent(root)
+                .setBoundsInScreen(new Rect(0, 0, 0, 10))
+                .build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(empty);
+        when(empty.focusSearch(direction)).thenReturn(button2);
+
+        // Rotate from button1, it should skip the empty view.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isSameAs(button2);
     }
