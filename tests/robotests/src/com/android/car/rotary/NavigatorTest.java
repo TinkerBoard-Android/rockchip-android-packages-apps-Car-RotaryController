@@ -190,6 +190,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo invisible = mNodeBuilder
                 .setParent(root)
                 .setVisibleToUser(false)
+                .setBoundsInScreen(new Rect(0, 0, 0, 0))
                 .build();
         AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
 
@@ -218,7 +219,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
         AccessibilityNodeInfo empty = mNodeBuilder
                 .setParent(root)
-                .setBoundsInScreen(new Rect(0, 0, 0, 10))
+                .setBoundsInParent(new Rect(0, 0, 0, 0))
                 .build();
         AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
 
