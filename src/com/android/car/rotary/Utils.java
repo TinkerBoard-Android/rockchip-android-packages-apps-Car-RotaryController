@@ -94,8 +94,11 @@ final class Utils {
         if (!node.isFocusable() || !node.isEnabled()) {
             return false;
         }
+
+        // Check the bounds in the parent rather than the bounds in the screen because the latter
+        // are always empty for views that are off screen.
         Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
+        node.getBoundsInParent(bounds);
         return !bounds.isEmpty();
     }
 

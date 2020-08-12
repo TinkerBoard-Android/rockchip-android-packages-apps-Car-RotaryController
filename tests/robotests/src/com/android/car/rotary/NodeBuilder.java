@@ -68,8 +68,11 @@ class NodeBuilder {
     /** The class this node comes from. */
     @Nullable
     private String mClassName;
+    /** The node bounds in parent coordinates. */
     @NonNull
+    private Rect mBoundsInParent = new Rect(DEFAULT_BOUNDS);
     /** The node bounds in screen coordinates. */
+    @NonNull
     private Rect mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
     /** Whether this node is focusable. */
     private boolean mFocusable = true;
@@ -136,6 +139,11 @@ class NodeBuilder {
 
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
+            ((Rect) args[0]).set(builder.mBoundsInParent);
+            return null;
+        }).when(node).getBoundsInParent(any(Rect.class));
+        doAnswer(invocation -> {
+            Object[] args = invocation.getArguments();
             ((Rect) args[0]).set(builder.mBoundsInScreen);
             return null;
         }).when(node).getBoundsInScreen(any(Rect.class));
@@ -169,6 +177,11 @@ class NodeBuilder {
 
     NodeBuilder setClassName(@Nullable String className) {
         mClassName = className;
+        return this;
+    }
+
+    NodeBuilder setBoundsInParent(@NonNull Rect boundsInParent) {
+        mBoundsInParent = boundsInParent;
         return this;
     }
 
@@ -238,6 +251,7 @@ class NodeBuilder {
         copy.mWindowId = mWindowId;
         copy.mParent = mParent;
         copy.mClassName = mClassName;
+        copy.mBoundsInParent = mBoundsInParent;
         copy.mBoundsInScreen = mBoundsInScreen;
         copy.mFocusable = mFocusable;
         copy.mVisibleToUser = mVisibleToUser;
@@ -252,6 +266,7 @@ class NodeBuilder {
         mWindowId = UNDEFINED_WINDOW_ID;
         mParent = null;
         mClassName = null;
+        mBoundsInParent = new Rect(DEFAULT_BOUNDS);
         mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
         mFocusable = true;
         mVisibleToUser = true;
