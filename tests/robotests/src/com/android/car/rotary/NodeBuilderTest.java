@@ -59,9 +59,12 @@ public class NodeBuilderTest {
         assertThat(node.isVisibleToUser()).isTrue();
         assertThat(node.refresh()).isTrue();
         assertThat(node.isEnabled()).isTrue();
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
-        assertThat(bounds.isEmpty()).isFalse();
+        Rect boundsInParent = new Rect();
+        node.getBoundsInParent(boundsInParent);
+        assertThat(boundsInParent.isEmpty()).isFalse();
+        Rect boundsInScreen = new Rect();
+        node.getBoundsInScreen(boundsInScreen);
+        assertThat(boundsInScreen.isEmpty()).isFalse();
     }
 
     @Test
@@ -93,6 +96,15 @@ public class NodeBuilderTest {
         AccessibilityWindowInfo window = new WindowBuilder().build();
         AccessibilityNodeInfo node = mNodeBuilder.setWindow(window).build();
         assertThat(node.getWindow()).isSameAs(window);
+    }
+
+    @Test
+    public void testSetBoundsInParent() {
+        Rect setBounds = new Rect(100, 200, 300, 400);
+        AccessibilityNodeInfo node = mNodeBuilder.setBoundsInParent(setBounds).build();
+        Rect retrievedBounds = new Rect();
+        node.getBoundsInParent(retrievedBounds);
+        assertThat(retrievedBounds).isEqualTo(setBounds);
     }
 
     @Test
