@@ -18,10 +18,10 @@ package com.android.car.rotary;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_LEFT_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_TOP_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
 
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -887,12 +887,12 @@ class Navigator {
         Rect bounds = new Rect();
         node.getBoundsInScreen(bounds);
         if (Utils.isFocusArea(node)) {
-            // The bounds of a FocusArea is its bounds minus its highlight paddings.
+            // The bounds used for finding the nudge target are its View bounds minus the offset.
             Bundle bundle = node.getExtras();
-            bounds.left += bundle.getInt(FOCUS_AREA_HIGHLIGHT_LEFT_PADDING);
-            bounds.right -= bundle.getInt(FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING);
-            bounds.top += bundle.getInt(FOCUS_AREA_HIGHLIGHT_TOP_PADDING);
-            bounds.bottom -= bundle.getInt(FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING);
+            bounds.left += bundle.getInt(FOCUS_AREA_LEFT_BOUND_OFFSET);
+            bounds.right -= bundle.getInt(FOCUS_AREA_RIGHT_BOUND_OFFSET);
+            bounds.top += bundle.getInt(FOCUS_AREA_TOP_BOUND_OFFSET);
+            bounds.bottom -= bundle.getInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET);
         }
         return bounds;
     }

@@ -1428,9 +1428,9 @@ public class NavigatorTest {
      * In the same window
      *
      *          ==========focus area 1============
-     *          =  .......highlight............  =
+     *          =  .........top offset.........  =
      *          =  .        *view1*           .  =
-     *          =  .......paddings.............  =
+     *          =  .......bottom offset........  =
      *          =                                =
      *          =  ========focus area 2========  =
      *          =  =         *view2*          =  =
@@ -1447,7 +1447,7 @@ public class NavigatorTest {
      * </pre>
      */
     @Test
-    public void testFindNudgeTargetWithFocusAreaHighlightPadding() {
+    public void testFindNudgeTargetWithFocusAreaBoundsOffset() {
         Rect windowBounds = new Rect(0, 0, 100, 100);
         AccessibilityWindowInfo window = new WindowBuilder()
                 .setBoundsInScreen(windowBounds)
@@ -1462,7 +1462,7 @@ public class NavigatorTest {
                 .setWindow(window)
                 .setParent(root)
                 .setFocusArea()
-                .setFocusAreaHighlightPadding(0, 0, 0, 70)
+                .setFocusAreaBoundsOffset(0, 0, 0, 70)
                 .setBoundsInScreen(new Rect(0, 0, 100, 80))
                 .build();
         AccessibilityNodeInfo view1 = mNodeBuilder

@@ -19,10 +19,10 @@ import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDO
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
 import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_LEFT_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_HIGHLIGHT_TOP_PADDING;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import static org.mockito.Mockito.any;
@@ -224,11 +224,11 @@ class NodeBuilder {
         return setClassName(FOCUS_AREA_CLASS_NAME).setFocusable(false);
     }
 
-    NodeBuilder setFocusAreaHighlightPadding(int left, int top, int right, int bottom) {
-        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_LEFT_PADDING, left);
-        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_TOP_PADDING, top);
-        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_RIGHT_PADDING, right);
-        mExtras.putInt(FOCUS_AREA_HIGHLIGHT_BOTTOM_PADDING, bottom);
+    NodeBuilder setFocusAreaBoundsOffset(int left, int top, int right, int bottom) {
+        mExtras.putInt(FOCUS_AREA_LEFT_BOUND_OFFSET, left);
+        mExtras.putInt(FOCUS_AREA_TOP_BOUND_OFFSET, top);
+        mExtras.putInt(FOCUS_AREA_RIGHT_BOUND_OFFSET, right);
+        mExtras.putInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET, bottom);
         return this;
     }
 
