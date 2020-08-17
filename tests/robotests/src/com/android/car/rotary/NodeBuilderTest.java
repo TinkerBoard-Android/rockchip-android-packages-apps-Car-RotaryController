@@ -59,6 +59,7 @@ public class NodeBuilderTest {
         assertThat(node.isVisibleToUser()).isTrue();
         assertThat(node.refresh()).isTrue();
         assertThat(node.isEnabled()).isTrue();
+        assertThat(node.isScrollable()).isFalse();
         Rect boundsInParent = new Rect();
         node.getBoundsInParent(boundsInParent);
         assertThat(boundsInParent.isEmpty()).isFalse();
@@ -83,6 +84,13 @@ public class NodeBuilderTest {
     public void testSetInViewTree() {
         AccessibilityNodeInfo node = mNodeBuilder.setInViewTree(false).build();
         assertThat(node.refresh()).isFalse();
+    }
+
+
+    @Test
+    public void testSetScrollable() {
+        AccessibilityNodeInfo node = mNodeBuilder.setScrollable(true).build();
+        assertThat(node.isScrollable()).isTrue();
     }
 
     @Test
