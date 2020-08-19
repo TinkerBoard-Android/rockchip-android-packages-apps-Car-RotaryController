@@ -15,6 +15,9 @@
   ~ limitations under the License.
   -->
 <resources>
+    <!-- Component name of default touch IME. This resource should be overlaid if a device uses an
+         IME other than CarLatinIME. This resource should not be empty. -->
+    <string name="default_touch_input_method" translatable="false">com.android.inputmethod.latin/.CarLatinIME</string>
     <!-- Component name of rotary IME. Empty if none. -->
     <string name="rotary_input_method" translatable="false"></string>
 </resources>

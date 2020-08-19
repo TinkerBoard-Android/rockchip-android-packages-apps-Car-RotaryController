@@ -51,6 +51,7 @@ import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
@@ -61,6 +62,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Display;
@@ -121,6 +123,9 @@ public class RotaryService extends AccessibilityService implements
      * debug build.
      */
     private static final int SHIFT_DETENTS = 10;
+
+    private static final String SHARED_PREFS = "com.android.car.rotary.RotaryService";
+    private static final String TOUCH_INPUT_METHOD_PREFIX = "TOUCH_INPUT_METHOD_";
 
     @NonNull
     private NodeCopier mNodeCopier = new NodeCopier();
@@ -214,12 +219,14 @@ public class RotaryService extends AccessibilityService implements
     /** Component name of rotary IME. Empty if none. */
     private String mRotaryInputMethod;
 
-    /** Component name of IME used in touch mode. Null until first observed. */
-    @Nullable
+    /** Component name of IME used in touch mode. */
     private String mTouchInputMethod;
 
     /** Observer to update {@link #mTouchInputMethod} when the user switches IMEs. */
     private ContentObserver mInputMethodObserver;
+
+    private SharedPreferences mPrefs;
+    private UserManager mUserManager;
 
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
@@ -374,6 +381,11 @@ public class RotaryService extends AccessibilityService implements
                 hunRight,
                 showHunOnBottom);
 
+        mPrefs = getSharedPreferences(SHARED_PREFS, Context.MODE_PRIVATE);
+        mUserManager = getSystemService(UserManager.class);
+        mTouchInputMethod = mPrefs.getString(
+                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(),
+                res.getString(R.string.default_touch_input_method));
         mRotaryInputMethod = res.getString(R.string.rotary_input_method);
 
         long afterFocusTimeoutMs = res.getInteger(R.integer.after_focus_timeout_ms);
@@ -614,12 +626,16 @@ public class RotaryService extends AccessibilityService implements
             @Override
             public void onChange(boolean selfChange) {
                 // Either the user switched input methods or we did. In the former case, update
-                // mTouchInputMethod so we can switch back after switching to the rotary input
-                // method.
+                // mTouchInputMethod and save it so we can switch back after switching to the rotary
+                // input method.
                 String inputMethod =
                         Settings.Secure.getString(contentResolver, DEFAULT_INPUT_METHOD);
                 if (inputMethod != null && !inputMethod.equals(mRotaryInputMethod)) {
                     mTouchInputMethod = inputMethod;
+                    String userName = mUserManager.getUserName();
+                    mPrefs.edit()
+                            .putString(TOUCH_INPUT_METHOD_PREFIX + userName, mTouchInputMethod)
+                            .apply();
                 }
             }
         };
@@ -1746,10 +1762,6 @@ public class RotaryService extends AccessibilityService implements
         }
         if (!inRotaryMode) {
             setEditNode(null);
-        }
-        if (!inRotaryMode && mTouchInputMethod == null) {
-            L.w("Touch IME not observed");
-            return;
         }
         // Switch to the rotary IME or the IME in use before we switched to the rotary IME.
         String newIme = inRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
