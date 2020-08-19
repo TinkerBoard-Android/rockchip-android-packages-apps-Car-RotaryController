@@ -32,6 +32,9 @@
     <!-- Allows us to have an overlay to capture touch events. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
+    <!-- Allows us to get the username of the current user. -->
+    <uses-permission android:name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
+
     <!-- RotaryService needs to be directBootAware so that it can start before the user is unlocked. -->
     <application>
         <service
