@@ -82,6 +82,8 @@ class NodeBuilder {
     private boolean mEnabled = true;
     /** Whether the view represented by this node is still in the view tree. */
     private boolean mInViewTree = true;
+    /** Whether this node is scrollable. */
+    private boolean mScrollable = false;
     /** The content description for this node. */
     @Nullable
     private String mContentDescription;
@@ -152,6 +154,7 @@ class NodeBuilder {
         when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
         when(node.isEnabled()).thenReturn(builder.mEnabled);
         when(node.refresh()).thenReturn(builder.mInViewTree);
+        when(node.isScrollable()).thenReturn(builder.mScrollable);
         when(node.getContentDescription()).thenReturn(builder.mContentDescription);
         when(node.getActionList()).thenReturn(builder.mActionList);
         when(node.getExtras()).thenReturn(builder.mExtras);
@@ -210,6 +213,11 @@ class NodeBuilder {
         return this;
     }
 
+    NodeBuilder setScrollable(boolean scrollable) {
+        mScrollable = scrollable;
+        return this;
+    }
+
     NodeBuilder setContentDescription(@Nullable String contentDescription) {
         mContentDescription = contentDescription;
         return this;
@@ -257,6 +265,7 @@ class NodeBuilder {
         copy.mVisibleToUser = mVisibleToUser;
         copy.mEnabled = mEnabled;
         copy.mInViewTree = mInViewTree;
+        copy.mScrollable = mScrollable;
         copy.mContentDescription = mContentDescription;
         copy.mActionList = mActionList;
         copy.mExtras = mExtras;
@@ -272,6 +281,7 @@ class NodeBuilder {
         mVisibleToUser = true;
         mEnabled = true;
         mInViewTree = true;
+        mScrollable = false;
         mContentDescription = null;
         mActionList = new ArrayList<>();
         mExtras = new Bundle();

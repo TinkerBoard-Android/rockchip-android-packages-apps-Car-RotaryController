@@ -16,10 +16,15 @@
 
 package com.android.car.rotary;
 
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_HORIZONTALLY_SCROLLABLE;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -107,16 +112,28 @@ final class Utils {
      * <ul>
      *     <li>To be a focus candidate, a node must be able to perform focus action.
      *     <li>A {@link FocusParkingView} is not a focus candidate.
-     *     <li>A focusable container with descendants to take focus is not a focus candidate. We
-     *         skip the container because we want to focus on its element directly. We don't skip a
-     *         scrollable container without descendants that can take focus because we want to focus
-     *         on it, thus we can scroll it when the rotary controller is rotated.
+     *     <li>A scrollable container is not a focus candidate unless it should scroll (i.e.,
+     *         is scrollable and has no focusable descendants on screen). We skip a container
+     *         because we want to focus on its element directly. We don't skip a container because
+     *         we want to focus on it, thus we can scroll it when the rotary controller is rotated.
+     *     <li>To be a focus candidate, a node must be on the screen. Usually the node off the
+     *         screen (its bounds in screen is empty) is ignored by RotaryService, but there are
+     *         exceptions.
      * </ul>
      */
     static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
-        return canPerformFocus(node)
+        boolean result =  canPerformFocus(node)
                 && !isFocusParkingView(node)
-                && (!isScrollableContainer(node) || !descendantCanTakeFocus(node));
+                && (!isScrollableContainer(node)
+                    || (node.isScrollable() && !descendantCanTakeFocus(node)));
+        if (result) {
+            Rect bounds = getBoundsInScreen(node);
+            if (!bounds.isEmpty()) {
+                return true;
+            }
+            L.d("node is off the screen but it's not ignored by RotaryService: " + node);
+        }
+        return false;
     }
 
     /** Returns whether the given {@code node} or its descendants can take focus. */
@@ -235,5 +252,35 @@ final class Utils {
             }
         }
         return null;
+    }
+
+    /** Gets the bounds in screen of the given {@code node}. */
+    @NonNull
+    static Rect getBoundsInScreen(@NonNull AccessibilityNodeInfo node) {
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        if (Utils.isFocusArea(node)) {
+            // For a FocusArea, the bounds used for finding the nudge target are its View bounds
+            // minus the offset.
+            Bundle bundle = node.getExtras();
+            bounds.left += bundle.getInt(FOCUS_AREA_LEFT_BOUND_OFFSET);
+            bounds.right -= bundle.getInt(FOCUS_AREA_RIGHT_BOUND_OFFSET);
+            bounds.top += bundle.getInt(FOCUS_AREA_TOP_BOUND_OFFSET);
+            bounds.bottom -= bundle.getInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET);
+        } else if (Utils.isScrollableContainer(node)) {
+            // For a scrollable container, the bounds used for finding the nudge target are the
+            // minimum bounds containing its children.
+            bounds.setEmpty();
+            Rect childBounds = new Rect();
+            for (int i = 0; i < node.getChildCount(); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child != null) {
+                    child.getBoundsInScreen(childBounds);
+                    child.recycle();
+                    bounds.union(childBounds);
+                }
+            }
+        }
+        return bounds;
     }
 }
