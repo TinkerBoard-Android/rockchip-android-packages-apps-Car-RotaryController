@@ -18,13 +18,7 @@ package com.android.car.rotary;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
-import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
-
 import android.graphics.Rect;
-import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -344,22 +338,26 @@ class Navigator {
                 // We need to skip nextTargetNode if:
                 // 1. it can't perform focus action (focusSearch() may return a node with zero
                 //    width and height),
-                // 2. or it is a scrollable container with descendants that can take focus. We skip
-                //    the container because we want to focus on its element directly. We don't skip
-                //    a scrollable container without descendants that can take focus because we want
-                //    to focus on it, thus we can scroll it when the rotary controller is rotated.
+                // 2. or it is a scrollable container but it shouldn't be scrolled (i.e., it is not
+                //    scrollable, or its descendants can take focus).
+                //    When we want to focus on its element directly, we'll skip the container. When
+                //    we want to focus on container and scroll it, we won't skip the container.
                 if (!Utils.canPerformFocus(nextCandidate)
                         || (Utils.isScrollableContainer(nextCandidate)
-                        && Utils.descendantCanTakeFocus(nextCandidate))) {
+                            && (!nextCandidate.isScrollable()
+                                || Utils.descendantCanTakeFocus(nextCandidate)))) {
                     Utils.recycleNode(candidate);
                     Utils.recycleNode(candidateFocusArea);
                     candidate = nextCandidate;
                     continue;
                 }
                 // If we're navigating through a scrolling view that can scroll in the specified
-                // direction and the next view is off-screen, don't advance to it. (We'll scroll
-                // the remaining count instead.)
-                Rect nextTargetBounds = getBoundsInScreen(nextCandidate);
+                // direction, and the next view's bounds don't intersect the scrolling view's
+                // bounds, don't advance to it. We'll scroll the remaining count instead.
+                // There are two cases where the bounds don't intersect:
+                // 1. the next view is not a descendant of the scrolling view
+                // 2. the next view is a descendant, but it's off the screen, so its bounds in
+                //    screen is empty, thus don't intersect the scrolling view's bounds
                 AccessibilityNodeInfo scrollableContainer = findScrollableContainer(candidate);
                 AccessibilityNodeInfo.AccessibilityAction scrollAction =
                         direction == View.FOCUS_FORWARD
@@ -367,9 +365,9 @@ class Navigator {
                                 : ACTION_SCROLL_BACKWARD;
                 if (scrollableContainer != null
                         && scrollableContainer.getActionList().contains(scrollAction)) {
-                    Rect scrollBounds = getBoundsInScreen(scrollableContainer);
-                    boolean intersects = nextTargetBounds.intersect(scrollBounds);
-                    if (!intersects) {
+                    Rect nextTargetBounds = Utils.getBoundsInScreen(nextCandidate);
+                    Rect scrollBounds = Utils.getBoundsInScreen(scrollableContainer);
+                    if (!Rect.intersects(nextTargetBounds, scrollBounds)) {
                         Utils.recycleNode(nextCandidate);
                         Utils.recycleNode(candidateFocusArea);
                         break;
@@ -767,16 +765,16 @@ class Navigator {
         if (candidates.isEmpty()) {
             return null;
         }
-        Rect sourceBounds = getBoundsInScreen(sourceNode);
+        Rect sourceBounds = Utils.getBoundsInScreen(sourceNode);
         AccessibilityNodeInfo sourceFocusArea = getAncestorFocusArea(sourceNode);
-        Rect sourceFocusAreaBounds = getBoundsInScreen(sourceFocusArea);
+        Rect sourceFocusAreaBounds = Utils.getBoundsInScreen(sourceFocusArea);
         sourceFocusArea.recycle();
         AccessibilityNodeInfo bestNode = null;
         Rect bestBounds = new Rect();
 
         for (AccessibilityNodeInfo candidate : candidates) {
             if (isCandidate(sourceBounds, sourceFocusAreaBounds, candidate, direction)) {
-                Rect candidateBounds = getBoundsInScreen(candidate);
+                Rect candidateBounds = Utils.getBoundsInScreen(candidate);
                 if (bestNode == null || FocusFinder.isBetterCandidate(
                         direction, sourceBounds, candidateBounds, bestBounds)) {
                     bestNode = candidate;
@@ -812,8 +810,8 @@ class Navigator {
                     // doesn't intersect with sourceFocusAreaBounds, and it's not in the given
                     // direction of sourceFocusAreaBounds, it's not a candidate, so we should return
                     // true to stop searching.
-                    Rect candidateBounds = getBoundsInScreen(candidateNode);
-                    return !candidateBounds.intersect(sourceFocusAreaBounds)
+                    Rect candidateBounds = Utils.getBoundsInScreen(candidateNode);
+                    return !Rect.intersects(candidateBounds,sourceFocusAreaBounds)
                             && !FocusFinder.isInDirection(
                                 sourceFocusAreaBounds, candidateBounds, direction);
                 },
@@ -824,7 +822,7 @@ class Navigator {
                         return false;
                     }
                     // The node represents a focusable view in a focus area, so check the geometry.
-                    Rect candidateBounds = getBoundsInScreen(candidateNode);
+                    Rect candidateBounds = Utils.getBoundsInScreen(candidateNode);
                     return FocusFinder.isCandidate(sourceBounds, candidateBounds, direction);
                 });
         if (candidate == null) {
@@ -880,20 +878,5 @@ class Navigator {
             this.node = node;
             this.advancedCount = advancedCount;
         }
-    }
-
-    @NonNull
-    private static Rect getBoundsInScreen(@NonNull AccessibilityNodeInfo node) {
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
-        if (Utils.isFocusArea(node)) {
-            // The bounds used for finding the nudge target are its View bounds minus the offset.
-            Bundle bundle = node.getExtras();
-            bounds.left += bundle.getInt(FOCUS_AREA_LEFT_BOUND_OFFSET);
-            bounds.right -= bundle.getInt(FOCUS_AREA_RIGHT_BOUND_OFFSET);
-            bounds.top += bundle.getInt(FOCUS_AREA_TOP_BOUND_OFFSET);
-            bounds.bottom -= bundle.getInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET);
-        }
-        return bounds;
     }
 }
