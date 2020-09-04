@@ -34,7 +34,6 @@ import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_ADDED
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_REMOVED;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_SELECTION;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
-import static android.view.accessibility.AccessibilityNodeInfo.ACTION_DISMISS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_SELECT;
@@ -43,6 +42,11 @@ import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityActi
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
 import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
+
+import static com.android.car.ui.utils.RotaryConstants.ACTION_HIDE_IME;
+import static com.android.car.ui.utils.RotaryConstants.ACTION_NUDGE_SHORTCUT;
+import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
+import static com.android.car.ui.utils.RotaryConstants.NUDGE_SHORTCUT_DIRECTION;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -1091,7 +1095,22 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // If the focused node is not in direct manipulation mode, move the focus.
+        // If the focused node is not in direct manipulation mode, try to move the focus to the
+        // shortcut node.
+        if (mFocusArea != null) {
+            Bundle arguments = new Bundle();
+            arguments.putInt(NUDGE_SHORTCUT_DIRECTION, direction);
+            if (mFocusArea.performAction(ACTION_NUDGE_SHORTCUT, arguments)) {
+                // If the user is nudging out of the IME to the node being edited, we no longer need
+                // to keep track of the node being edited.
+                if (mEditNode != null && mEditNode.isFocused()) {
+                    setEditNode(null);
+                }
+                return;
+            }
+        }
+
+        // No shortcut node, so move the focus in the given direction.
         // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
         List<AccessibilityWindowInfo> windows = getWindows();
         mEditNode = Utils.refreshNode(mEditNode);
@@ -1676,12 +1695,12 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleWindow(nextWindow);
 
         // To close the IME, we'll ask the FocusParkingView in the previous window to perform
-        // ACTION_COLLAPSE.
+        // ACTION_HIDE_IME.
         AccessibilityNodeInfo focusParkingView = findFocusParkingView(mFocusedNode);
         if (focusParkingView == null) {
             return;
         }
-        if (!focusParkingView.performAction(AccessibilityNodeInfo.ACTION_COLLAPSE)) {
+        if (!focusParkingView.performAction(ACTION_HIDE_IME)) {
             L.w("Failed to close IME");
         }
         focusParkingView.recycle();
@@ -1950,7 +1969,7 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        if (fpv.performAction(ACTION_DISMISS)) {
+        if (fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS)) {
             L.d("Move focus to the default focus in the window");
             return;
         }
