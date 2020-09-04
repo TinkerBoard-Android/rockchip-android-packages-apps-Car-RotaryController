@@ -27,9 +27,11 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
@@ -48,8 +50,11 @@ import java.util.List;
  */
 final class Utils {
 
+    @VisibleForTesting
     static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
+    @VisibleForTesting
     static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+    private static final String WEB_VIEW_CLASS_NAME = WebView.class.getName();
 
     private Utils() {
     }
@@ -100,6 +105,11 @@ final class Utils {
             return false;
         }
 
+        // ACTION_FOCUS doesn't work on WebViews.
+        if (isWebView(node)) {
+            return false;
+        }
+
         // Check the bounds in the parent rather than the bounds in the screen because the latter
         // are always empty for views that are off screen.
         Rect bounds = new Rect();
@@ -118,14 +128,14 @@ final class Utils {
      *         we want to focus on it, thus we can scroll it when the rotary controller is rotated.
      *     <li>To be a focus candidate, a node must be on the screen. Usually the node off the
      *         screen (its bounds in screen is empty) is ignored by RotaryService, but there are
-     *         exceptions.
+     *         exceptions, e.g. nodes in a WebView.
      * </ul>
      */
     static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
-        boolean result =  canPerformFocus(node)
+        boolean result = canPerformFocus(node)
                 && !isFocusParkingView(node)
                 && (!isScrollableContainer(node)
-                    || (node.isScrollable() && !descendantCanTakeFocus(node)));
+                        || (node.isScrollable() && !descendantCanTakeFocus(node)));
         if (result) {
             Rect bounds = getBoundsInScreen(node);
             if (!bounds.isEmpty()) {
@@ -187,6 +197,21 @@ final class Utils {
     static boolean isFocusArea(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
         return className != null && FOCUS_AREA_CLASS_NAME.contentEquals(className);
+    }
+
+    /**
+     * Returns whether {@code node} represents a {@code WebView} or the root of the document within
+     * one.
+     * <p>
+     * The descendants of a node representing a {@code WebView} represent HTML elements rather
+     * than {@code View}s so {@link AccessibilityNodeInfo#focusSearch} doesn't work for these nodes.
+     * The focused state of these nodes isn't reliable. The node representing a {@code WebView} has
+     * a single child node representing the HTML document. This node also claims to be a {@code
+     * WebView}. Unlike its parent, it is scrollable and focusable.
+     */
+    static boolean isWebView(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && WEB_VIEW_CLASS_NAME.contentEquals(className);
     }
 
     /**

@@ -1961,7 +1961,8 @@ public class NavigatorTest {
     }
 
     /**
-     * Tests {@link Navigator#findPreviousFocusableDescendant} in the following node tree:
+     * Tests {@link Navigator#findFocusableDescendantInDirection} going
+     *      * {@link View#FOCUS_BACKWARD} in the following node tree:
      * <pre>
      *                     root
      *                   /      \
@@ -1973,7 +1974,7 @@ public class NavigatorTest {
      * </pre>
      */
     @Test
-    public void testFindPreviousFocusableDescendant() {
+    public void testFindFocusableVisibleDescendantInDirectionBackward() {
         AccessibilityNodeInfo root = mNodeBuilder.build();
         AccessibilityNodeInfo container1 = mNodeBuilder.setParent(root).build();
         AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container1).build();
@@ -1988,19 +1989,23 @@ public class NavigatorTest {
         when(button2.focusSearch(direction)).thenReturn(button1);
         when(button1.focusSearch(direction)).thenReturn(null);
 
-        AccessibilityNodeInfo target =
-                Navigator.findPreviousFocusableDescendant(container2, button4);
+        AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(
+                container2, button4, View.FOCUS_BACKWARD);
         assertThat(target).isSameAs(button3);
-        target = Navigator.findPreviousFocusableDescendant(container2, button3);
+        target = mNavigator.findFocusableDescendantInDirection(container2, button3,
+                View.FOCUS_BACKWARD);
         assertThat(target).isNull();
-        target = Navigator.findPreviousFocusableDescendant(container1, button2);
+        target = mNavigator.findFocusableDescendantInDirection(container1, button2,
+                View.FOCUS_BACKWARD);
         assertThat(target).isSameAs(button1);
-        target = Navigator.findPreviousFocusableDescendant(container1, button1);
+        target = mNavigator.findFocusableDescendantInDirection(container1, button1,
+                View.FOCUS_BACKWARD);
         assertThat(target).isNull();
     }
 
     /**
-     * Tests {@link Navigator#findNextFocusableDescendant} in the following node tree:
+     * Tests {@link Navigator#findFocusableDescendantInDirection} going
+     * {@link View#FOCUS_FORWARD} in the following node tree:
      * <pre>
      *                     root
      *                   /      \
@@ -2012,7 +2017,7 @@ public class NavigatorTest {
      * </pre>
      */
     @Test
-    public void testFindNextFocusableDescendant() {
+    public void testFindFocusableVisibleDescendantInDirectionForward() {
         AccessibilityNodeInfo root = mNodeBuilder.build();
         AccessibilityNodeInfo container1 = mNodeBuilder.setParent(root).build();
         AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container1).build();
@@ -2027,13 +2032,17 @@ public class NavigatorTest {
         when(button3.focusSearch(direction)).thenReturn(button4);
         when(button4.focusSearch(direction)).thenReturn(null);
 
-        AccessibilityNodeInfo target = mNavigator.findNextFocusableDescendant(container1, button1);
+        AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(
+                container1, button1, View.FOCUS_FORWARD);
         assertThat(target).isSameAs(button2);
-        target = mNavigator.findNextFocusableDescendant(container1, button2);
+        target = mNavigator.findFocusableDescendantInDirection(container1, button2,
+                View.FOCUS_FORWARD);
         assertThat(target).isNull();
-        target = mNavigator.findNextFocusableDescendant(container2, button3);
+        target = mNavigator.findFocusableDescendantInDirection(container2, button3,
+                View.FOCUS_FORWARD);
         assertThat(target).isSameAs(button4);
-        target = mNavigator.findNextFocusableDescendant(container2, button4);
+        target = mNavigator.findFocusableDescendantInDirection(container2, button4,
+                View.FOCUS_FORWARD);
         assertThat(target).isNull();
     }
 
