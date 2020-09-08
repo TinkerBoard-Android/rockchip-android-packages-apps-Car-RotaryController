@@ -67,4 +67,7 @@
     <!-- How many milliseconds to wait for TYPE_VIEW_FOCUSED events after performing ACTION_FOCUS.
     -->
     <integer name="after_focus_timeout_ms">200</integer>
+    <!-- How many milliseconds to ignore TYPE_VIEW_FOCUSED events of FocusParkingView after
+    a WINDOWS_CHANGE_ADDED event. -->
+    <integer name="ignore_fpv_focused_ms">200</integer>
 </resources>
