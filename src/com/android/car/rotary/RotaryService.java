@@ -285,7 +285,13 @@ public class RotaryService extends AccessibilityService implements
     /** Whether we're in rotary mode (vs touch mode). */
     private boolean mInRotaryMode;
 
-    /** Whether we're in direct manipulation mode. */
+    /**
+     * Whether we're in direct manipulation mode.
+     * <p>
+     * If the focused node supports rotate directly, this mode is controlled by us. Otherwise
+     * this mode is controlled by the client app, which is responsible for updating the mode by
+     * calling {@link DirectManipulationHelper#enableDirectManipulationMode} when needed.
+     */
     private boolean mInDirectManipulationMode;
 
     /** The {@link SystemClock#uptimeMillis} when the last rotary rotation event occurred. */
@@ -1859,15 +1865,30 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    /**
-     * Sets {@link #mInRotaryMode}, toggling IMEs when the value changes and a rotary input method
-     * has been configured.
-     */
     private void setInRotaryMode(boolean inRotaryMode) {
         if (inRotaryMode == mInRotaryMode) {
             return;
         }
         mInRotaryMode = inRotaryMode;
+
+        // If we're controlling direct manipulation mode (i.e., the focused node supports rotate
+        // directly), exit the mode when the user touches the screen.
+        if (!inRotaryMode && mInDirectManipulationMode) {
+            if (mFocusedNode == null) {
+                L.e("mFocused is null in direct manipulation mode");
+            } else if (DirectManipulationHelper.supportRotateDirectly(mFocusedNode)) {
+                L.d("Exit direct manipulation mode on user touch");
+                mInDirectManipulationMode = false;
+                boolean result = mFocusedNode.performAction(ACTION_CLEAR_SELECTION);
+                if (!result) {
+                    L.w("Failed to perform ACTION_CLEAR_SELECTION on " + mFocusedNode);
+                }
+            } else {
+                L.d("The client app should exit direct manipulation mode");
+            }
+        }
+
+        // Update IME.
         if (mRotaryInputMethod.isEmpty()) {
             L.w("No rotary IME configured");
             return;
