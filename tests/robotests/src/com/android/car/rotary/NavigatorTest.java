@@ -2047,6 +2047,50 @@ public class NavigatorTest {
     }
 
     /**
+     * Tests {@link Navigator#findNextFocusableDescendant} in the following node tree:
+     * <pre>
+     *                     root
+     *                      |
+     *                      |
+     *                  container
+     *               /    /   \   \
+     *            /      /     \      \
+     *     button1  button2  button3  button4
+     * </pre>
+     * where {@code button3} and {@code button4} have empty bounds.
+     */
+    @Test
+    public void testFindNextFocusableDescendantWithEmptyBounds() {
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo container = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(container).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(container).build();
+        AccessibilityNodeInfo button3 = mNodeBuilder.setParent(container)
+                .setBoundsInScreen(new Rect(5, 10, 5, 10)).build();
+        AccessibilityNodeInfo button4 = mNodeBuilder.setParent(container)
+                .setBoundsInScreen(new Rect(20, 40, 20, 40)).build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(button3);
+        when(button3.focusSearch(direction)).thenReturn(button4);
+        when(button4.focusSearch(direction)).thenReturn(button1);
+
+        AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(container,
+                button1, View.FOCUS_FORWARD);
+        assertThat(target).isSameAs(button2);
+        target = mNavigator.findFocusableDescendantInDirection(container, button2,
+                View.FOCUS_FORWARD);
+        assertThat(target).isSameAs(button1);
+        target = mNavigator.findFocusableDescendantInDirection(container, button3,
+                View.FOCUS_FORWARD);
+        assertThat(target).isSameAs(button1);
+        target = mNavigator.findFocusableDescendantInDirection(container, button4,
+                View.FOCUS_FORWARD);
+        assertThat(target).isSameAs(button1);
+    }
+
+    /**
      * Tests {@link Navigator#findFirstFocusableDescendant} in the following node tree:
      * <pre>
      *                     root
