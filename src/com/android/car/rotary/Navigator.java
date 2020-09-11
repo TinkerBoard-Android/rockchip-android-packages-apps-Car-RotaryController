@@ -676,10 +676,11 @@ class Navigator {
     }
 
     /**
-     * Returns the previous node before {@code referenceNode} in Tab order or the next node after
-     * {@code referenceNode} in Tab order, depending on {@code direction}. The search is limited to
-     * descendants of {@code containerNode}. Returns null if there are no focusable descendants in
-     * the given direction. The caller is responsible for recycling the result.
+     * Returns the previous node  before {@code referenceNode} in Tab order that can take focus or
+     * the next node after {@code referenceNode} in Tab order that can take focus, depending on
+     * {@code direction}. The search is limited to descendants of {@code containerNode}. Returns
+     * null if there are no descendants that can take focus in the given direction. The caller is
+     * responsible for recycling the result.
      *
      * @param containerNode the node with descendants
      * @param referenceNode a descendant of {@code containerNode} to start from
@@ -687,24 +688,30 @@ class Navigator {
      * @return the node before or after {@code referenceNode} or null if none
      */
     @Nullable
-    static AccessibilityNodeInfo findFocusableDescendantInDirection(
+    AccessibilityNodeInfo findFocusableDescendantInDirection(
             @NonNull AccessibilityNodeInfo containerNode,
             @NonNull AccessibilityNodeInfo referenceNode,
             int direction) {
-        AccessibilityNodeInfo targetNode = referenceNode.focusSearch(direction);
-        if (targetNode == null
-                || targetNode.equals(containerNode)
-                || !Utils.canTakeFocus(targetNode)
-                || !Utils.isDescendant(containerNode, targetNode)) {
-            Utils.recycleNode(targetNode);
-            return null;
-        }
-        if (targetNode.equals(referenceNode)) {
-            L.w((direction == View.FOCUS_FORWARD ? "Next" : "Previous")
-                    + " node is the same node: " + referenceNode);
-            Utils.recycleNode(targetNode);
-            return null;
-        }
+        AccessibilityNodeInfo targetNode = copyNode(referenceNode);
+        do {
+            AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(direction);
+            if (nextTargetNode == null
+                    || nextTargetNode.equals(containerNode)
+                    || !Utils.isDescendant(containerNode, nextTargetNode)) {
+                Utils.recycleNode(nextTargetNode);
+                Utils.recycleNode(targetNode);
+                return null;
+            }
+            if (nextTargetNode.equals(referenceNode) || nextTargetNode.equals(targetNode)) {
+                L.w((direction == View.FOCUS_FORWARD ? "Next" : "Previous")
+                        + " node is the same node: " + referenceNode);
+                Utils.recycleNode(nextTargetNode);
+                Utils.recycleNode(targetNode);
+                return null;
+            }
+            targetNode.recycle();
+            targetNode = nextTargetNode;
+        } while (!Utils.canTakeFocus(targetNode));
         return targetNode;
     }
 
