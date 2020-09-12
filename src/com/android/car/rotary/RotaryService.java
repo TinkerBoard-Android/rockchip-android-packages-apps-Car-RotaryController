@@ -907,7 +907,7 @@ public class RotaryService extends AccessibilityService implements
                 if (mFocusedNode.equals(sourceNode)) {
                     break;
                 }
-                AccessibilityNodeInfo target = Navigator.findFocusableDescendantInDirection(
+                AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(
                         sourceNode, mFocusedNode,
                         mAfterScrollAction == AfterScrollAction.FOCUS_PREVIOUS
                                 ? View.FOCUS_BACKWARD
