@@ -406,7 +406,8 @@ public class RotaryService extends AccessibilityService implements
                 hunRight,
                 showHunOnBottom);
 
-        mPrefs = getSharedPreferences(SHARED_PREFS, Context.MODE_PRIVATE);
+        mPrefs = createDeviceProtectedStorageContext().getSharedPreferences(SHARED_PREFS,
+                Context.MODE_PRIVATE);
         mUserManager = getSystemService(UserManager.class);
         mTouchInputMethod = mPrefs.getString(
                 TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(),
