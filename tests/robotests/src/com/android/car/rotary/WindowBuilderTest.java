@@ -42,7 +42,7 @@ public class WindowBuilderTest {
     public void testSetRoot() {
         AccessibilityNodeInfo root = new NodeBuilder(new ArrayList<>()).build();
         AccessibilityWindowInfo window = new WindowBuilder().setRoot(root).build();
-        assertThat(window.getRoot()).isSameAs(root);
+        assertThat(window.getRoot()).isSameInstanceAs(root);
     }
 
     @Test

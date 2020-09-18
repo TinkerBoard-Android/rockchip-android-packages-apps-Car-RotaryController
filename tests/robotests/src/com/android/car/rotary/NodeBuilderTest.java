@@ -103,7 +103,7 @@ public class NodeBuilderTest {
     public void testSetWindow() {
         AccessibilityWindowInfo window = new WindowBuilder().build();
         AccessibilityNodeInfo node = mNodeBuilder.setWindow(window).build();
-        assertThat(node.getWindow()).isSameAs(window);
+        assertThat(node.getWindow()).isSameInstanceAs(window);
     }
 
     @Test
@@ -143,10 +143,10 @@ public class NodeBuilderTest {
         AccessibilityNodeInfo child1 = mNodeBuilder.setParent(parent).build();
         AccessibilityNodeInfo child2 = mNodeBuilder.setParent(parent).build();
 
-        assertThat(child1.getParent()).isSameAs(parent);
+        assertThat(child1.getParent()).isSameInstanceAs(parent);
         assertThat(parent.getChildCount()).isEqualTo(2);
-        assertThat(parent.getChild(0)).isSameAs(child1);
-        assertThat(parent.getChild(1)).isSameAs(child2);
+        assertThat(parent.getChild(0)).isSameInstanceAs(child1);
+        assertThat(parent.getChild(1)).isSameInstanceAs(child2);
         assertThat(parent.getChild(2)).isNull();
     }
 
