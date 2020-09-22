@@ -45,8 +45,9 @@ import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDO
 
 import static com.android.car.ui.utils.RotaryConstants.ACTION_HIDE_IME;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_NUDGE_SHORTCUT;
+import static com.android.car.ui.utils.RotaryConstants.ACTION_NUDGE_TO_ANOTHER_FOCUS_AREA;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
-import static com.android.car.ui.utils.RotaryConstants.NUDGE_SHORTCUT_DIRECTION;
+import static com.android.car.ui.utils.RotaryConstants.NUDGE_DIRECTION;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -85,7 +86,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
-import com.android.car.ui.utils.RotaryConstants;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -982,7 +982,7 @@ public class RotaryService extends AccessibilityService implements
 
         // Restore focus to the last focused node in the last focused window.
         Integer lastWindowId = mWindowCache.getMostRecentWindowId();
-        if (lastWindowId == null ) {
+        if (lastWindowId == null) {
             return;
         }
         AccessibilityNodeInfo recentFocus = mNavigator.getMostRecentFocus(lastWindowId);
@@ -1044,7 +1044,7 @@ public class RotaryService extends AccessibilityService implements
             L.d("Move focus to IME");
             // If the focused node is editable, save it so that we can return to it when the user
             // nudges out of the IME.
-            if  (mFocusedNode != null && mFocusedNode.isEditable()) {
+            if (mFocusedNode != null && mFocusedNode.isEditable()) {
                 setEditNode(mFocusedNode);
             }
             performFocusAction(nodeToFocus);
@@ -1140,41 +1140,76 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // If the focused node is not in direct manipulation mode, try to move the focus to the
-        // shortcut node.
-        if (mFocusArea != null) {
-            Bundle arguments = new Bundle();
-            arguments.putInt(NUDGE_SHORTCUT_DIRECTION, direction);
-            if (mFocusArea.performAction(ACTION_NUDGE_SHORTCUT, arguments)) {
-                // If the user is nudging out of the IME to the node being edited, we no longer need
-                // to keep track of the node being edited.
-                if (mEditNode != null && mEditNode.isFocused()) {
-                    setEditNode(null);
-                }
-                return;
+        // If the focused node is not in direct manipulation mode, try to move the focus to another
+        // node.
+        List<AccessibilityWindowInfo> windows = getWindows();
+        boolean success = nudgeTo(windows, direction);
+        Utils.recycleWindows(windows);
+
+        // If the user is nudging out of the IME to the node being edited, we no longer need
+        // to keep track of the node being edited.
+        if (success) {
+            mEditNode = Utils.refreshNode(mEditNode);
+            if (mEditNode != null && mEditNode.isFocused()) {
+                setEditNode(null);
             }
+        }
+    }
+
+    private boolean nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+        // If the HUN is in the nudge direction, nudge to it.
+        AccessibilityNodeInfo hunNudgeTarget =
+                mNavigator.findHunNudgeTarget(windows, mFocusedNode, direction);
+        if (hunNudgeTarget != null) {
+            performFocusAction(hunNudgeTarget);
+            hunNudgeTarget.recycle();
+            return true;
+        }
+
+        // Try to move the focus to the shortcut node.
+        if (mFocusArea == null) {
+            L.e("mFocusArea shouldn't be null");
+            return false;
+        }
+        Bundle arguments = new Bundle();
+        arguments.putInt(NUDGE_DIRECTION, direction);
+        if (mFocusArea.performAction(ACTION_NUDGE_SHORTCUT, arguments)) {
+            L.d("Nudge to shortcut view");
+            return true;
         }
 
         // No shortcut node, so move the focus in the given direction.
-        // TODO(b/152438801): sometimes getWindows() takes 10s after boot.
-        List<AccessibilityWindowInfo> windows = getWindows();
-        mEditNode = Utils.refreshNode(mEditNode);
-        AccessibilityNodeInfo targetNode =
-                mNavigator.findNudgeTarget(windows, mFocusedNode, direction, mEditNode);
-        Utils.recycleWindows(windows);
-        if (targetNode == null) {
-            L.w("Failed to find nudge target");
-            return;
+        // First, try to perform ACTION_NUDGE on mFocusArea to nudge to another FocusArea.
+        if (mFocusArea != null) {
+            arguments.clear();
+            arguments.putInt(NUDGE_DIRECTION, direction);
+            if (mFocusArea.performAction(ACTION_NUDGE_TO_ANOTHER_FOCUS_AREA, arguments)) {
+                L.d("Nudge to user specified FocusArea");
+                return true;
+            }
         }
 
-        // If the user is nudging out of the IME to the node being edited, we no longer need to keep
-        // track of the node being edited.
-        if (targetNode.equals(mEditNode)) {
-            setEditNode(null);
+        // No specified FocusArea or cached FocusArea in the direction, so mFocusArea doesn't know
+        // what FocusArea to nudge to. In this case, we'll find a target FocusArea using geometry.
+        AccessibilityNodeInfo targetFocusArea =
+                mNavigator.findNudgeTargetFocusArea(windows, mFocusedNode, mFocusArea, direction);
+        if (targetFocusArea == null) {
+            L.d("Failed to find a target FocusArea for the nudge");
+            return false;
+        }
+        if (Utils.isFocusArea(targetFocusArea)) {
+            arguments.clear();
+            arguments.putInt(NUDGE_DIRECTION, direction);
+            if (targetFocusArea.performAction(ACTION_FOCUS, arguments)) {
+                L.d("Nudge to the nearest FocusArea");
+                return true;
+            }
+            return false;
         }
 
-        performFocusAction(targetNode);
-        Utils.recycleNode(targetNode);
+        // targetFocusArea is an implicit FocusArea (i.e., the root node of a window without any
+        // FocusAreas), so focus on the first focusable node in it.
+        return focusFirstFocusDescendant(targetFocusArea);
     }
 
     private void handleRotaryEvent(RotaryEvent rotaryEvent) {
@@ -1575,18 +1610,9 @@ public class RotaryService extends AccessibilityService implements
 
         mFocusArea = Utils.refreshNode(mFocusArea);
         if (mFocusArea != null && mFocusArea.getWindowId() == windowId) {
-            Bundle arguments = new Bundle();
-            arguments.putInt(RotaryConstants.FOCUS_ACTION_TYPE, RotaryConstants.FOCUS_DEFAULT);
-            boolean success = performFocusAction(mFocusArea, arguments);
+            boolean success = mFocusArea.performAction(ACTION_FOCUS);
             if (success) {
-                L.d("Move focus to the default focus of the current FocusArea");
-                return;
-            }
-
-            arguments.clear();
-            arguments.putInt(RotaryConstants.FOCUS_ACTION_TYPE, RotaryConstants.FOCUS_FIRST);
-            if (performFocusAction(mFocusArea, arguments)) {
-                L.d("Move focus to the first focusable view in the current FocusArea");
+                L.d("Move focus to a view within the current FocusArea");
                 return;
             }
         }
@@ -1600,8 +1626,13 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleNode(fpv);
 
         L.d("Try to focus on the first focusable view in the window");
-        focusFirstFocusDescendant();
-        return;
+        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
+        if (rootNode == null) {
+            L.e("rootNode of active window is null");
+            return;
+        }
+        focusFirstFocusDescendant(rootNode);
+        rootNode.recycle();
     }
 
     /**
@@ -1691,23 +1722,18 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /**
-     * Focuses the first focus descendant (a node inside a focus area that can take focus) in the
-     * currently active window, if any.
+     * Focuses the first focus descendant of the given {@code node}, if any. Returns whether the
+     * the node is focused.
      */
-    private void focusFirstFocusDescendant() {
-        AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        if (rootNode == null) {
-            L.e("rootNode of active window is null");
-            return;
-        }
-        AccessibilityNodeInfo targetNode = mNavigator.findFirstFocusDescendant(rootNode);
-        rootNode.recycle();
+    private boolean focusFirstFocusDescendant(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo targetNode = mNavigator.findFirstFocusDescendant(node);
         if (targetNode == null) {
             L.w("Failed to find the first focus descendant");
-            return;
+            return false;
         }
-        performFocusAction(targetNode);
+        boolean success = performFocusAction(targetNode);
         targetNode.recycle();
+        return success;
     }
 
     /**

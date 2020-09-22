@@ -231,7 +231,7 @@ class Navigator {
      *         contains no views that can take focus
      */
     @Nullable
-    private AccessibilityNodeInfo findHunNudgeTarget(@NonNull List<AccessibilityWindowInfo> windows,
+    AccessibilityNodeInfo findHunNudgeTarget(@NonNull List<AccessibilityWindowInfo> windows,
             @NonNull AccessibilityNodeInfo sourceNode, int direction) {
         if (direction != mHunNudgeDirection) {
             return null;
@@ -521,7 +521,7 @@ class Navigator {
      * returns the best nudge target from among all the candidate focus areas. The caller is
      * responsible for updating the cache and recycling the result.
      */
-    private AccessibilityNodeInfo findNudgeTargetFocusArea(
+    AccessibilityNodeInfo findNudgeTargetFocusArea(
             @NonNull List<AccessibilityWindowInfo> windows,
             @NonNull AccessibilityNodeInfo focusedNode,
             @NonNull AccessibilityNodeInfo currentFocusArea,
