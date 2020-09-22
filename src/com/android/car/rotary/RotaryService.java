@@ -1612,6 +1612,7 @@ public class RotaryService extends AccessibilityService implements
      * might go out of sync.
      */
     private void maybeClearFocusInCurrentWindow(@Nullable AccessibilityNodeInfo targetFocus) {
+        mFocusedNode = Utils.refreshNode(mFocusedNode);
         if (mFocusedNode == null || !mFocusedNode.isFocused()
                 || (targetFocus != null
                         && mFocusedNode.getWindowId() == targetFocus.getWindowId())) {
