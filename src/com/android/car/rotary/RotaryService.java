@@ -56,8 +56,8 @@ import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.content.SharedPreferences;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
@@ -235,10 +235,10 @@ public class RotaryService extends AccessibilityService implements
     private long mLastWindowAddedTime;
 
     /** Component name of rotary IME. Empty if none. */
-    private String mRotaryInputMethod;
+    @Nullable private String mRotaryInputMethod;
 
     /** Component name of IME used in touch mode. */
-    private String mTouchInputMethod;
+    @Nullable private String mTouchInputMethod;
 
     /** Observer to update {@link #mTouchInputMethod} when the user switches IMEs. */
     private ContentObserver mInputMethodObserver;
@@ -409,10 +409,19 @@ public class RotaryService extends AccessibilityService implements
         mPrefs = createDeviceProtectedStorageContext().getSharedPreferences(SHARED_PREFS,
                 Context.MODE_PRIVATE);
         mUserManager = getSystemService(UserManager.class);
-        mTouchInputMethod = mPrefs.getString(
-                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(),
-                res.getString(R.string.default_touch_input_method));
-        mRotaryInputMethod = res.getString(R.string.rotary_input_method);
+
+        // Verify that the component names for default_touch_input_method and rotary_input_method
+        // are valid. If mTouchInputMethod or mRotaryInputMethod is empty, IMEs should not switch
+        // because RotaryService won't be able to switch them back.
+        String defaultTouchInputMethod = res.getString(R.string.default_touch_input_method);
+        if (isValidIme(defaultTouchInputMethod)) {
+            mTouchInputMethod = mPrefs.getString(
+                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(), defaultTouchInputMethod);
+        }
+        String rotaryInputMethod = res.getString(R.string.rotary_input_method);
+        if (isValidIme(rotaryInputMethod)) {
+            mRotaryInputMethod = rotaryInputMethod;
+        }
 
         long afterFocusTimeoutMs = res.getInteger(R.integer.after_focus_timeout_ms);
         mPendingFocusedNodes = new PendingFocusedNodes(afterFocusTimeoutMs);
@@ -1917,15 +1926,23 @@ public class RotaryService extends AccessibilityService implements
         }
 
         // Update IME.
-        if (mRotaryInputMethod.isEmpty()) {
+        if (TextUtils.isEmpty(mRotaryInputMethod)) {
             L.w("No rotary IME configured");
+            return;
+        }
+        if (TextUtils.isEmpty(mTouchInputMethod)) {
+            L.w("No touch IME configured");
             return;
         }
         if (!inRotaryMode) {
             setEditNode(null);
         }
-        // Switch to the rotary IME or the IME in use before we switched to the rotary IME.
+        // Switch to the rotary IME or the touch IME.
         String newIme = inRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
+        if (!isValidIme(newIme)) {
+            L.w("Invalid IME: " + newIme);
+            return;
+        }
         boolean result =
                 Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
         if (!result) {
@@ -2065,5 +2082,19 @@ public class RotaryService extends AccessibilityService implements
 
     private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
         return mNodeCopier.copy(node);
+    }
+
+    /**
+     * Checks if the {@code componentName} is an enabled input method.
+     * The string should be in the format {@code "PackageName/.ClassName"}.
+     * Example: {@code "com.android.inputmethod.latin/.CarLatinIME"}.
+     */
+    private boolean isValidIme(String componentName) {
+        if (TextUtils.isEmpty(componentName)) {
+            return false;
+        }
+        String enabledInputMethods = Settings.Secure.getString(
+                getContentResolver(), Settings.Secure.ENABLED_INPUT_METHODS);
+        return enabledInputMethods != null && enabledInputMethods.contains(componentName);
     }
 }
