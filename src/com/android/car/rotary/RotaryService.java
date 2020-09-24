@@ -303,6 +303,8 @@ public class RotaryService extends AccessibilityService implements
      */
     private int mCenterButtonRepeatCount;
 
+    private Context mWindowContext;
+
     private static final Map<Integer, Integer> TEST_TO_REAL_KEYCODE_MAP;
 
     private static final Map<Integer, Integer> DIRECTION_TO_KEYCODE_MAP;
@@ -440,12 +442,7 @@ public class RotaryService extends AccessibilityService implements
         // Guarantee that we always return the same WindowManager instance.
         if (WINDOW_SERVICE.equals(name)) {
             if (mWindowManager == null) {
-                // We need to set the display before creating the WindowContext.
-                DisplayManager displayManager = getSystemService(DisplayManager.class);
-                Display primaryDisplay = displayManager.getDisplay(DEFAULT_DISPLAY);
-                updateDisplay(primaryDisplay.getDisplayId());
-
-                Context windowContext = createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+                Context windowContext = getWindowContext();
                 mWindowManager = (WindowManager) windowContext.getSystemService(WINDOW_SERVICE);
             }
             return mWindowManager;
@@ -601,6 +598,18 @@ public class RotaryService extends AccessibilityService implements
         // Do nothing.
     }
 
+    private Context getWindowContext() {
+        if (mWindowContext == null) {
+            // We need to set the display before creating the WindowContext.
+            DisplayManager displayManager = getSystemService(DisplayManager.class);
+            Display primaryDisplay = displayManager.getDisplay(DEFAULT_DISPLAY);
+            updateDisplay(primaryDisplay.getDisplayId());
+
+            mWindowContext = createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+        }
+        return mWindowContext;
+    }
+
     /**
      * Adds an overlay to capture touch events. The overlay has zero width and height so
      * it doesn't prevent other windows from receiving touch events. It sets
@@ -610,7 +619,10 @@ public class RotaryService extends AccessibilityService implements
      * isn't considered a click.
      */
     private void addTouchOverlay() {
-        FrameLayout frameLayout = new FrameLayout(this);
+        // Only views with a visual context, such as a window context, can be added by
+        // WindowManager.
+        FrameLayout frameLayout = new FrameLayout(getWindowContext());
+
         FrameLayout.LayoutParams frameLayoutParams =
                 new FrameLayout.LayoutParams(/* width= */ 0, /* height= */ 0);
         frameLayout.setLayoutParams(frameLayoutParams);
