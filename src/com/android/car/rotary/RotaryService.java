@@ -1141,9 +1141,6 @@ public class RotaryService extends AccessibilityService implements
         if (!isValidAction(action)) {
             return;
         }
-        if (initFocus()) {
-            return;
-        }
 
         // If the focused node is in direct manipulation mode, manipulate it directly.
         if (mInDirectManipulationMode) {
@@ -1158,6 +1155,14 @@ public class RotaryService extends AccessibilityService implements
 
         // We're done with ACTION_UP event.
         if (action == ACTION_UP) {
+            return;
+        }
+
+        // Don't call initFocus() when handling ACTION_UP nudge events as this event will typically
+        // arrive before the TYPE_VIEW_FOCUSED event when we delegate focusing to a FocusArea, and
+        // will cause us to focus a nearby view when we discover that mFocusedNode is no longer
+        // focused.
+        if (initFocus()) {
             return;
         }
 
