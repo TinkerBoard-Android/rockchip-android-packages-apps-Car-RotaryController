@@ -1708,6 +1708,11 @@ public class RotaryService extends AccessibilityService implements
             return false;
         }
         AccessibilityNodeInfo focusParkingView = findFocusParkingView(mFocusedNode);
+
+        // Refresh the node to ensure the focused state is up to date. The node came directly from
+        // the node tree but it could have been cached by the accessibility framework.
+        focusParkingView = Utils.refreshNode(focusParkingView);
+
         if (focusParkingView == null) {
             return false;
         }
