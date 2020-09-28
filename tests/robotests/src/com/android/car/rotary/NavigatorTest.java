@@ -71,7 +71,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo root = mNodeBuilder.build();
         setRootNodeForWindow(root, window);
 
-        assertThat(window.getRoot()).isSameAs(root);
+        assertThat(window.getRoot()).isSameInstanceAs(root);
     }
 
     /**
@@ -101,17 +101,17 @@ public class NavigatorTest {
 
         // Rotate once, the focus should move from button1 to button2.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button3.
         target = mNavigator.findRotateTarget(button1, direction, 2);
-        assertThat(target.node).isSameAs(button3);
+        assertThat(target.node).isSameInstanceAs(button3);
         assertThat(target.advancedCount).isEqualTo(2);
 
         // Rotate 3 times and exceed the boundary, the focus should stay at the boundary.
         target = mNavigator.findRotateTarget(button1, direction, 3);
-        assertThat(target.node).isSameAs(button3);
+        assertThat(target.node).isSameInstanceAs(button3);
         assertThat(target.advancedCount).isEqualTo(2);
     }
 
@@ -200,7 +200,7 @@ public class NavigatorTest {
 
         // Rotate from button1, it shouldn't skip the invisible view.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(invisible);
+        assertThat(target.node).isSameInstanceAs(invisible);
     }
 
     /**
@@ -229,7 +229,7 @@ public class NavigatorTest {
 
         // Rotate from button1, it should skip the empty view.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
     }
 
     /**
@@ -265,7 +265,7 @@ public class NavigatorTest {
         when(recyclerView.focusSearch(direction)).thenReturn(button2);
 
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(recyclerView);
+        assertThat(target.node).isSameInstanceAs(recyclerView);
     }
 
     /**
@@ -295,7 +295,7 @@ public class NavigatorTest {
         when(recyclerView.focusSearch(direction)).thenReturn(button2);
 
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
     }
 
     /**
@@ -329,7 +329,7 @@ public class NavigatorTest {
         when(recyclerView.focusSearch(direction)).thenReturn(focusParkingView);
 
         FindRotateTargetResult target = mNavigator.findRotateTarget(focusable2, direction, 2);
-        assertThat(target.node).isSameAs(focusable1);
+        assertThat(target.node).isSameInstanceAs(focusable1);
         assertThat(target.advancedCount).isEqualTo(1);
     }
 
@@ -409,18 +409,18 @@ public class NavigatorTest {
 
         // Rotate once, the focus should move from button1 to button2.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button2 since button3 is not a
         // descendant of the scrollable container.
         target = mNavigator.findRotateTarget(button1, direction, 2);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate three times should do the same.
         target = mNavigator.findRotateTarget(button1, direction, 3);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
     }
 
@@ -484,18 +484,18 @@ public class NavigatorTest {
 
         // Rotate once, the focus should move from button1 to button2.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate twice, the focus should move from button1 to button2 since button3 is off the
         // screen.
         target = mNavigator.findRotateTarget(button1, direction, 2);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
         // Rotate three times should do the same.
         target = mNavigator.findRotateTarget(button1, direction, 3);
-        assertThat(target.node).isSameAs(button2);
+        assertThat(target.node).isSameInstanceAs(button2);
         assertThat(target.advancedCount).isEqualTo(1);
     }
 
@@ -640,7 +640,7 @@ public class NavigatorTest {
         // Nudge within the same window.
         AccessibilityNodeInfo target =
                 mNavigator.findNudgeTarget(windows, topLeft1, View.FOCUS_DOWN);
-        assertThat(target).isSameAs(bottomLeft1);
+        assertThat(target).isSameInstanceAs(bottomLeft1);
 
         // Reach to the boundary.
         target = mNavigator.findNudgeTarget(windows, topLeft1, View.FOCUS_UP);
@@ -648,7 +648,7 @@ public class NavigatorTest {
 
         // Nudge to a different window.
         target = mNavigator.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
-        assertThat(target).isSameAs(topLeft2);
+        assertThat(target).isSameInstanceAs(topLeft2);
 
         // When nudging back, the focus should return to the previously focused node within the
         // previous focus area, rather than the geometrically close node or focus area.
@@ -657,10 +657,10 @@ public class NavigatorTest {
         mNavigator.saveFocusedNode(bottomLeft1);
         // Then nudge to right.
         target = mNavigator.findNudgeTarget(windows, bottomLeft1, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(topRight1);
+        assertThat(target).isSameInstanceAs(topRight1);
         // Then nudge back.
         target = mNavigator.findNudgeTarget(windows, topRight1, View.FOCUS_LEFT);
-        assertThat(target).isSameAs(bottomLeft1);
+        assertThat(target).isSameInstanceAs(bottomLeft1);
     }
 
     /**
@@ -753,7 +753,7 @@ public class NavigatorTest {
 
         // Nudge from left window to right window.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(right);
+        assertThat(target).isSameInstanceAs(right);
     }
 
     /**
@@ -879,16 +879,16 @@ public class NavigatorTest {
         // source and target overlap so geometric targeting fails. We should fall back to using the
         // first focusable view in the HUN.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, topLeft, View.FOCUS_UP);
-        assertThat(target).isSameAs(hunLeft);
+        assertThat(target).isSameInstanceAs(hunLeft);
         target = mNavigator.findNudgeTarget(windows, topRight, View.FOCUS_UP);
-        assertThat(target).isSameAs(hunLeft);
+        assertThat(target).isSameInstanceAs(hunLeft);
 
         // Nudging up from the bottom left or right view should go to the corresponding button in
         // the HUN, skipping over the top focus area. Geometric targeting should work.
         target = mNavigator.findNudgeTarget(windows, bottomLeft, View.FOCUS_UP);
-        assertThat(target).isSameAs(hunLeft);
+        assertThat(target).isSameInstanceAs(hunLeft);
         target = mNavigator.findNudgeTarget(windows, bottomRight, View.FOCUS_UP);
-        assertThat(target).isSameAs(hunRight);
+        assertThat(target).isSameInstanceAs(hunRight);
     }
 
     /**
@@ -968,7 +968,7 @@ public class NavigatorTest {
         // Nudge from sourceView to right, and it should go to view1.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(view1);
+        assertThat(target).isSameInstanceAs(view1);
     }
 
     /**
@@ -1052,11 +1052,11 @@ public class NavigatorTest {
         // Nudge up from controlButton, it should go to listItem1.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, controlButton, View.FOCUS_UP);
-        assertThat(target).isSameAs(listItem1);
+        assertThat(target).isSameInstanceAs(listItem1);
 
         // Nudge up from listItem1, it should go to tab.
         target = mNavigator.findNudgeTarget(windows, listItem1, View.FOCUS_UP);
-        assertThat(target).isSameAs(tab);
+        assertThat(target).isSameInstanceAs(tab);
 
         // Disable cache.
         mNavigator = new Navigator(
@@ -1076,7 +1076,7 @@ public class NavigatorTest {
 
         // Nudge down from listItem1, it should go to controlButton.
         target = mNavigator.findNudgeTarget(windows, listItem1, View.FOCUS_DOWN);
-        assertThat(target).isSameAs(controlButton);
+        assertThat(target).isSameInstanceAs(controlButton);
     }
 
     /**
@@ -1148,7 +1148,7 @@ public class NavigatorTest {
         // Nudge down from sourceView, and it should go to targetView.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_DOWN);
-        assertThat(target).isSameAs(targetView);
+        assertThat(target).isSameInstanceAs(targetView);
     }
 
     /**
@@ -1219,7 +1219,7 @@ public class NavigatorTest {
         // Nudge down from sourceView, and it should go to viewContainer.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_DOWN);
-        assertThat(target).isSameAs(viewContainer);
+        assertThat(target).isSameInstanceAs(viewContainer);
     }
 
     /**
@@ -1327,7 +1327,7 @@ public class NavigatorTest {
         // EditText they were editing.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, sourceView, View.FOCUS_UP, targetView);
-        assertThat(target).isSameAs(targetView);
+        assertThat(target).isSameInstanceAs(targetView);
     }
 
     /**
@@ -1412,7 +1412,7 @@ public class NavigatorTest {
 
         // Nudge from left window to right window.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(recyclerView);
+        assertThat(target).isSameInstanceAs(recyclerView);
     }
 
     /**
@@ -1504,7 +1504,7 @@ public class NavigatorTest {
 
         // Nudge from left window to right window.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(recyclerView);
+        assertThat(target).isSameInstanceAs(recyclerView);
     }
 
     /**
@@ -1588,7 +1588,7 @@ public class NavigatorTest {
 
         // Nudge from left window to right window.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(null);
+        assertThat(target).isSameInstanceAs(null);
     }
 
 
@@ -1673,7 +1673,7 @@ public class NavigatorTest {
 
         // Nudge from left window to right window.
         AccessibilityNodeInfo target = mNavigator.findNudgeTarget(windows, left, View.FOCUS_RIGHT);
-        assertThat(target).isSameAs(focusable);
+        assertThat(target).isSameInstanceAs(focusable);
     }
 
     /**
@@ -1768,7 +1768,7 @@ public class NavigatorTest {
         // Nudge down from tab, it should go to contact list.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, tab, View.FOCUS_DOWN);
-        assertThat(target).isSameAs(contactList);
+        assertThat(target).isSameInstanceAs(contactList);
     }
 
     /**
@@ -1850,7 +1850,7 @@ public class NavigatorTest {
         // Nudge up from view3, it should go to view2.
         AccessibilityNodeInfo target
                 = mNavigator.findNudgeTarget(windows, view3, View.FOCUS_UP);
-        assertThat(target).isSameAs(view2);
+        assertThat(target).isSameInstanceAs(view2);
     }
 
     /**
@@ -1881,12 +1881,12 @@ public class NavigatorTest {
         // Search forward from the focus area.
         when(focusArea1.focusSearch(direction)).thenReturn(button2);
         AccessibilityNodeInfo target = mNavigator.findFirstFocusDescendant(root);
-        assertThat(target).isSameAs(button2);
+        assertThat(target).isSameInstanceAs(button2);
 
         // Fall back to tree traversal.
         when(focusArea1.focusSearch(direction)).thenReturn(null);
         target = mNavigator.findFirstFocusDescendant(root);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
     }
 
     /**
@@ -1915,12 +1915,12 @@ public class NavigatorTest {
         // Search forward from the focus area.
         when(focusArea.focusSearch(direction)).thenReturn(button2);
         AccessibilityNodeInfo target = mNavigator.findFirstFocusDescendant(root);
-        assertThat(target).isSameAs(button2);
+        assertThat(target).isSameInstanceAs(button2);
 
         // Fall back to tree traversal.
         when(focusArea.focusSearch(direction)).thenReturn(null);
         target = mNavigator.findFirstFocusDescendant(root);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
     }
 
     /**
@@ -1955,7 +1955,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
 
         AccessibilityNodeInfo target = mNavigator.findScrollableContainer(button1);
-        assertThat(target).isSameAs(scrollableContainer);
+        assertThat(target).isSameInstanceAs(scrollableContainer);
         target = mNavigator.findScrollableContainer(button2);
         assertThat(target).isNull();
     }
@@ -1991,13 +1991,13 @@ public class NavigatorTest {
 
         AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(
                 container2, button4, View.FOCUS_BACKWARD);
-        assertThat(target).isSameAs(button3);
+        assertThat(target).isSameInstanceAs(button3);
         target = mNavigator.findFocusableDescendantInDirection(container2, button3,
                 View.FOCUS_BACKWARD);
         assertThat(target).isNull();
         target = mNavigator.findFocusableDescendantInDirection(container1, button2,
                 View.FOCUS_BACKWARD);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
         target = mNavigator.findFocusableDescendantInDirection(container1, button1,
                 View.FOCUS_BACKWARD);
         assertThat(target).isNull();
@@ -2034,13 +2034,13 @@ public class NavigatorTest {
 
         AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(
                 container1, button1, View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button2);
+        assertThat(target).isSameInstanceAs(button2);
         target = mNavigator.findFocusableDescendantInDirection(container1, button2,
                 View.FOCUS_FORWARD);
         assertThat(target).isNull();
         target = mNavigator.findFocusableDescendantInDirection(container2, button3,
                 View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button4);
+        assertThat(target).isSameInstanceAs(button4);
         target = mNavigator.findFocusableDescendantInDirection(container2, button4,
                 View.FOCUS_FORWARD);
         assertThat(target).isNull();
@@ -2078,16 +2078,16 @@ public class NavigatorTest {
 
         AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(container,
                 button1, View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button2);
+        assertThat(target).isSameInstanceAs(button2);
         target = mNavigator.findFocusableDescendantInDirection(container, button2,
                 View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
         target = mNavigator.findFocusableDescendantInDirection(container, button3,
                 View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
         target = mNavigator.findFocusableDescendantInDirection(container, button4,
                 View.FOCUS_FORWARD);
-        assertThat(target).isSameAs(button1);
+        assertThat(target).isSameInstanceAs(button1);
     }
 
     /**
@@ -2126,7 +2126,7 @@ public class NavigatorTest {
         AccessibilityNodeInfo button4 = mNodeBuilder.setParent(container2).build();
 
         AccessibilityNodeInfo target = mNavigator.findFirstFocusableDescendant(root);
-        assertThat(target).isSameAs(button3);
+        assertThat(target).isSameInstanceAs(button3);
     }
 
     /**
@@ -2165,7 +2165,7 @@ public class NavigatorTest {
                 .build();
 
         AccessibilityNodeInfo target = mNavigator.findLastFocusableDescendant(root);
-        assertThat(target).isSameAs(button2);
+        assertThat(target).isSameInstanceAs(button2);
     }
 
     /** Sets the {@code root} node in the {@code window}'s hierarchy. */
