@@ -51,7 +51,7 @@ public class NodeBuilderTest {
                 .setBoundsInScreen(bounds)
                 .build();
 
-        assertThat(parent.getWindow()).isSameAs(window);
+        assertThat(parent.getWindow()).isSameInstanceAs(window);
         assertThat(parent.getClassName()).isEqualTo(FOCUS_AREA_CLASS_NAME);
         assertThat(parent.isFocusable()).isTrue();
         assertThat(parent.isVisibleToUser()).isTrue();
@@ -69,10 +69,10 @@ public class NodeBuilderTest {
                 .setNodeList(nodeList)
                 .setParent(parent).build();
 
-        assertThat(child1.getParent()).isSameAs(parent);
+        assertThat(child1.getParent()).isSameInstanceAs(parent);
         assertThat(parent.getChildCount()).isEqualTo(2);
-        assertThat(parent.getChild(0)).isSameAs(child1);
-        assertThat(parent.getChild(1)).isSameAs(child2);
+        assertThat(parent.getChild(0)).isSameInstanceAs(child1);
+        assertThat(parent.getChild(1)).isSameInstanceAs(child2);
         assertThat(parent.getChild(2)).isNull();
     }
 }
