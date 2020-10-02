@@ -104,17 +104,17 @@ public class TreeTraverserTest {
         // Should check the node itself.
         AccessibilityNodeInfo result = mTreeTraverser.findNodeOrAncestor(node0,
                 /* stopPredicate= */ null, /* targetPredicate= */ node -> node == node0);
-        assertThat(result).isSameAs(node0);
+        assertThat(result).isSameInstanceAs(node0);
 
         // Parent.
         result = mTreeTraverser.findNodeOrAncestor(node1, /* stopPredicate= */ null,
                 /* targetPredicate= */ node -> node == node0);
-        assertThat(result).isSameAs(node0);
+        assertThat(result).isSameInstanceAs(node0);
 
         // Grandparent.
         result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */ null,
                 /* targetPredicate= */ node -> node == node0);
-        assertThat(result).isSameAs(node0);
+        assertThat(result).isSameInstanceAs(node0);
 
         // No ancestor found.
         result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */ null,
@@ -189,17 +189,17 @@ public class TreeTraverserTest {
         // Find root.
         result = mTreeTraverser.depthFirstSearch(node0, /* skipPredicate= */ null,
                 /* targetPredicate= */ node -> node == node0);
-        assertThat(result).isSameAs(node0);
+        assertThat(result).isSameInstanceAs(node0);
 
         // Find child.
         result = mTreeTraverser.depthFirstSearch(node0, /* skipPredicate= */ null,
                 /* targetPredicate= */ node -> node == node4);
-        assertThat(result).isSameAs(node4);
+        assertThat(result).isSameInstanceAs(node4);
 
         // Find grandchild.
         result = mTreeTraverser.depthFirstSearch(node0, /* skipPredicate= */ null,
                 /* targetPredicate= */ node -> node == node6);
-        assertThat(result).isSameAs(node6);
+        assertThat(result).isSameInstanceAs(node6);
 
         // Iterate in depth-first order, skipping a subtree containing the target
         List<AccessibilityNodeInfo> skipPredicateCalledWithNodes = new ArrayList<>();
@@ -278,15 +278,15 @@ public class TreeTraverserTest {
 
         // Find root.
         result = mTreeTraverser.reverseDepthFirstSearch(node0, node -> node == node0);
-        assertThat(result).isSameAs(node0);
+        assertThat(result).isSameInstanceAs(node0);
 
         // Find child.
         result = mTreeTraverser.reverseDepthFirstSearch(node0, node -> node == node1);
-        assertThat(result).isSameAs(node1);
+        assertThat(result).isSameInstanceAs(node1);
 
         // Find grandchild.
         result = mTreeTraverser.reverseDepthFirstSearch(node0, node -> node == node2);
-        assertThat(result).isSameAs(node2);
+        assertThat(result).isSameInstanceAs(node2);
     }
 
     /**

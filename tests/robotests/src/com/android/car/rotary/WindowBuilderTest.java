@@ -38,7 +38,7 @@ public class WindowBuilderTest {
                 .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
                 .build();
 
-        assertThat(window.getRoot()).isSameAs(root);
+        assertThat(window.getRoot()).isSameInstanceAs(root);
 
         Rect boundsInScreen = new Rect();
         window.getBoundsInScreen(boundsInScreen);
