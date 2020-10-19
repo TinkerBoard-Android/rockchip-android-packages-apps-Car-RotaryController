@@ -15,26 +15,52 @@
  */
 package com.android.car.rotary;
 
+import android.view.accessibility.AccessibilityNodeInfo;
+
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
-/** Cache of window IDs and types. */
+/** Cache of window type and most recently focused node for each window ID. */
 class WindowCache {
     /** Window IDs. */
     private final Stack<Integer> mWindowIds;
     /** Window types keyed by window IDs. */
     private final Map<Integer, Integer> mWindowTypes;
+    /** Most recent focused nodes keyed by window IDs. */
+    private final Map<Integer, AccessibilityNodeInfo> mFocusedNodes;
+
+    @NonNull
+    private NodeCopier mNodeCopier = new NodeCopier();
 
     WindowCache() {
         mWindowIds = new Stack<>();
         mWindowTypes = new HashMap<>();
+        mFocusedNodes = new HashMap<>();
     }
 
-    /** Puts an entry, removing the existing entry, if any. */
-    void put(int windowId, int windowType) {
+    /**
+     * Saves the focused node of the given window, removing the existing entry, if any. This method
+     * should be called when the focused node changed.
+     */
+    void saveFocusedNode(int windowId, @NonNull AccessibilityNodeInfo focusedNode) {
+        if (mFocusedNodes.containsKey(windowId)) {
+            // Call remove(Integer) to remove.
+            AccessibilityNodeInfo oldNode = mFocusedNodes.remove(windowId);
+            oldNode.recycle();
+        }
+        mFocusedNodes.put(windowId, copyNode(focusedNode));
+    }
+
+    /**
+     * Saves the type of the given window, removing the existing entry, if any. This method should
+     * be called when a window was just added.
+     */
+    void saveWindowType(int windowId, int windowType) {
         Integer id = windowId;
         if (mWindowIds.contains(id)) {
             // Call remove(Integer) to remove.
@@ -45,13 +71,17 @@ class WindowCache {
         mWindowTypes.put(windowId, windowType);
     }
 
-    /** Removes an entry if it exists. */
+    /**
+     * Removes an entry if it exists. This method should be called when a window was just removed.
+     */
     void remove(int windowId) {
         Integer id = windowId;
         if (mWindowIds.contains(id)) {
             // Call remove(Integer) to remove.
             mWindowIds.remove(id);
             mWindowTypes.remove(id);
+            AccessibilityNodeInfo node = mFocusedNodes.remove(id);
+            Utils.recycleNode(node);
         }
     }
 
@@ -61,12 +91,29 @@ class WindowCache {
         return mWindowTypes.get(windowId);
     }
 
-    /** Gets the most recently added window ID, or null if none. */
+    /**
+     * Returns a copy of the most recently focused node in the most recently added window, or null
+     * if none.
+     */
     @Nullable
-    Integer getMostRecentWindowId() {
+    AccessibilityNodeInfo getMostRecentFocusedNode() {
         if (mWindowIds.isEmpty()) {
             return null;
         }
-        return mWindowIds.peek();
+        Integer recentWindowId = mWindowIds.peek();
+        if (recentWindowId == null) {
+            return null;
+        }
+        return copyNode(mFocusedNodes.get(recentWindowId));
+    }
+
+    /** Sets a mock NodeCopier instance for testing. */
+    @VisibleForTesting
+    void setNodeCopier(@NonNull NodeCopier nodeCopier) {
+        mNodeCopier = nodeCopier;
+    }
+
+    private AccessibilityNodeInfo copyNode(@Nullable AccessibilityNodeInfo node) {
+        return mNodeCopier.copy(node);
     }
 }

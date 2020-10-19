@@ -37,8 +37,8 @@ public class WindowCacheTest {
     @Before
     public void setUp() {
         mWindowCache = new WindowCache();
-        mWindowCache.put(WINDOW_ID_1, TYPE_APPLICATION);
-        mWindowCache.put(WINDOW_ID_2, TYPE_SYSTEM);
+        mWindowCache.saveWindowType(WINDOW_ID_1, TYPE_APPLICATION);
+        mWindowCache.saveWindowType(WINDOW_ID_2, TYPE_SYSTEM);
     }
 
     @Test
@@ -52,19 +52,5 @@ public class WindowCacheTest {
 
         type = mWindowCache.getWindowType(WINDOW_ID_3);
         assertThat(type).isNull();
-    }
-
-    @Test
-    public void testGetMostRecentWindowId() {
-        Integer id = mWindowCache.getMostRecentWindowId();
-        assertThat(id).isEqualTo(WINDOW_ID_2);
-
-        mWindowCache.remove(id);
-        id = mWindowCache.getMostRecentWindowId();
-        assertThat(id).isEqualTo(WINDOW_ID_1);
-
-        mWindowCache.remove(id);
-        id = mWindowCache.getMostRecentWindowId();
-        assertThat(id).isNull();
     }
 }

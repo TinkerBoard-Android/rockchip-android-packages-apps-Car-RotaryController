@@ -19,7 +19,6 @@ import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityActi
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 
 import android.graphics.Rect;
-import android.os.SystemClock;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -34,6 +33,7 @@ import com.android.car.ui.FocusParkingView;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * A helper class used for finding the next focusable node when the rotary controller is rotated or
@@ -47,191 +47,31 @@ class Navigator {
     @NonNull
     private final TreeTraverser mTreeTraverser = new TreeTraverser();
 
-    private final RotaryCache mRotaryCache;
-
     private final int mHunLeft;
     private final int mHunRight;
 
     @View.FocusRealDirection
     private int mHunNudgeDirection;
 
-    Navigator(@RotaryCache.CacheType int focusHistoryCacheType,
-            int focusHistoryCacheSize,
-            int focusHistoryExpirationTimeMs,
-            @RotaryCache.CacheType int focusAreaHistoryCacheType,
-            int focusAreaHistoryCacheSize,
-            int focusAreaHistoryExpirationTimeMs,
-            @RotaryCache.CacheType int focusWindowCacheType,
-            int focusWindowCacheSize,
-            int focusWindowExpirationTimeMs,
-            int hunLeft,
-            int hunRight,
-            boolean showHunOnBottom) {
-        mRotaryCache = new RotaryCache(focusHistoryCacheType,
-                focusHistoryCacheSize,
-                focusHistoryExpirationTimeMs,
-                focusAreaHistoryCacheType,
-                focusAreaHistoryCacheSize,
-                focusAreaHistoryExpirationTimeMs,
-                focusWindowCacheType,
-                focusWindowCacheSize,
-                focusWindowExpirationTimeMs);
+    Navigator(int hunLeft, int hunRight, boolean showHunOnBottom) {
         mHunLeft = hunLeft;
         mHunRight = hunRight;
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
     }
 
-    /** Clears focus area history cache. */
-    void clearFocusAreaHistory() {
-        mRotaryCache.clearFocusAreaHistory();
-    }
-
-    /** Caches the focused node by focus area and by window. */
-    void saveFocusedNode(@NonNull AccessibilityNodeInfo focusedNode) {
-        long elapsedRealtime = SystemClock.elapsedRealtime();
-        AccessibilityNodeInfo focusArea = getAncestorFocusArea(focusedNode);
-        mRotaryCache.saveFocusedNode(focusArea, focusedNode, elapsedRealtime);
-        mRotaryCache.saveWindowFocus(focusedNode, elapsedRealtime);
-        Utils.recycleNode(focusArea);
-    }
-
     /**
-     * Returns the most recently focused valid node in window {@code windowId}, or {@code null} if
-     * there are no valid nodes saved by {@link #saveFocusedNode}. The caller is responsible for
-     * recycling the result.
-     */
-    AccessibilityNodeInfo getMostRecentFocus(int windowId) {
-        return mRotaryCache.getMostRecentFocus(windowId, SystemClock.elapsedRealtime());
-    }
-
-    /**
-     * Returns the target focusable for a nudge. Convenience method for when the {@code editNode} is
-     * null.
-     *
-     * @see #findNudgeTarget(List, AccessibilityNodeInfo, int, AccessibilityNodeInfo)
-     */
-    @Nullable
-    AccessibilityNodeInfo findNudgeTarget(@NonNull List<AccessibilityWindowInfo> windows,
-            @NonNull AccessibilityNodeInfo sourceNode, int direction) {
-        return findNudgeTarget(windows, sourceNode, direction, null);
-    }
-
-    /**
-     * Returns the target focusable for a nudge:
-     * <ol>
-     *     <li>If the HUN is present and the nudge is towards it, a focusable in the HUN is
-     *         returned. See {@link #findHunNudgeTarget} for details.
-     *     <li>If the nudge is leaving the IME, return focus to the view that was left focused when
-     *         the IME appeared.
-     *     <li>Otherwise, a target focus area is chosen, either from the focus area history or by
-     *         choosing the best candidate. See {@link #findNudgeTargetFocusArea} for details.
-     *     <li>Finally a focusable view within the chosen focus area is chosen, either from the
-     *         focus history or by choosing the best candidate.
-     * </ol>
-     * Saves nudge history except when nudging out of the IME. The caller is responsible for
-     * recycling the result.
+     * Returns a target node representing a HUN FocusArea for a nudge in {@code direction}. The
+     * caller is responsible for recycling the result.
      *
      * @param windows    a list of windows to search from
      * @param sourceNode the current focus
      * @param direction  nudge direction, must be {@link View#FOCUS_UP}, {@link View#FOCUS_DOWN},
      *                   {@link View#FOCUS_LEFT}, or {@link View#FOCUS_RIGHT}
-     * @param editNode   node currently being edited by the IME, if any
-     * @return a view that can take focus (visible, focusable and enabled) within another {@link
-     *         FocusArea}, which is in the given {@code direction} from the current {@link
-     *         FocusArea}, or null if not found
+     * @return a node representing a HUN FocusArea, or null if the HUN isn't present, the nudge
+     *         isn't in the direction of the HUN, or the HUN contains no views that can take focus
      */
     @Nullable
-    AccessibilityNodeInfo findNudgeTarget(@NonNull List<AccessibilityWindowInfo> windows,
-            @NonNull AccessibilityNodeInfo sourceNode, int direction,
-            @Nullable AccessibilityNodeInfo editNode) {
-        // If the user is trying to nudge to the HUN, search for a focus area in the HUN window.
-        AccessibilityNodeInfo hunNudgeTarget = findHunNudgeTarget(windows, sourceNode, direction);
-        if (hunNudgeTarget != null) {
-            return hunNudgeTarget;
-        }
-
-        long elapsedRealtime = SystemClock.elapsedRealtime();
-        AccessibilityNodeInfo currentFocusArea = getAncestorFocusArea(sourceNode);
-        AccessibilityNodeInfo targetFocusArea =
-                findNudgeTargetFocusArea(windows, sourceNode, currentFocusArea, direction);
-        if (targetFocusArea == null) {
-            Utils.recycleNode(currentFocusArea);
-            return null;
-        }
-
-        // If the user is nudging out of an IME, return to the field they were editing, if any.
-        // Don't save nudge history in this case.
-        AccessibilityWindowInfo sourceWindow =
-                Utils.findWindowWithId(windows, sourceNode.getWindowId());
-        AccessibilityWindowInfo targetWindow =
-                Utils.findWindowWithId(windows, targetFocusArea.getWindowId());
-        if (sourceWindow != null && targetWindow != null
-                && sourceWindow.getType() == AccessibilityWindowInfo.TYPE_INPUT_METHOD
-                && targetWindow.getType() != AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-            if (editNode != null && editNode.getWindowId() == targetWindow.getId()) {
-                Utils.recycleNode(currentFocusArea);
-                Utils.recycleNode(targetFocusArea);
-                return copyNode(editNode);
-            }
-        }
-
-        // Return the recently focused node within the target focus area, if any.
-        AccessibilityNodeInfo cachedFocusedNode =
-                mRotaryCache.getFocusedNode(targetFocusArea, elapsedRealtime);
-        if (cachedFocusedNode != null) {
-            // Save nudge history.
-            mRotaryCache.saveTargetFocusArea(
-                    currentFocusArea, targetFocusArea, direction, elapsedRealtime);
-
-            Utils.recycleNode(currentFocusArea);
-            Utils.recycleNode(targetFocusArea);
-            return cachedFocusedNode;
-        }
-
-        // Make a list of candidate nodes in the target FocusArea.
-        List<AccessibilityNodeInfo> candidateNodes = new ArrayList<>();
-        addFocusDescendants(targetFocusArea, candidateNodes);
-
-        // Choose the best candidate as the target node.
-        AccessibilityNodeInfo bestCandidate =
-                chooseBestNudgeCandidate(sourceNode, candidateNodes, direction);
-
-        // Save nudge history if we're going to move focus.
-        if (bestCandidate != null) {
-            mRotaryCache.saveTargetFocusArea(
-                    currentFocusArea, targetFocusArea, direction, elapsedRealtime);
-        }
-
-        Utils.recycleNode(currentFocusArea);
-        Utils.recycleNodes(candidateNodes);
-        Utils.recycleNode(targetFocusArea);
-        return bestCandidate;
-    }
-
-    /**
-     * Returns the target focusable for a nudge to the HUN if the HUN is present and the nudge is
-     * in the right direction. The target focusable is chosen as follows:
-     * <ol>
-     *     <li>The best candidate focus area is chosen. If there aren't any valid candidates, the
-     *         first (only) focus area in the HUN is used. This happens when nudging from a view
-     *         obscured by the HUN.
-     *     <li>The focus history is checked. If one of the focusable views in the chosen focus area
-     *         is in the cache, it's returned.
-     *     <li>Finally the best candidate focusable view in the chosen focus area is selected.
-     *         Again, if there aren't any candidates, the first focusable view is chosen.
-     * </ol>
-     * The caller is responsible for recycling the result.
-     *
-     * @param windows    a list of windows to search from
-     * @param sourceNode the current focus
-     * @param direction  nudge direction, must be {@link View#FOCUS_UP}, {@link View#FOCUS_DOWN},
-     *                   {@link View#FOCUS_LEFT}, or {@link View#FOCUS_RIGHT}
-     * @return a view that can take focus (visible, focusable and enabled) within the HUN, or null
-     *         if the HUN isn't present, the nudge isn't in the direction of the HUN, or the HUN
-     *         contains no views that can take focus
-     */
-    @Nullable
-    AccessibilityNodeInfo findHunNudgeTarget(@NonNull List<AccessibilityWindowInfo> windows,
+    AccessibilityNodeInfo findHunFocusArea(@NonNull List<AccessibilityWindowInfo> windows,
             @NonNull AccessibilityNodeInfo sourceNode, int direction) {
         if (direction != mHunNudgeDirection) {
             return null;
@@ -260,38 +100,7 @@ class Navigator {
             targetFocusArea = copyNode(hunFocusAreas.get(0));
         }
         Utils.recycleNodes(hunFocusAreas);
-        if (targetFocusArea == null) {
-            return null;
-        }
-
-        // Save nudge history.
-        AccessibilityNodeInfo currentFocusArea = getAncestorFocusArea(sourceNode);
-        long elapsedRealtime = SystemClock.elapsedRealtime();
-        mRotaryCache.saveTargetFocusArea(
-                currentFocusArea, targetFocusArea, direction, elapsedRealtime);
-
-        // Check the cache to see if a node was focused in the HUN.
-        AccessibilityNodeInfo cachedFocusedNode =
-                mRotaryCache.getFocusedNode(targetFocusArea, elapsedRealtime);
-        if (cachedFocusedNode != null) {
-            Utils.recycleNode(targetFocusArea);
-            Utils.recycleNode(currentFocusArea);
-            return cachedFocusedNode;
-        }
-
-        // Choose the best candidate target node. The HUN may overlap the source node, in which
-        // case the geometric search will fail. The fallback is to use the first focusable node.
-        List<AccessibilityNodeInfo> candidateNodes = new ArrayList<>();
-        addFocusDescendants(targetFocusArea, candidateNodes);
-        AccessibilityNodeInfo bestCandidate =
-                chooseBestNudgeCandidate(sourceNode, candidateNodes, direction);
-        if (bestCandidate == null && !candidateNodes.isEmpty()) {
-            bestCandidate = copyNode(candidateNodes.get(0));
-        }
-        Utils.recycleNodes(candidateNodes);
-        Utils.recycleNode(targetFocusArea);
-        Utils.recycleNode(currentFocusArea);
-        return bestCandidate;
+        return targetFocusArea;
     }
 
     /**
@@ -402,141 +211,56 @@ class Navigator {
         return target == null ? null : new FindRotateTargetResult(target, advancedCount);
     }
 
-    /**
-     * Searches the {@code rootNode} and its descendants in depth-first order, and returns the first
-     * focus descendant (a node inside a focus area that can take focus) if any, or returns null if
-     * not found. The caller is responsible for recycling the result.
-     */
-    AccessibilityNodeInfo findFirstFocusDescendant(@NonNull AccessibilityNodeInfo rootNode) {
-        // First try finding the first focus area and searching forward from the focus area. This
-        // is a quick way to find the first node but it doesn't always work.
-        AccessibilityNodeInfo focusDescendant = findFirstFocus(rootNode);
-        if (focusDescendant != null) {
-            return focusDescendant;
-        }
-
-        // Fall back to tree traversal.
-        L.w("Falling back to tree traversal");
-        focusDescendant = findDepthFirstFocus(rootNode);
-        if (focusDescendant == null) {
-            L.w("No node can take focus in the current window");
-        }
-        return focusDescendant;
-    }
-
     /** Sets a mock Utils instance for testing. */
     @VisibleForTesting
     void setNodeCopier(@NonNull NodeCopier nodeCopier) {
         mNodeCopier = nodeCopier;
         mTreeTraverser.setNodeCopier(nodeCopier);
-        mRotaryCache.setNodeCopier(nodeCopier);
     }
 
     /**
-     * Searches all the nodes in the {@code window}, and returns the node representing a {@link
+     * Searches the window containing {@code node}, and returns the node representing a {@link
      * FocusParkingView}, if any, or returns null if not found. The caller is responsible for
      * recycling the result.
      */
-    AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityWindowInfo window) {
-        AccessibilityNodeInfo root = window.getRoot();
-        if (root == null) {
-            L.e("No root node in " + window);
+    @Nullable
+    AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityWindowInfo window = node.getWindow();
+        if (window == null) {
+            L.w("Failed to get window for node " + node);
             return null;
         }
-        AccessibilityNodeInfo focusParkingView = findFocusParkingView(root);
-        root.recycle();
-        return focusParkingView;
-    }
-
-    /**
-     * Searches the {@code node} and its descendants in depth-first order, and returns the node
-     * representing a {@link FocusParkingView}, if any, or returns null if not found. The caller is
-     * responsible for recycling the result.
-     */
-    private AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityNodeInfo node) {
-        return mTreeTraverser.depthFirstSearch(node, /* skipPredicate= */ Utils::isFocusArea,
+        AccessibilityNodeInfo root = window.getRoot();
+        window.recycle();
+        if (root == null) {
+            L.e("No root node that contains " + node);
+            return null;
+        }
+        AccessibilityNodeInfo fpv = mTreeTraverser.depthFirstSearch(
+                root,
+                /* skipPredicate= */ Utils::isFocusArea,
                 /* targetPredicate= */ Utils::isFocusParkingView);
+        root.recycle();
+        return fpv;
     }
 
     /**
-     * Searches the {@code rootNode} and its descendants in depth-first order for the first focus
-     * area, and returns the first node that can take focus in tab order from the focus area.
-     * The return value could be a node inside or outside the first focus area, or null if not
-     * found. The caller is responsible for recycling result.
-     */
-    private AccessibilityNodeInfo findFirstFocus(@NonNull AccessibilityNodeInfo rootNode) {
-        AccessibilityNodeInfo focusArea = findFirstFocusArea(rootNode);
-        if (focusArea == null) {
-            L.w("No FocusArea in the tree");
-            // rootNode is an implicit focus area if no explicit FocusAreas are specified.
-            focusArea = copyNode(rootNode);
-        }
-
-        AccessibilityNodeInfo targetNode = focusArea.focusSearch(View.FOCUS_FORWARD);
-        AccessibilityNodeInfo firstTarget = copyNode(targetNode);
-        // focusSearch() searches in the active window, which has at least one FocusParkingView. We
-        // need to skip it.
-        while (targetNode != null && Utils.isFocusParkingView(targetNode)) {
-            L.d("Found FocusParkingView, continue focusSearch() ...");
-            AccessibilityNodeInfo nextTargetNode = targetNode.focusSearch(View.FOCUS_FORWARD);
-            targetNode.recycle();
-            targetNode = nextTargetNode;
-
-            // If we found the same FocusParkingView again, it means all the focusable views in
-            // current window are FocusParkingViews, so we should just return null.
-            if (firstTarget.equals(targetNode)) {
-                L.w("Stop focusSearch() because there is no view to take focus except "
-                        + "FocusParkingViews");
-                Utils.recycleNode(targetNode);
-                targetNode = null;
-                break;
-            }
-        }
-        Utils.recycleNode(firstTarget);
-        focusArea.recycle();
-        return targetNode;
-    }
-
-    /**
-     * Searches the given {@code node} and its descendants in depth-first order, and returns the
-     * first {@link FocusArea}, or returns null if not found. The caller is responsible for
-     * recycling the result.
-     */
-    private AccessibilityNodeInfo findFirstFocusArea(@NonNull AccessibilityNodeInfo node) {
-        return mTreeTraverser.depthFirstSearch(node, Utils::isFocusArea);
-    }
-
-    /**
-     * Searches the given {@code node} and its descendants in depth-first order, and returns the
-     * first node that can take focus, or returns null if not found. The caller is responsible for
-     * recycling result.
-     */
-    private AccessibilityNodeInfo findDepthFirstFocus(@NonNull AccessibilityNodeInfo node) {
-        return mTreeTraverser.depthFirstSearch(node, Utils::canTakeFocus);
-    }
-
-    /**
-     * Returns the target focus area for a nudge in the given {@code direction} from the current
-     * focus, or null if not found. Checks the cache first. If nothing is found in the cache,
-     * returns the best nudge target from among all the candidate focus areas. The caller is
-     * responsible for updating the cache and recycling the result.
+     * Returns the best target focus area for a nudge in the given {@code direction}. The caller is
+     * responsible for recycling the result.
+     *
+     * @param windows          a list of windows to search from
+     * @param sourceNode       the current focus
+     * @param currentFocusArea the current focus area
+     * @param direction        nudge direction, must be {@link View#FOCUS_UP}, {@link
+     *                         View#FOCUS_DOWN}, {@link View#FOCUS_LEFT}, or {@link
+     *                         View#FOCUS_RIGHT}
      */
     AccessibilityNodeInfo findNudgeTargetFocusArea(
             @NonNull List<AccessibilityWindowInfo> windows,
-            @NonNull AccessibilityNodeInfo focusedNode,
+            @NonNull AccessibilityNodeInfo sourceNode,
             @NonNull AccessibilityNodeInfo currentFocusArea,
             int direction) {
-        long elapsedRealtime = SystemClock.elapsedRealtime();
-        // If there is a target focus area in the cache, returns it.
-        AccessibilityNodeInfo cachedTargetFocusArea =
-                mRotaryCache.getTargetFocusArea(currentFocusArea, direction, elapsedRealtime);
-        if (cachedTargetFocusArea != null && Utils.canHaveFocus(cachedTargetFocusArea)) {
-            return cachedTargetFocusArea;
-        }
-        Utils.recycleNode(cachedTargetFocusArea);
-
-        // No target focus area in the cache; we need to search the node tree to find it.
-        AccessibilityWindowInfo currentWindow = focusedNode.getWindow();
+        AccessibilityWindowInfo currentWindow = sourceNode.getWindow();
         if (currentWindow == null) {
             L.e("Currently focused window is null");
             return null;
@@ -569,7 +293,7 @@ class Navigator {
 
         // Choose the best candidate as our target focus area.
         AccessibilityNodeInfo targetFocusArea =
-                chooseBestNudgeCandidate(focusedNode, candidateFocusAreas, direction);
+                chooseBestNudgeCandidate(sourceNode, candidateFocusAreas, direction);
         Utils.recycleNodes(candidateFocusAreas);
         return targetFocusArea;
     }
@@ -655,7 +379,7 @@ class Navigator {
      * HUN appears at the top or bottom of the screen and on the height of the notification being
      * displayed so they aren't used.
      */
-    boolean isHunWindow(@NonNull AccessibilityWindowInfo window) {
+    private boolean isHunWindow(@NonNull AccessibilityWindowInfo window) {
         if (window.getType() != AccessibilityWindowInfo.TYPE_SYSTEM) {
             return false;
         }
@@ -748,29 +472,6 @@ class Navigator {
     private void addFocusAreas(@NonNull AccessibilityNodeInfo rootNode,
             @NonNull List<AccessibilityNodeInfo> results) {
         mTreeTraverser.depthFirstSelect(rootNode, Utils::isFocusArea, results);
-    }
-
-    /**
-     * Adds the given {@code node} and all its focus descendants (nodes that can take focus) to the
-     * given list. The caller is responsible for recycling added nodes.
-     */
-    private void addFocusDescendants(@NonNull AccessibilityNodeInfo node,
-            @NonNull List<AccessibilityNodeInfo> results) {
-        // Include off-screen nodes within a WebView.
-        if (Utils.isWebView(node)) {
-            mTreeTraverser.depthFirstSelect(node, Utils::canPerformFocus, results);
-            return;
-        }
-
-        if (Utils.canTakeFocus(node)) {
-            results.add(node);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo child = node.getChild(i);
-            if (child != null) {
-                addFocusDescendants(child, results);
-            }
-        }
     }
 
     /**
@@ -873,7 +574,7 @@ class Navigator {
      */
     @NonNull
     AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
-        NodePredicate isFocusAreaOrRoot = candidateNode -> {
+        Predicate<AccessibilityNodeInfo> isFocusAreaOrRoot = candidateNode -> {
             if (Utils.isFocusArea(candidateNode)) {
                 // The candidateNode is a focus area.
                 return true;
