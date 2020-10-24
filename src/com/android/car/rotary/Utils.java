@@ -317,7 +317,8 @@ final class Utils {
             bounds.bottom -= bundle.getInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET);
         } else if (Utils.isRotaryContainer(node)) {
             // For a rotary container, the bounds used for finding the nudge target are the
-            // minimum bounds containing its children.
+            // intersection of the two bounds: (1) minimum bounds containing its children, and
+            // (2) its ancestor FocusArea's bounds, if any.
             bounds.setEmpty();
             Rect childBounds = new Rect();
             for (int i = 0; i < node.getChildCount(); i++) {
@@ -328,7 +329,27 @@ final class Utils {
                     bounds.union(childBounds);
                 }
             }
+            AccessibilityNodeInfo focusArea = getAncestorFocusArea(node);
+            if (focusArea != null) {
+                Rect focusAreaBounds = getBoundsInScreen(focusArea);
+                bounds.setIntersect(bounds, focusAreaBounds);
+                focusArea.recycle();
+            }
         }
         return bounds;
+    }
+
+    @Nullable
+    private static AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo ancestor = node.getParent();
+        while (ancestor != null) {
+            if (isFocusArea(ancestor)) {
+                return ancestor;
+            }
+            AccessibilityNodeInfo nextAncestor = ancestor.getParent();
+            ancestor.recycle();
+            ancestor = nextAncestor;
+        }
+        return null;
     }
 }
