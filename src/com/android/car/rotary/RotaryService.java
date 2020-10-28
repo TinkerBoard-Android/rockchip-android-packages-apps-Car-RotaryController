@@ -346,6 +346,11 @@ public class RotaryService extends AccessibilityService implements
         if (isValidIme(defaultTouchInputMethod)) {
             mTouchInputMethod = mPrefs.getString(
                 TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(), defaultTouchInputMethod);
+            // Set the DEFAULT_INPUT_METHOD in case Android defaults to the rotary_input_method.
+            // TODO(b/169423887): Figure out how to configure the default IME through Android
+            // without needing to do this.
+            Settings.Secure.putString(
+                    getContentResolver(), DEFAULT_INPUT_METHOD, mTouchInputMethod);
         }
         String rotaryInputMethod = res.getString(R.string.rotary_input_method);
         if (isValidIme(rotaryInputMethod)) {
