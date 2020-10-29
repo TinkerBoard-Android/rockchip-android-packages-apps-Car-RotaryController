@@ -16,11 +16,11 @@
 
 package com.android.car.rotary;
 
-import static com.android.car.ui.utils.RotaryConstants.ROTARY_CONTAINER;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_CONTAINER;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_HORIZONTALLY_SCROLLABLE;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
@@ -55,6 +55,10 @@ final class Utils {
     static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
     @VisibleForTesting
     static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+    @VisibleForTesting
+    static final String GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME =
+            "com.android.car.rotary.FocusParkingView";
+
     private static final String WEB_VIEW_CLASS_NAME = WebView.class.getName();
 
     private Utils() {
@@ -177,10 +181,26 @@ final class Utils {
         return false;
     }
 
-    /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
+    /**
+     * Returns whether the given {@code node} represents a car ui lib {@link FocusParkingView} or a
+     * generic FocusParkingView.
+     */
     static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        return isCarUiFocusParkingView(node) || isGenericFocusParkingView(node);
+    }
+    /** Returns whether the given {@code node} represents a car ui lib {@link FocusParkingView}. */
+    static boolean isCarUiFocusParkingView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
         return className != null && FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
+    }
+
+    /**
+     * Returns whether the given {@code node} represents a generic FocusParkingView (primarily used
+     * as a fallback for potential apps that are not using Chassis).
+     */
+    static boolean isGenericFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
     }
 
     /** Returns whether the given {@code node} represents a {@link FocusArea}. */

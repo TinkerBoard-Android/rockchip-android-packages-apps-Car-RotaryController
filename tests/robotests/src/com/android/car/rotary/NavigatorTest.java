@@ -137,6 +137,38 @@ public class NavigatorTest {
     /**
      * Tests {@link Navigator#findRotateTarget} in the following node tree:
      * <pre>
+     *                     root
+     *                    /    \
+     *                   /      \
+     *           focusArea  genericFocusParkingView
+     *            /    \
+     *           /      \
+     *       button1  button2
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetNoWrapAroundWithGenericFpv() {
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo focusArea = mNodeBuilder.setParent(root).setFocusArea().build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(focusArea).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(focusArea).build();
+
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(
+                root).setGenericFpv().build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(focusParkingView);
+        when(focusParkingView.focusSearch(direction)).thenReturn(button1);
+
+        // Rotate at the end of focus area, no wrap-around should happen.
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
+        assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
      *                          root
      *                         /  |  \
      *                       /    |    \
@@ -150,6 +182,34 @@ public class NavigatorTest {
         AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(root).setFpv().build();
         AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
         AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+
+        int direction = View.FOCUS_FORWARD;
+        when(button1.focusSearch(direction)).thenReturn(button2);
+        when(button2.focusSearch(direction)).thenReturn(focusParkingView);
+        when(focusParkingView.focusSearch(direction)).thenReturn(button1);
+
+        // Rotate at the end of focus area, no wrap-around should happen.
+        FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
+        assertThat(target).isNull();
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
+     *                          root
+     *                         /  |  \
+     *                       /    |    \
+     *                     /      |      \
+     *              button1   button2  genericFocusParkingView
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetNoWrapAround2WithGenericFpv() {
+        AccessibilityNodeInfo root = mNodeBuilder.build();
+        AccessibilityNodeInfo button1 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo button2 = mNodeBuilder.setParent(root).build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder.setParent(
+                root).setGenericFpv().build();
 
         int direction = View.FOCUS_FORWARD;
         when(button1.focusSearch(direction)).thenReturn(button2);
