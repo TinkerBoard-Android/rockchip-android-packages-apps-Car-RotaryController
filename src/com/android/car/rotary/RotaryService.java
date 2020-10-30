@@ -57,8 +57,8 @@ import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.res.Resources;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
@@ -128,6 +128,13 @@ public class RotaryService extends AccessibilityService implements
      * debug build.
      */
     private static final int SHIFT_DETENTS = 10;
+
+    /**
+     * A value to indicate that it isn't one of the nudge directions. (i.e.
+     * {@link View#FOCUS_LEFT}, {@link View#FOCUS_UP}, {@link View#FOCUS_RIGHT}, or
+     * {@link View#FOCUS_DOWN}).
+     */
+    private static final int INVALID_NUDGE_DIRECTION = -1;
 
     private static final String SHARED_PREFS = "com.android.car.rotary.RotaryService";
     private static final String TOUCH_INPUT_METHOD_PREFIX = "TOUCH_INPUT_METHOD_";
@@ -213,6 +220,13 @@ public class RotaryService extends AccessibilityService implements
 
     private SharedPreferences mPrefs;
     private UserManager mUserManager;
+
+    /**
+     * The direction of the HUN. If there is no focused node, or the focused node is outside the
+     * HUN, nudging to this direction will focus on a node inside the HUN.
+     */
+    @View.FocusRealDirection
+    private int mHunNudgeDirection;
 
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
@@ -331,6 +345,7 @@ public class RotaryService extends AccessibilityService implements
         int displayWidth = windowManager.getCurrentWindowMetrics().getBounds().width();
         int hunRight = displayWidth - hunMarginHorizontal;
         boolean showHunOnBottom = res.getBoolean(R.bool.config_showHeadsUpNotificationOnBottom);
+        mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
 
         mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
         mAfterScrollTimeoutMs = res.getInteger(R.integer.after_scroll_timeout_ms);
@@ -1015,17 +1030,19 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
+        List<AccessibilityWindowInfo> windows = getWindows();
+
         // Don't call initFocus() when handling ACTION_UP nudge events as this event will typically
         // arrive before the TYPE_VIEW_FOCUSED event when we delegate focusing to a FocusArea, and
         // will cause us to focus a nearby view when we discover that mFocusedNode is no longer
         // focused.
-        if (initFocus()) {
+        if (initFocus(windows, direction)) {
+            Utils.recycleWindows(windows);
             return;
         }
 
         // If the focused node is not in direct manipulation mode, try to move the focus to another
         // node.
-        List<AccessibilityWindowInfo> windows = getWindows();
         boolean success = nudgeTo(windows, direction);
         Utils.recycleWindows(windows);
 
@@ -1390,6 +1407,21 @@ public class RotaryService extends AccessibilityService implements
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
     private boolean initFocus() {
+        return initFocus(null, INVALID_NUDGE_DIRECTION);
+    }
+
+    /**
+     * Similar to above, but also checks for heads-up notifications if given a valid nudge direction
+     * which may be relevant when we're trying to focus the HUNs when coming from touch mode.
+     *
+     * @param windows the windows currently available to the Accessibility Service
+     * @param direction the direction of the nudge that was received (can be
+     *                  {@link #INVALID_NUDGE_DIRECTION})
+     * @return whether the event was consumed by this method. When {@code false},
+     *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
+     */
+    private boolean initFocus(@Nullable List<AccessibilityWindowInfo> windows, int direction) {
+        boolean prevInRotaryMode = mInRotaryMode;
         refreshSavedNodes();
         setInRotaryMode(true);
         if (mFocusedNode != null) {
@@ -1408,6 +1440,14 @@ public class RotaryService extends AccessibilityService implements
             // focused any more. In this case we should set mFocusedNode to null.
             setFocusedNode(null);
         }
+
+        // If we were not in rotary mode before and we can focus the HUNs window for the given
+        // nudge, focus the window and ensure that there is no previously touched node.
+        if (!prevInRotaryMode && windows != null && focusHunsWindow(windows, direction)) {
+            setLastTouchedNode(null);
+            return true;
+        }
+
         if (mLastTouchedNode != null && focusLastTouchedNode()) {
             return true;
         }
@@ -1485,6 +1525,30 @@ public class RotaryService extends AccessibilityService implements
         }
         fpv.recycle();
         return result;
+    }
+
+    private boolean focusHunsWindow(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+        if (direction != mHunNudgeDirection) {
+            return false;
+        }
+
+        AccessibilityWindowInfo hunWindow = mNavigator.findHunWindow(windows);
+        if (hunWindow == null) {
+            L.d("No HUN window to focus");
+            return false;
+        }
+
+        AccessibilityNodeInfo hunRoot = hunWindow.getRoot();
+        if (hunRoot == null) {
+            L.d("No root in HUN Window to focus");
+            return false;
+        }
+
+        boolean success = restoreDefaultFocus(hunRoot);
+        hunRoot.recycle();
+        hunWindow.recycle();
+        L.d("HUN window focus " + (success ? "successful" : "failed"));
+        return success;
     }
 
     /**

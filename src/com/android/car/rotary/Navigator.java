@@ -78,13 +78,7 @@ class Navigator {
         }
 
         // Find the HUN window, if any.
-        AccessibilityWindowInfo hunWindow = null;
-        for (AccessibilityWindowInfo window : windows) {
-            if (isHunWindow(window)) {
-                hunWindow = window;
-                break;
-            }
-        }
+        AccessibilityWindowInfo hunWindow = findHunWindow(windows);
         if (hunWindow == null) {
             return null;
         }
@@ -101,6 +95,16 @@ class Navigator {
         }
         Utils.recycleNodes(hunFocusAreas);
         return targetFocusArea;
+    }
+
+    @Nullable
+    AccessibilityWindowInfo findHunWindow(@NonNull List<AccessibilityWindowInfo> windows) {
+        for (AccessibilityWindowInfo window : windows) {
+            if (isHunWindow(window)) {
+                return window;
+            }
+        }
+        return null;
     }
 
     /**
