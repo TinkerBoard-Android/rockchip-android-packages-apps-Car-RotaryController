@@ -20,8 +20,8 @@ android_app {
     // Because it uses a platform API (CarInputManager).
     platform_apis: true,
 
-    // This app should be platform signed because it requires android.permission.MONITOR_INPUT
-    // permission, which is of type "signature".
+    // This app should be platform signed because it requires
+    // android.car.permission.CAR_MONITOR_INPUT permission, which is of type "signature".
     certificate: "platform",
 
     optimize: {

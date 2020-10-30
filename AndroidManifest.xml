@@ -17,14 +17,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.android.car.rotary">
 
-    <!-- Allows input events to be monitored by us. -->
-    <uses-permission android:name="android.permission.MONITOR_INPUT"
-                     android:protectionLevel="signature"/>
+    <!-- Allows car input events to be monitored by us. -->
+    <uses-permission android:name="android.car.permission.CAR_MONITOR_INPUT"/>
 
     <!-- Allows us to inject input events (such as KeyEvent and MotionEvent) into the event stream
          and deliver them. -->
-    <uses-permission android:name="android.permission.INJECT_EVENTS"
-                     android:protectionLevel="signature"/>
+    <uses-permission android:name="android.permission.INJECT_EVENTS"/>
 
     <!-- Allows us to toggle between touch and rotary IME. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/>
