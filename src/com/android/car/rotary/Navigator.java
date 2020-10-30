@@ -166,8 +166,7 @@ class Navigator {
                 //    we want to focus on container and scroll it, we won't skip the container.
                 if (!Utils.canPerformFocus(nextCandidate)
                         || (Utils.isScrollableContainer(nextCandidate)
-                            && (!nextCandidate.isScrollable()
-                                || Utils.descendantCanTakeFocus(nextCandidate)))) {
+                            && !Utils.canScrollableContainerTakeFocus(nextCandidate))) {
                     Utils.recycleNode(candidate);
                     Utils.recycleNode(candidateFocusArea);
                     candidate = nextCandidate;
