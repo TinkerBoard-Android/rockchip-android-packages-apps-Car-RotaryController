@@ -382,7 +382,7 @@ class Navigator {
      * HUN appears at the top or bottom of the screen and on the height of the notification being
      * displayed so they aren't used.
      */
-    private boolean isHunWindow(@NonNull AccessibilityWindowInfo window) {
+    boolean isHunWindow(@NonNull AccessibilityWindowInfo window) {
         if (window.getType() != AccessibilityWindowInfo.TYPE_SYSTEM) {
             return false;
         }

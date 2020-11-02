@@ -227,6 +227,14 @@ public class RotaryService extends AccessibilityService implements
     private int mHunNudgeDirection;
 
     /**
+     * The direction to escape the HUN. If the focused node is inside the HUN, nudging to this
+     * direction will move focus to a node outside the HUN, while nudging to other directions
+     * will do nothing.
+     */
+    @View.FocusRealDirection
+    private int mHunEscapeNudgeDirection;
+
+    /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
      *
      * @see #injectScrollEvent
@@ -344,6 +352,7 @@ public class RotaryService extends AccessibilityService implements
         int hunRight = displayWidth - hunMarginHorizontal;
         boolean showHunOnBottom = res.getBoolean(R.bool.config_showHeadsUpNotificationOnBottom);
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
+        mHunEscapeNudgeDirection = showHunOnBottom ? View.FOCUS_UP : View.FOCUS_DOWN;
 
         mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
         mAfterScrollTimeoutMs = res.getInteger(R.integer.after_scroll_timeout_ms);
@@ -1039,6 +1048,14 @@ public class RotaryService extends AccessibilityService implements
         // will cause us to focus a nearby view when we discover that mFocusedNode is no longer
         // focused.
         if (initFocus(windows, direction)) {
+            Utils.recycleWindows(windows);
+            return;
+        }
+
+        // If the HUN is currently focused, we should only handle nudge events that are in the
+        // opposite direction of the HUN nudge direction.
+        if (mNavigator.isHunWindow(mFocusedNode.getWindow())
+                && direction != mHunEscapeNudgeDirection) {
             Utils.recycleWindows(windows);
             return;
         }
