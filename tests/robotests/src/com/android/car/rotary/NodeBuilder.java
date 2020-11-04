@@ -19,6 +19,7 @@ import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDO
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
 import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.rotary.Utils.GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
@@ -242,6 +243,10 @@ class NodeBuilder {
 
     NodeBuilder setFpv() {
         return setClassName(FOCUS_PARKING_VIEW_CLASS_NAME);
+    }
+
+    NodeBuilder setGenericFpv() {
+        return setClassName(GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME);
     }
 
     NodeBuilder setScrollableContainer() {

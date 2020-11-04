@@ -949,8 +949,29 @@ public class RotaryService extends AccessibilityService implements
             L.e("No FocusParkingView in the window containing " + node);
             return false;
         }
-        boolean result = fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS);
+
+        if (Utils.isCarUiFocusParkingView(fpv)) {
+            boolean result = fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS);
+            fpv.recycle();
+            return result;
+        }
+
+        AccessibilityWindowInfo w = fpv.getWindow();
         fpv.recycle();
+        if (w == null) {
+            L.e("No window found for the generic FocusParkingView");
+            return false;
+        }
+        AccessibilityNodeInfo root = w.getRoot();
+        w.recycle();
+        AccessibilityNodeInfo firstFocusable = mNavigator.findFirstFocusableDescendant(root);
+        root.recycle();
+        if (firstFocusable == null) {
+            L.e("No focusable element in the window containing the generic FocusParkingView");
+            return false;
+        }
+        boolean result = firstFocusable.performAction(ACTION_FOCUS);
+        firstFocusable.recycle();
         return result;
     }
 

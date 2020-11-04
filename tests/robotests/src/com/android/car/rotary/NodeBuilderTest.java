@@ -19,6 +19,7 @@ import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityActi
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
 import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.rotary.Utils.GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
@@ -183,6 +184,12 @@ public class NodeBuilderTest {
     public void testSetFpv() {
         AccessibilityNodeInfo node = mNodeBuilder.setFpv().build();
         assertThat(node.getClassName().toString()).isEqualTo(FOCUS_PARKING_VIEW_CLASS_NAME);
+    }
+
+    @Test
+    public void testSetGenericFpv() {
+        AccessibilityNodeInfo node = mNodeBuilder.setGenericFpv().build();
+        assertThat(node.getClassName().toString()).isEqualTo(GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME);
     }
 
     @Test
