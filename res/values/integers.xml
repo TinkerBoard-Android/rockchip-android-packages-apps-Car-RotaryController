@@ -30,4 +30,10 @@
     <integer name="ignore_view_clicked_ms">200</integer>
     <!-- How many milliseconds to wait for TYPE_VIEW_SCROLLED events after scrolling. -->
     <integer name="after_scroll_timeout_ms">200</integer>
+
+    <!-- How many milliseconds to wait for TYPE_VIEW_FOCUSED events after performing ACTION_FOCUS or
+    another actions which changes the focus. When rotating quickly, Android may take a while to send
+    these events so this needs to be fairly long.
+    -->
+    <integer name="after_focus_timeout_ms">60000</integer>
 </resources>
