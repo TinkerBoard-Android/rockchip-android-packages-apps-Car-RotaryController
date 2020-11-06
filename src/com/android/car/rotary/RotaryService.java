@@ -436,10 +436,11 @@ public class RotaryService extends AccessibilityService implements
                     if (ready) {
                         mCarInputManager =
                                 (CarInputManager) mCar.getCarManager(Car.CAR_INPUT_SERVICE);
-                        mCarInputManager.requestInputEventCapture(this,
+                        mCarInputManager.requestInputEventCapture(
                                 CarOccupantZoneManager.DISPLAY_TYPE_MAIN,
                                 mInputTypes,
-                                CarInputManager.CAPTURE_REQ_FLAGS_ALLOW_DELAYED_GRANT);
+                                CarInputManager.CAPTURE_REQ_FLAGS_ALLOW_DELAYED_GRANT,
+                                /* callback= */ this);
                     }
                 });
 
