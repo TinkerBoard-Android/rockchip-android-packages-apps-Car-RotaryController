@@ -1477,6 +1477,8 @@ public class RotaryService extends AccessibilityService implements
      * following:<ol>
      *     <li>If {@link #mFocusedNode} isn't null and represents a view that still exists, does
      *         nothing. The event isn't consumed in this case. This is the normal case.
+     *     <li>If there is a non-FocusParkingView focused in any window, set mFocusedNode to that
+     *         view.
      *     <li>If {@link #mLastTouchedNode} isn't null and represents a view that still exists,
      *         focuses it. The event is consumed in this case. This happens when the user switches
      *         from touch to rotary.
@@ -1487,7 +1489,10 @@ public class RotaryService extends AccessibilityService implements
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
     private boolean initFocus() {
-        return initFocus(null, INVALID_NUDGE_DIRECTION);
+        List<AccessibilityWindowInfo> windows = getWindows();
+        boolean consumed = initFocus(windows, INVALID_NUDGE_DIRECTION);
+        Utils.recycleWindows(windows);
+        return consumed;
     }
 
     /**
@@ -1500,7 +1505,7 @@ public class RotaryService extends AccessibilityService implements
      * @return whether the event was consumed by this method. When {@code false},
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
-    private boolean initFocus(@Nullable List<AccessibilityWindowInfo> windows, int direction) {
+    private boolean initFocus(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
         boolean prevInRotaryMode = mInRotaryMode;
         refreshSavedNodes();
         setInRotaryMode(true);
@@ -1526,6 +1531,20 @@ public class RotaryService extends AccessibilityService implements
         if (!prevInRotaryMode && windows != null && focusHunsWindow(windows, direction)) {
             setLastTouchedNode(null);
             return true;
+        }
+
+        // If there is a non-FocusParkingView focused in any window, set mFocusedNode to that view.
+        for (AccessibilityWindowInfo window : windows) {
+            AccessibilityNodeInfo root = window.getRoot();
+            if (root != null) {
+                AccessibilityNodeInfo focusedNode = root.findFocus(FOCUS_INPUT);
+                root.recycle();
+                if (focusedNode != null && !Utils.isFocusParkingView(focusedNode)) {
+                    setFocusedNode(focusedNode);
+                    focusedNode.recycle();
+                    return false;
+                }
+            }
         }
 
         if (mLastTouchedNode != null && focusLastTouchedNode()) {
