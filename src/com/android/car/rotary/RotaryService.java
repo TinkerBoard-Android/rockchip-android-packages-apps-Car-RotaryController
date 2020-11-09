@@ -752,29 +752,34 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // If it's a FocusParkingView, only update mFocusedNode when it's in the same window
-        // with mFocusedNode.
-        if (Utils.isFocusParkingView(sourceNode)) {
-            if (mFocusedNode != null && sourceNode.getWindowId() == mFocusedNode.getWindowId()) {
-                setFocusedNode(null);
-            }
-            return;
-        }
-
-        // If it's not a FocusParkingView, update mFocusedNode unless this event is a result of
-        // performing ACTION_FOCUS. However, after performing ACTION_FOCUS on a FocusArea, the
-        // actual node that gets focused will be a descendant of the FocusArea. In this case,
-        // mFocusedNode is updated unless the focus has since moved.
+        // Update mFocusedNode if we're not waiting for focused event caused by performing an
+        // action.
         refreshPendingFocusedNode();
         if (mPendingFocusedNode == null) {
             L.d("Focus event wasn't caused by performing an action");
+            // If it's a FocusParkingView, only update mFocusedNode when it's in the same window
+            // with mFocusedNode.
+            if (Utils.isFocusParkingView(sourceNode)) {
+                if (mFocusedNode != null
+                        && sourceNode.getWindowId() == mFocusedNode.getWindowId()) {
+                    setFocusedNode(null);
+                }
+                return;
+            }
+            // If it's not a FocusParkingView, update mFocusedNode.
             setFocusedNode(sourceNode);
             return;
         }
+
+        // If we're waiting for focused event but this isn't the one we're waiting for, ignore this
+        // event. This event doesn't matter because focus has moved from sourceNode to
+        // mPendingFocusedNode.
         if (!sourceNode.equals(mPendingFocusedNode)) {
             L.d("Ignoring focus event because focus has since moved");
             return;
         }
+
+        // The event we're waiting for has arrived, so reset mPendingFocusedNode.
         L.d("Ignoring focus event caused by performing an action");
         setPendingFocusedNode(null);
     }
@@ -1618,7 +1623,7 @@ public class RotaryService extends AccessibilityService implements
             L.d("FocusParkingView is already focused " + fpv);
             return true;
         }
-        boolean result = fpv.performAction(ACTION_FOCUS);
+        boolean result = performFocusAction(fpv);
         if (!result) {
             L.w("Failed to perform ACTION_FOCUS on " + fpv);
         }
@@ -1919,7 +1924,7 @@ public class RotaryService extends AccessibilityService implements
         }
 
         // Update mFocusedNode and mPendingFocusedNode.
-        setFocusedNode(targetNode);
+        setFocusedNode(Utils.isFocusParkingView(targetNode) ? null : targetNode);
         setPendingFocusedNode(targetNode);
         return true;
     }
