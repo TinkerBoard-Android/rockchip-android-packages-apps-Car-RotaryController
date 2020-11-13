@@ -1526,9 +1526,6 @@ public class RotaryService extends AccessibilityService implements
             if (mNavigator.isInWebView(mFocusedNode)) {
                 return false;
             }
-            // mFocusedNode is still in the view tree, but its state has changed and it's not
-            // focused any more. In this case we should set mFocusedNode to null.
-            setFocusedNode(null);
         }
 
         // If we were not in rotary mode before and we can focus the HUNs window for the given
