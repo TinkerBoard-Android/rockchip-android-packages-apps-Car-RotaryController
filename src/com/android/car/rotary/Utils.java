@@ -373,4 +373,19 @@ final class Utils {
         }
         return null;
     }
+
+    /**
+     * Returns the root node in the tree containing {@code node}. Returns null if unable to get
+     * the root node for any reason. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    static AccessibilityNodeInfo getRoot(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityWindowInfo window = node.getWindow();
+        if (window == null) {
+            return null;
+        }
+        AccessibilityNodeInfo root = window.getRoot();
+        window.recycle();
+        return root;
+    }
 }
