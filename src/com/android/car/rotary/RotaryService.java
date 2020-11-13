@@ -1164,7 +1164,11 @@ public class RotaryService extends AccessibilityService implements
         arguments.putInt(NUDGE_DIRECTION, direction);
         if (mFocusArea.performAction(ACTION_NUDGE_SHORTCUT, arguments)) {
             L.d("Nudge to shortcut view");
-            findFocusedNode(mFocusArea);
+            AccessibilityNodeInfo root = Utils.getRoot(mFocusArea);
+            if (root != null) {
+                findFocusedNode(root);
+                root.recycle();
+            }
             return true;
         }
 
@@ -1174,7 +1178,11 @@ public class RotaryService extends AccessibilityService implements
         arguments.putInt(NUDGE_DIRECTION, direction);
         if (mFocusArea.performAction(ACTION_NUDGE_TO_ANOTHER_FOCUS_AREA, arguments)) {
             L.d("Nudge to user specified FocusArea");
-            findFocusedNode(mFocusArea);
+            AccessibilityNodeInfo root = Utils.getRoot(mFocusArea);
+            if (root != null) {
+                findFocusedNode(root);
+                root.recycle();
+            }
             return true;
         }
 
@@ -1269,7 +1277,7 @@ public class RotaryService extends AccessibilityService implements
                     mNavigator.findScrollableContainer(mFocusedNode);
             if (scrollableContainer != null) {
                 injectScrollEvent(scrollableContainer, clockwise, remainingRotationCount);
-                scrollableContainer.recycle();;
+                scrollableContainer.recycle();
             }
         }
     }
