@@ -28,6 +28,7 @@
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/>
 
     <!-- Allows us to have an overlay to capture touch events. -->
+    <uses-permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
     <!-- Allows us to get the username of the current user. -->
