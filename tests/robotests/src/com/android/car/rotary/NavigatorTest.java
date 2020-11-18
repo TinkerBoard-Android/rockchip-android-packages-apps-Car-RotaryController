@@ -48,8 +48,9 @@ public class NavigatorTest {
     public void setUp() {
         mHunWindowBounds = new Rect(50, 10, 950, 200);
         mNodeBuilder = new NodeBuilder(new ArrayList<>());
-        mNavigator = new Navigator(mHunWindowBounds.left, mHunWindowBounds.right,
-                /* showHunOnBottom= */ false);
+        // The values of displayWidth and displayHeight don't affect the test, so just use 0.
+        mNavigator = new Navigator(/* displayWidth= */ 0, /* displayHeight= */ 0,
+                mHunWindowBounds.left, mHunWindowBounds.right,/* showHunOnBottom= */ false);
         mNavigator.setNodeCopier(MockNodeCopierProvider.get());
     }
 
