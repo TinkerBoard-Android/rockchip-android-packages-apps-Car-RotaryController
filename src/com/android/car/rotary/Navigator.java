@@ -59,44 +59,6 @@ class Navigator {
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
     }
 
-    /**
-     * Returns a target node representing a HUN FocusArea for a nudge in {@code direction}. The
-     * caller is responsible for recycling the result.
-     *
-     * @param windows    a list of windows to search from
-     * @param sourceNode the current focus
-     * @param direction  nudge direction, must be {@link View#FOCUS_UP}, {@link View#FOCUS_DOWN},
-     *                   {@link View#FOCUS_LEFT}, or {@link View#FOCUS_RIGHT}
-     * @return a node representing a HUN FocusArea, or null if the HUN isn't present, the nudge
-     *         isn't in the direction of the HUN, or the HUN contains no views that can take focus
-     */
-    @Nullable
-    AccessibilityNodeInfo findHunFocusArea(@NonNull List<AccessibilityWindowInfo> windows,
-            @NonNull AccessibilityNodeInfo sourceNode, int direction) {
-        if (direction != mHunNudgeDirection) {
-            return null;
-        }
-
-        // Find the HUN window, if any.
-        AccessibilityWindowInfo hunWindow = findHunWindow(windows);
-        if (hunWindow == null) {
-            return null;
-        }
-
-        // Find the target focus area within the HUN. The HUN may overlap the source node, in which
-        // case the geometric search will fail. The fallback is to use the first (typically only)
-        // focus area.
-        List<AccessibilityNodeInfo> hunFocusAreas = findFocusAreas(hunWindow);
-        removeEmptyFocusAreas(hunFocusAreas);
-        AccessibilityNodeInfo targetFocusArea =
-                chooseBestNudgeCandidate(sourceNode, hunFocusAreas, direction);
-        if (targetFocusArea == null && !hunFocusAreas.isEmpty()) {
-            targetFocusArea = copyNode(hunFocusAreas.get(0));
-        }
-        Utils.recycleNodes(hunFocusAreas);
-        return targetFocusArea;
-    }
-
     @Nullable
     AccessibilityWindowInfo findHunWindow(@NonNull List<AccessibilityWindowInfo> windows) {
         for (AccessibilityWindowInfo window : windows) {
