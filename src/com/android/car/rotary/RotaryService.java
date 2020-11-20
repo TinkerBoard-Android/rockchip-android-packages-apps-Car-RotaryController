@@ -63,6 +63,7 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.os.Build;
@@ -366,7 +367,9 @@ public class RotaryService extends AccessibilityService implements
                 res.getDimensionPixelSize(R.dimen.notification_headsup_card_margin_horizontal);
         int hunLeft = hunMarginHorizontal;
         WindowManager windowManager = getSystemService(WindowManager.class);
-        int displayWidth = windowManager.getCurrentWindowMetrics().getBounds().width();
+        Rect displayBounds = windowManager.getCurrentWindowMetrics().getBounds();
+        int displayWidth = displayBounds.width();
+        int displayHeight = displayBounds.height();
         int hunRight = displayWidth - hunMarginHorizontal;
         boolean showHunOnBottom = res.getBoolean(R.bool.config_showHeadsUpNotificationOnBottom);
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
@@ -375,7 +378,7 @@ public class RotaryService extends AccessibilityService implements
         mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
         mAfterScrollTimeoutMs = res.getInteger(R.integer.after_scroll_timeout_ms);
 
-        mNavigator = new Navigator(hunLeft, hunRight, showHunOnBottom);
+        mNavigator = new Navigator(displayWidth, displayHeight, hunLeft, hunRight, showHunOnBottom);
 
         mPrefs = createDeviceProtectedStorageContext().getSharedPreferences(SHARED_PREFS,
                 Context.MODE_PRIVATE);
@@ -987,20 +990,15 @@ public class RotaryService extends AccessibilityService implements
 
         if (fpv == null) {
             L.e("No FocusParkingView in the window containing " + node);
-            return false;
-        }
-
-        if (Utils.isCarUiFocusParkingView(fpv)) {
-            boolean result = fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS);
+        } else if (Utils.isCarUiFocusParkingView(fpv)
+                    && fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS)) {
             fpv.recycle();
-            if (result) {
-                findFocusedNode(node);
-            }
-            return result;
+            findFocusedNode(node);
+            return true;
         }
+        Utils.recycleNode(fpv);
 
-        AccessibilityWindowInfo window = fpv.getWindow();
-        fpv.recycle();
+        AccessibilityWindowInfo window = node.getWindow();
         if (window == null) {
             L.e("No window found for the generic FocusParkingView");
             return false;
