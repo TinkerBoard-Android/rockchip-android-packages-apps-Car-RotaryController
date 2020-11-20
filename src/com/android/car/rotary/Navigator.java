@@ -17,6 +17,8 @@ package com.android.car.rotary;
 
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
 
 import android.graphics.Rect;
 import android.view.View;
@@ -53,10 +55,15 @@ class Navigator {
     @View.FocusRealDirection
     private int mHunNudgeDirection;
 
-    Navigator(int hunLeft, int hunRight, boolean showHunOnBottom) {
+    @NonNull
+    private final Rect mAppWindowBounds;
+
+    Navigator(int displayWidth, int displayHeight, int hunLeft, int hunRight,
+            boolean showHunOnBottom) {
         mHunLeft = hunLeft;
         mHunRight = hunRight;
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
+        mAppWindowBounds = new Rect(0, 0, displayWidth, displayHeight);
     }
 
     @Nullable
@@ -244,7 +251,9 @@ class Navigator {
 
         // Add candidate focus areas in other windows in the given direction.
         List<AccessibilityWindowInfo> candidateWindows = new ArrayList<>();
-        addWindowsInDirection(windows, currentWindow, candidateWindows, direction);
+        boolean isSourceNodeEditable = sourceNode.isEditable();
+        addWindowsInDirection(windows, currentWindow, candidateWindows, direction,
+                isSourceNodeEditable);
         currentWindow.recycle();
         for (AccessibilityWindowInfo window : candidateWindows) {
             List<AccessibilityNodeInfo> focusAreasInAnotherWindow = findFocusAreas(window);
@@ -297,24 +306,39 @@ class Navigator {
 
     /**
      * Adds all the {@code windows} in the given {@code direction} of the given {@code source}
-     * window to the given list.
+     * window to the given list if the {@code source} window is not an overlay. If it's an overlay
+     * and the source node is editable, adds the IME window only. Otherwise does nothing.
      */
     private void addWindowsInDirection(@NonNull List<AccessibilityWindowInfo> windows,
             @NonNull AccessibilityWindowInfo source,
             @NonNull List<AccessibilityWindowInfo> results,
-            int direction) {
+            int direction,
+            boolean isSourceNodeEditable) {
         Rect sourceBounds = new Rect();
         source.getBoundsInScreen(sourceBounds);
+
+        // If the source window is an application window and it's smaller than the display, then
+        // it's an overlay window (such as a Dialog window). Nudging out of the overlay window is
+        // not allowed unless the source node is editable and the target window is an IME window
+        // (e.g., nudging from the EditText in the Dialog to the IME is allowed, while nudging from
+        // the Button in the Dialog to the IME is not allowed).
+        boolean isSourceWindowOverlayWindow =
+                source.getType() == TYPE_APPLICATION && !mAppWindowBounds.equals(sourceBounds);
         Rect destBounds = new Rect();
         for (AccessibilityWindowInfo window : windows) {
-            if (!window.equals(source)) {
-                window.getBoundsInScreen(destBounds);
+            if (window.equals(source)) {
+               continue;
+            }
+            if (isSourceWindowOverlayWindow
+                    && (!isSourceNodeEditable || window.getType() != TYPE_INPUT_METHOD)) {
+                continue;
+            }
 
-                // Even if only part of destBounds is in the given direction of sourceBounds, we
-                // still include it because that part may contain the target focus area.
-                if (FocusFinder.isPartiallyInDirection(sourceBounds, destBounds, direction)) {
-                    results.add(window);
-                }
+            window.getBoundsInScreen(destBounds);
+            // Even if only part of destBounds is in the given direction of sourceBounds, we
+            // still include it because that part may contain the target focus area.
+            if (FocusFinder.isPartiallyInDirection(sourceBounds, destBounds, direction)) {
+                results.add(window);
             }
         }
     }
