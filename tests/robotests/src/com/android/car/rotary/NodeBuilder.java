@@ -15,12 +15,23 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
+
+import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
+import static com.android.car.rotary.Utils.FOCUS_PARKING_VIEW_CLASS_NAME;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
+
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -28,6 +39,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -35,72 +47,85 @@ import java.util.List;
  * need to be recycled.
  */
 class NodeBuilder {
+
+    private static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 100, 100);
+
     /**
      * A list of mock nodes created via NodeBuilder. This list is used for searching for a
      * node's child nodes.
      */
-    private List<AccessibilityNodeInfo> mNodeList;
+    @NonNull
+    private final List<AccessibilityNodeInfo> mNodeList;
+
     /** The window to which this node belongs. */
     @Nullable
     private AccessibilityWindowInfo mWindow;
     /** The window ID to which this node belongs. */
-    @Nullable
-    private Integer mWindowId;
+    private int mWindowId = UNDEFINED_WINDOW_ID;
     /** The parent of this node. */
     @Nullable
     private AccessibilityNodeInfo mParent;
     /** The class this node comes from. */
     @Nullable
     private String mClassName;
+    /** The node bounds in parent coordinates. */
+    @NonNull
+    private Rect mBoundsInParent = new Rect(DEFAULT_BOUNDS);
     /** The node bounds in screen coordinates. */
-    @Nullable
-    private Rect mBoundsInScreen;
+    @NonNull
+    private Rect mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
     /** Whether this node is focusable. */
-    private boolean mFocusable;
+    private boolean mFocusable = true;
     /** Whether this node is visible to the user. */
-    private boolean mVisibleToUser;
+    private boolean mVisibleToUser = true;
     /** Whether this node is enabled. */
-    private boolean mEnabled;
+    private boolean mEnabled = true;
     /** Whether the view represented by this node is still in the view tree. */
-    private boolean mInViewTree;
+    private boolean mInViewTree = true;
+    /** Whether this node is scrollable. */
+    private boolean mScrollable = false;
     /** The content description for this node. */
     @Nullable
     private String mContentDescription;
     /** The action list for this node. */
     @NonNull
     private List<AccessibilityNodeInfo.AccessibilityAction> mActionList = new ArrayList<>();
+    /** The extras of this node. */
+    @NonNull
+    private Bundle mExtras = new Bundle();
+
+    NodeBuilder(@NonNull List<AccessibilityNodeInfo> nodeList) {
+        mNodeList = nodeList;
+    }
 
     AccessibilityNodeInfo build() {
-        AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
-        if (mWindow != null) {
-            // Mock AccessibilityNodeInfo#getWindow().
-            when(node.getWindow()).thenReturn(mWindow);
-        }
-        if (mWindowId != null) {
-            // Mock AccessibilityNodeInfo#getWindowId().
-            when(node.getWindowId()).thenReturn(mWindowId);
-        }
-        if (mParent != null && mNodeList != null) {
-            // Mock AccessibilityNodeInfo#getParent().
-            when(node.getParent()).thenReturn(mParent);
+        // Make a copy of the current NodeBuilder.
+        NodeBuilder builder = cut();
 
+        AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
+
+        when(node.getWindow()).thenReturn(builder.mWindow);
+        when(node.getWindowId()).thenReturn(builder.mWindowId);
+        when(node.getParent()).thenReturn(builder.mParent);
+
+        if (builder.mParent != null) {
             // Mock AccessibilityNodeInfo#getChildCount().
             doAnswer(invocation -> {
                 int childCount = 0;
-                for (AccessibilityNodeInfo candidate : mNodeList) {
-                    if (mParent.equals(candidate.getParent())) {
+                for (AccessibilityNodeInfo candidate : builder.mNodeList) {
+                    if (builder.mParent.equals(candidate.getParent())) {
                         childCount++;
                     }
                 }
                 return childCount;
-            }).when(mParent).getChildCount();
+            }).when(builder.mParent).getChildCount();
 
             // Mock AccessibilityNodeInfo#getChild(int).
             doAnswer(invocation -> {
                 Object[] args = invocation.getArguments();
                 int index = (int) args[0];
-                for (AccessibilityNodeInfo candidate : mNodeList) {
-                    if (mParent.equals(candidate.getParent())) {
+                for (AccessibilityNodeInfo candidate : builder.mNodeList) {
+                    if (builder.mParent.equals(candidate.getParent())) {
                         if (index == 0) {
                             return candidate;
                         } else {
@@ -109,47 +134,33 @@ class NodeBuilder {
                     }
                 }
                 return null;
-            }).when(mParent).getChild(any(Integer.class));
-        }
-        if (mClassName != null) {
-            // Mock AccessibilityNodeInfo#getClassName().
-            when(node.getClassName()).thenReturn(mClassName);
-        }
-        if (mBoundsInScreen != null) {
-            // Mock AccessibilityNodeInfo#getBoundsInScreen(Rect).
-            doAnswer(invocation -> {
-                Object[] args = invocation.getArguments();
-                ((Rect) args[0]).set(mBoundsInScreen);
-                return null;
-            }).when(node).getBoundsInScreen(any(Rect.class));
-        }
-        // Mock AccessibilityNodeInfo#isFocusable().
-        when(node.isFocusable()).thenReturn(mFocusable);
-        // Mock AccessibilityNodeInfo#isVisibleToUser().
-        when(node.isVisibleToUser()).thenReturn(mVisibleToUser);
-        // Mock AccessibilityNodeInfo#isEnabled().
-        when(node.isEnabled()).thenReturn(mEnabled);
-
-        // Mock AccessibilityNodeInfo#refresh().
-        when(node.refresh()).thenReturn(mInViewTree);
-
-        if (mContentDescription != null) {
-            // Mock AccessibilityNodeInfo#getContentDescription().
-            when(node.getContentDescription()).thenReturn(mContentDescription);
+            }).when(builder.mParent).getChild(any(Integer.class));
         }
 
-        // Mock AccessibilityNodeInfo#getActionList().
-        when(node.getActionList()).thenReturn(mActionList);
+        when(node.getClassName()).thenReturn(builder.mClassName);
 
-        if (mNodeList != null) {
-            mNodeList.add(node);
-        }
+        doAnswer(invocation -> {
+            Object[] args = invocation.getArguments();
+            ((Rect) args[0]).set(builder.mBoundsInParent);
+            return null;
+        }).when(node).getBoundsInParent(any(Rect.class));
+        doAnswer(invocation -> {
+            Object[] args = invocation.getArguments();
+            ((Rect) args[0]).set(builder.mBoundsInScreen);
+            return null;
+        }).when(node).getBoundsInScreen(any(Rect.class));
+
+        when(node.isFocusable()).thenReturn(builder.mFocusable);
+        when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
+        when(node.isEnabled()).thenReturn(builder.mEnabled);
+        when(node.refresh()).thenReturn(builder.mInViewTree);
+        when(node.isScrollable()).thenReturn(builder.mScrollable);
+        when(node.getContentDescription()).thenReturn(builder.mContentDescription);
+        when(node.getActionList()).thenReturn(builder.mActionList);
+        when(node.getExtras()).thenReturn(builder.mExtras);
+
+        builder.mNodeList.add(node);
         return node;
-    }
-
-    NodeBuilder setNodeList(@NonNull List<AccessibilityNodeInfo> nodeList) {
-        mNodeList = nodeList;
-        return this;
     }
 
     NodeBuilder setWindow(@Nullable AccessibilityWindowInfo window) {
@@ -172,7 +183,12 @@ class NodeBuilder {
         return this;
     }
 
-    NodeBuilder setBoundsInScreen(@Nullable Rect boundsInScreen) {
+    NodeBuilder setBoundsInParent(@NonNull Rect boundsInParent) {
+        mBoundsInParent = boundsInParent;
+        return this;
+    }
+
+    NodeBuilder setBoundsInScreen(@NonNull Rect boundsInScreen) {
         mBoundsInScreen = boundsInScreen;
         return this;
     }
@@ -197,13 +213,79 @@ class NodeBuilder {
         return this;
     }
 
+    NodeBuilder setScrollable(boolean scrollable) {
+        mScrollable = scrollable;
+        return this;
+    }
+
     NodeBuilder setContentDescription(@Nullable String contentDescription) {
         mContentDescription = contentDescription;
         return this;
     }
 
-    NodeBuilder setActionList(@NonNull List<AccessibilityNodeInfo.AccessibilityAction> actionList) {
-        mActionList = actionList;
+    NodeBuilder setActions(AccessibilityNodeInfo.AccessibilityAction... actions) {
+        mActionList = Arrays.asList(actions);
         return this;
+    }
+
+    NodeBuilder setFocusArea() {
+        return setClassName(FOCUS_AREA_CLASS_NAME).setFocusable(false);
+    }
+
+    NodeBuilder setFocusAreaBoundsOffset(int left, int top, int right, int bottom) {
+        mExtras.putInt(FOCUS_AREA_LEFT_BOUND_OFFSET, left);
+        mExtras.putInt(FOCUS_AREA_TOP_BOUND_OFFSET, top);
+        mExtras.putInt(FOCUS_AREA_RIGHT_BOUND_OFFSET, right);
+        mExtras.putInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET, bottom);
+        return this;
+    }
+
+    NodeBuilder setFpv() {
+        return setClassName(FOCUS_PARKING_VIEW_CLASS_NAME);
+    }
+
+    NodeBuilder setScrollableContainer() {
+        return setContentDescription(ROTARY_VERTICALLY_SCROLLABLE);
+    }
+
+    /**
+     * Creates a copy of the current NodeBuilder, and clears the states of the current NodeBuilder
+     * except for {@link #mNodeList}.
+     */
+    private NodeBuilder cut() {
+        // Create a copy.
+        NodeBuilder copy = new NodeBuilder(this.mNodeList);
+        copy.mWindow = mWindow;
+        copy.mWindowId = mWindowId;
+        copy.mParent = mParent;
+        copy.mClassName = mClassName;
+        copy.mBoundsInParent = mBoundsInParent;
+        copy.mBoundsInScreen = mBoundsInScreen;
+        copy.mFocusable = mFocusable;
+        copy.mVisibleToUser = mVisibleToUser;
+        copy.mEnabled = mEnabled;
+        copy.mInViewTree = mInViewTree;
+        copy.mScrollable = mScrollable;
+        copy.mContentDescription = mContentDescription;
+        copy.mActionList = mActionList;
+        copy.mExtras = mExtras;
+
+        // Clear the states so that it doesn't infect the next NodeBuilder we create.
+        mWindow = null;
+        mWindowId = UNDEFINED_WINDOW_ID;
+        mParent = null;
+        mClassName = null;
+        mBoundsInParent = new Rect(DEFAULT_BOUNDS);
+        mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
+        mFocusable = true;
+        mVisibleToUser = true;
+        mEnabled = true;
+        mInViewTree = true;
+        mScrollable = false;
+        mContentDescription = null;
+        mActionList = new ArrayList<>();
+        mExtras = new Bundle();
+
+        return copy;
     }
 }

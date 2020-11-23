@@ -161,12 +161,6 @@ class TreeTraverser {
         }
     }
 
-    /** A function that takes an {@link AccessibilityNodeInfo} and returns a {@code boolean}. */
-    @VisibleForTesting
-    interface NodePredicate {
-        boolean isTarget(@NonNull AccessibilityNodeInfo node);
-    }
-
     /** Sets a node copier for testing. */
     @VisibleForTesting
     void setNodeCopier(@NonNull NodeCopier nodeCopier) {
