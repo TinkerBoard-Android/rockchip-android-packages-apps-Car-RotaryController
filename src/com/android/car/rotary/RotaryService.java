@@ -890,7 +890,7 @@ public class RotaryService extends AccessibilityService implements
     /**
      * Handles a {@link AccessibilityEvent#TYPE_WINDOWS_CHANGED} event indicating that a window was
      * removed. Attempts to restore the most recent focus when the window containing
-     * {@link #mFocusedNode} is removed.
+     * {@link #mFocusedNode} is not an application window and it's removed.
      */
     private void handleWindowRemovedEvent(@NonNull AccessibilityEvent event) {
         int windowId = event.getWindowId();
@@ -901,6 +901,12 @@ public class RotaryService extends AccessibilityService implements
             // No longer need to keep track of the node being edited if the IME window was closed.
             if (type.intValue() == TYPE_INPUT_METHOD) {
                 setEditNode(null);
+            }
+            // No need to restore the focus if it's an application window. When an application
+            // window is removed, another window will gain focus shortly and the FocusParkingView
+            // in that window will restore the focus.
+            if (type.intValue() == TYPE_APPLICATION) {
+                return;
             }
         } else {
             L.w("No window type found in cache for window ID: " + windowId);
