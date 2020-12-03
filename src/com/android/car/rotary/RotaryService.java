@@ -91,6 +91,7 @@ import androidx.annotation.Nullable;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
 
+import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -141,6 +142,14 @@ public class RotaryService extends AccessibilityService implements
 
     private static final String SHARED_PREFS = "com.android.car.rotary.RotaryService";
     private static final String TOUCH_INPUT_METHOD_PREFIX = "TOUCH_INPUT_METHOD_";
+
+    /**
+     * A reference to {@link #mWindowContext} or null if one hasn't been created. This is static in
+     * order to prevent the creation of multiple window contexts when this service is enabled and
+     * disabled repeatedly. Android imposes a limit on the number of window contexts without a
+     * corresponding surface.
+     */
+    @Nullable private static WeakReference<Context> sWindowContext;
 
     @NonNull
     private NodeCopier mNodeCopier = new NodeCopier();
@@ -299,7 +308,11 @@ public class RotaryService extends AccessibilityService implements
      */
     private int mCenterButtonRepeatCount;
 
-    private Context mWindowContext;
+    /**
+     * A context to use for fetching the {@link WindowManager} and creating the touch overlay or
+     * null if one hasn't been created yet.
+     */
+    @Nullable private Context mWindowContext;
 
     private static final Map<Integer, Integer> TEST_TO_REAL_KEYCODE_MAP;
 
@@ -572,13 +585,20 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private Context getWindowContext() {
+        if (mWindowContext == null && sWindowContext != null) {
+            mWindowContext = sWindowContext.get();
+            if (mWindowContext != null) {
+                L.d("Reusing window context");
+            }
+        }
         if (mWindowContext == null) {
             // We need to set the display before creating the WindowContext.
             DisplayManager displayManager = getSystemService(DisplayManager.class);
             Display primaryDisplay = displayManager.getDisplay(DEFAULT_DISPLAY);
             updateDisplay(primaryDisplay.getDisplayId());
-
+            L.d("Creating window context");
             mWindowContext = createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+            sWindowContext = new WeakReference<>(mWindowContext);
         }
         return mWindowContext;
     }
