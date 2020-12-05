@@ -21,6 +21,7 @@ import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATIO
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
 
 import android.graphics.Rect;
+import android.view.Display;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -317,13 +318,15 @@ class Navigator {
         Rect sourceBounds = new Rect();
         source.getBoundsInScreen(sourceBounds);
 
-        // If the source window is an application window and it's smaller than the display, then
-        // it's an overlay window (such as a Dialog window). Nudging out of the overlay window is
-        // not allowed unless the source node is editable and the target window is an IME window
-        // (e.g., nudging from the EditText in the Dialog to the IME is allowed, while nudging from
-        // the Button in the Dialog to the IME is not allowed).
-        boolean isSourceWindowOverlayWindow =
-                source.getType() == TYPE_APPLICATION && !mAppWindowBounds.equals(sourceBounds);
+        // If the source window is an application window on the default display and it's smaller
+        // than the display, then it's an overlay window (such as a Dialog window). Nudging out of
+        // the overlay window is not allowed unless the source node is editable and the target
+        // window is an IME window (e.g., nudging from the EditText in the Dialog to the IME is
+        // allowed, while nudging from the Button in the Dialog to the IME is not allowed). Windows
+        // for ActivityViews are on virtual displays so they won't be considered overlay windows.
+        boolean isSourceWindowOverlayWindow = source.getType() == TYPE_APPLICATION
+                && source.getDisplayId() == Display.DEFAULT_DISPLAY
+                && !mAppWindowBounds.equals(sourceBounds);
         Rect destBounds = new Rect();
         for (AccessibilityWindowInfo window : windows) {
             if (window.equals(source)) {
