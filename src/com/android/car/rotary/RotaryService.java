@@ -67,6 +67,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -77,6 +78,7 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -136,6 +138,12 @@ public class RotaryService extends AccessibilityService implements
      * {@link View#FOCUS_DOWN}).
      */
     private static final int INVALID_NUDGE_DIRECTION = -1;
+
+    /**
+     * Message for timer indicating that the center button has been held down long enough to trigger
+     * a long-press.
+     */
+    private static final int MSG_LONG_PRESS = 1;
 
     private static final String SHARED_PREFS = "com.android.car.rotary.RotaryService";
     private static final String TOUCH_INPUT_METHOD_PREFIX = "TOUCH_INPUT_METHOD_";
@@ -300,10 +308,25 @@ public class RotaryService extends AccessibilityService implements
     private long mLastRotateEventTime;
 
     /**
-     * The repeat count of {@link KeyEvent#KEYCODE_DPAD_CENTER}. Use to prevent processing a center
-     * button click when the center button is released after a long press.
+     * How many milliseconds the center buttons must be held down before a long-press is triggered.
+     * This doesn't apply to the application window.
      */
-    private int mCenterButtonRepeatCount;
+    private long mLongPressMs;
+
+    /**
+     * Whether the center button was held down long enough to trigger a long-press. In this case, a
+     * click won't be triggered when the center button is released.
+     */
+    private boolean mLongPressTriggered;
+
+    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(@NonNull Message msg) {
+            if (msg.what == MSG_LONG_PRESS) {
+                handleCenterButtonLongPressEvent();
+            }
+        }
+    };
 
     /**
      * A context to use for fetching the {@link WindowManager} and creating the touch overlay or
@@ -413,6 +436,11 @@ public class RotaryService extends AccessibilityService implements
         }
 
         mAfterFocusTimeoutMs = res.getInteger(R.integer.after_focus_timeout_ms);
+
+        mLongPressMs = res.getInteger(R.integer.long_press_ms);
+        if (mLongPressMs == 0) {
+            mLongPressMs = ViewConfiguration.getLongPressTimeout();
+        }
     }
 
     /**
@@ -739,17 +767,11 @@ public class RotaryService extends AccessibilityService implements
                 handleNudgeEvent(View.FOCUS_DOWN, action);
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
-                if (isActionDown) {
-                    mCenterButtonRepeatCount = event.getRepeatCount();
+                // Ignore repeat events. We only care about the initial ACTION_DOWN and the final
+                // ACTION_UP events.
+                if (event.getRepeatCount() == 0) {
+                    handleCenterButtonEvent(action);
                 }
-                if (mCenterButtonRepeatCount == 0) {
-                    handleCenterButtonEvent(action, /* longClick= */ false);
-                } else if (mCenterButtonRepeatCount == 1) {
-                    handleCenterButtonEvent(action, /* longClick= */ true);
-                }
-                return true;
-            case KeyEvent.KEYCODE_G:
-                handleCenterButtonEvent(action, /* longClick= */ true);
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (mInDirectManipulationMode) {
@@ -1058,7 +1080,7 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /** Handles controller center button event. */
-    private void handleCenterButtonEvent(int action, boolean longClick) {
+    private void handleCenterButtonEvent(int action) {
         if (!isValidAction(action)) {
             return;
         }
@@ -1094,19 +1116,39 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // Case 3: the focus node doesn't support rotate directly and it's not in application window
-        // (e.g., in system window). We should ignore ACTION_DOWN event, and click or long click
-        // the focused node on ACTION_UP event.
+        // Case 3: the focused node doesn't support rotate directly and it's not in the
+        // application window (e.g., it's in a system window). We start a timer on the
+        // ACTION_DOWN event. If the ACTION_UP event occurs before the timeout, we perform
+        // ACTION_CLICK on the focused node and abort the timer. If the timer times out before
+        // the ACTION_UP event, handleCenterButtonLongPressEvent() will perform ACTION_LONG_CLICK
+        // on the focused node and we'll ignore the subsequent ACTION_UP event.
         if (action == ACTION_DOWN) {
+            mLongPressTriggered = false;
+            mHandler.removeMessages(MSG_LONG_PRESS);
+            mHandler.sendEmptyMessageDelayed(MSG_LONG_PRESS, mLongPressMs);
             return;
         }
-        boolean result = mFocusedNode.performAction(longClick ? ACTION_LONG_CLICK : ACTION_CLICK);
-        if (!result) {
-            L.w("Failed to perform " + (longClick ? "ACTION_LONG_CLICK" : "ACTION_CLICK")
-                    + " on " + mFocusedNode);
+        if (mLongPressTriggered) {
+            mLongPressTriggered = false;
+            return;
         }
-        if (!longClick) {
-            setIgnoreViewClickedNode(mFocusedNode);
+        mHandler.removeMessages(MSG_LONG_PRESS);
+        boolean result = mFocusedNode.performAction(ACTION_CLICK);
+        if (!result) {
+            L.w("Failed to perform ACTION_CLICK on " + mFocusedNode);
+        }
+        setIgnoreViewClickedNode(mFocusedNode);
+    }
+
+    /** Handles controller center button long-press events. */
+    private void handleCenterButtonLongPressEvent() {
+        mLongPressTriggered = true;
+        if (initFocus()) {
+            return;
+        }
+        boolean result = mFocusedNode.performAction(ACTION_LONG_CLICK);
+        if (!result) {
+            L.w("Failed to perform ACTION_LONG_CLICK on " + mFocusedNode);
         }
     }
 
