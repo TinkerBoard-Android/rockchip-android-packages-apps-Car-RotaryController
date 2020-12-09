@@ -17,19 +17,11 @@ package com.android.car.rotary;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doAnswer;
-
 import android.view.accessibility.AccessibilityNodeInfo;
-
-import com.android.car.rotary.TreeTraverser.NodePredicate;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
@@ -37,26 +29,15 @@ import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
 public class TreeTraverserTest {
-    @Mock
-    private NodeCopier mNodeCopier;
-
-    private List<AccessibilityNodeInfo> mNodeList;
 
     private TreeTraverser mTreeTraverser;
+    private NodeBuilder mNodeBuilder;
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
-
-        // Utils#copyNode() doesn't work when passed a mock node, so we create a mock method
-        // which returns the passed node itself rather than a copy. As a result, nodes created by
-        // the mock method (such as |target| in testFindRotateTarget()) shouldn't be recycled.
-        doAnswer(returnsFirstArg()).when(mNodeCopier).copy(any(AccessibilityNodeInfo.class));
-
         mTreeTraverser = new TreeTraverser();
-        mTreeTraverser.setNodeCopier(mNodeCopier);
-
-        mNodeList = new ArrayList<>();
+        mTreeTraverser.setNodeCopier(MockNodeCopierProvider.get());
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
 
     /**
@@ -75,31 +56,13 @@ public class TreeTraverserTest {
      */
     @Test
     public void testFindNodeOrAncestor() {
-        AccessibilityNodeInfo node0 = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo node1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node5 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
-        AccessibilityNodeInfo node6 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
+        AccessibilityNodeInfo node0 = mNodeBuilder.build();
+        AccessibilityNodeInfo node1 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node2 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node3 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node4 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node5 = mNodeBuilder.setParent(node4).build();
+        AccessibilityNodeInfo node6 = mNodeBuilder.setParent(node4).build();
 
         // Should check the node itself.
         AccessibilityNodeInfo result = mTreeTraverser.findNodeOrAncestor(node0,
@@ -122,18 +85,21 @@ public class TreeTraverserTest {
         assertThat(result).isNull();
 
         // Stop before target.
-        result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */ node -> node == node1,
+        result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */
+                node -> node == node1,
                 /* targetPredicate= */ node -> node == node0);
         assertThat(result).isNull();
 
         // Stop at target.
-        result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */ node -> node == node0,
+        result = mTreeTraverser.findNodeOrAncestor(node2, /* stopPredicate= */
+                node -> node == node0,
                 /* targetPredicate= */ node -> node == node0);
         assertThat(result).isNull();
     }
 
     /**
-     * Tests {@link TreeTraverser#depthFirstSearch(AccessibilityNodeInfo, NodePredicate, NodePredicate)}
+     * Tests {@link TreeTraverser#depthFirstSearch(AccessibilityNodeInfo, NodePredicate,
+     * NodePredicate)}
      * in the following node tree:
      * <pre>
      *                   node0
@@ -147,31 +113,13 @@ public class TreeTraverserTest {
      */
     @Test
     public void testDepthFirstSearch() {
-        AccessibilityNodeInfo node0 = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo node1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node5 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
-        AccessibilityNodeInfo node6 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
+        AccessibilityNodeInfo node0 = mNodeBuilder.build();
+        AccessibilityNodeInfo node1 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node2 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node3 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node4 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node5 = mNodeBuilder.setParent(node4).build();
+        AccessibilityNodeInfo node6 = mNodeBuilder.setParent(node4).build();
 
         // Iterate in depth-first order, finding nothing.
         List<AccessibilityNodeInfo> targetPredicateCalledWithNodes = new ArrayList<>();
@@ -238,31 +186,13 @@ public class TreeTraverserTest {
      */
     @Test
     public void testReverseDepthFirstSearch() {
-        AccessibilityNodeInfo node0 = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo node1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node5 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
-        AccessibilityNodeInfo node6 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
+        AccessibilityNodeInfo node0 = mNodeBuilder.build();
+        AccessibilityNodeInfo node1 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node2 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node3 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node4 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node5 = mNodeBuilder.setParent(node4).build();
+        AccessibilityNodeInfo node6 = mNodeBuilder.setParent(node4).build();
 
         // Iterate in reverse depth-first order, finding nothing.
         List<AccessibilityNodeInfo> predicateCalledWithNodes = new ArrayList<>();
@@ -303,31 +233,13 @@ public class TreeTraverserTest {
      */
     @Test
     public void testDepthFirstSelect() {
-        AccessibilityNodeInfo node0 = new NodeBuilder().setNodeList(mNodeList).build();
-        AccessibilityNodeInfo node1 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node2 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node3 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node1)
-                .build();
-        AccessibilityNodeInfo node4 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node0)
-                .build();
-        AccessibilityNodeInfo node5 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
-        AccessibilityNodeInfo node6 = new NodeBuilder()
-                .setNodeList(mNodeList)
-                .setParent(node4)
-                .build();
+        AccessibilityNodeInfo node0 = mNodeBuilder.build();
+        AccessibilityNodeInfo node1 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node2 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node3 = mNodeBuilder.setParent(node1).build();
+        AccessibilityNodeInfo node4 = mNodeBuilder.setParent(node0).build();
+        AccessibilityNodeInfo node5 = mNodeBuilder.setParent(node4).build();
+        AccessibilityNodeInfo node6 = mNodeBuilder.setParent(node4).build();
 
         // Iterate in depth-first order, selecting no nodes.
         List<AccessibilityNodeInfo> predicateCalledWithNodes = new ArrayList<>();

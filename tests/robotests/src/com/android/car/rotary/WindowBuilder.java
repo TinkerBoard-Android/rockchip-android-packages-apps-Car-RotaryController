@@ -15,6 +15,8 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
+
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -31,19 +33,20 @@ import androidx.annotation.Nullable;
  * don't need to be recycled.
  */
 class WindowBuilder {
+    /** The ID of the window. */
+    private int mId = UNDEFINED_WINDOW_ID;
     /** The root node in the window's hierarchy. */
     private AccessibilityNodeInfo mRoot;
     /** The bounds of this window in the screen. */
     private Rect mBoundsInScreen;
     /** The window type, if specified. */
-    private Integer mType;
+    private int mType;
 
     AccessibilityWindowInfo build() {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
-        if (mRoot != null) {
-            // Mock AccessibilityWindowInfo#getRoot().
-            when(window.getRoot()).thenReturn(mRoot);
-        }
+        when(window.getId()).thenReturn(mId);
+        when(window.getRoot()).thenReturn(mRoot);
+
         if (mBoundsInScreen != null) {
             // Mock AccessibilityWindowInfo#getBoundsInScreen(Rect).
             doAnswer(invocation -> {
@@ -52,10 +55,15 @@ class WindowBuilder {
                 return null;
             }).when(window).getBoundsInScreen(any(Rect.class));
         }
-        if (mType != null) {
-            when(window.getType()).thenReturn(mType);
-        }
+
+        when(window.getType()).thenReturn(mType);
+
         return window;
+    }
+
+    WindowBuilder setId(int id) {
+        mId = id;
+        return this;
     }
 
     WindowBuilder setRoot(@Nullable AccessibilityNodeInfo root) {
