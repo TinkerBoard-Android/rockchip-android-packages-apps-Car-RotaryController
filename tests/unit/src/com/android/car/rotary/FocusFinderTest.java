@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,22 @@
 
 package com.android.car.rotary;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.fail;
+import static org.testng.AssertJUnit.assertFalse;
+import static org.testng.AssertJUnit.assertTrue;
+
 import android.graphics.Rect;
-import android.test.AndroidTestCase;
 import android.view.View;
+
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 /** Most of the tests are copied from {@link android.view.FocusFinderTest}. */
-@RunWith(RobolectricTestRunner.class)
-public class FocusFinderTest extends AndroidTestCase {
+@RunWith(AndroidJUnit4.class)
+public class FocusFinderTest {
 
     @Test
     public void testPartiallyInDirection() {
