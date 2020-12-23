@@ -28,6 +28,7 @@
 
     <application android:debuggable="true">
         <uses-library android:name="android.test.runner" />
+        <activity android:name="com.android.car.rotary.TreeTraverserTestActivity" />
     </application>
 
     <instrumentation android:name="androidx.test.runner.AndroidJUnitRunner"
