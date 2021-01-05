@@ -46,20 +46,34 @@ public class FocusFinderTest extends AndroidTestCase {
     public void testInDirection() {
         final Rect src = new Rect(100, 100, 200, 200);
 
-        assertIsInDirection(View.FOCUS_LEFT, src, new Rect(99, 100, 300, 200));
-        assertIsInDirection(View.FOCUS_RIGHT, src, new Rect(0, 50, 201, 60));
-        assertIsInDirection(View.FOCUS_UP, src, new Rect(50, 99, 60, 300));
-        assertIsInDirection(View.FOCUS_DOWN, src, new Rect(50, 0, 60, 201));
+        // Strictly in the given direction.
+        assertIsInDirection(View.FOCUS_LEFT, src, new Rect(99, 100, 200, 200));
+        assertIsInDirection(View.FOCUS_RIGHT, src, new Rect(100, 99, 201, 200));
+        assertIsInDirection(View.FOCUS_UP, src, new Rect(101, 99, 199, 200));
+        assertIsInDirection(View.FOCUS_DOWN, src, new Rect(99, 100, 201, 201));
+
+        // Loosely in the given direction.
+        assertIsInDirection(View.FOCUS_LEFT, src, new Rect(0, 0, 50, 50));
+        assertIsInDirection(View.FOCUS_RIGHT, src, new Rect(250, 50, 300, 150));
+        assertIsInDirection(View.FOCUS_UP, src, new Rect(250, 50, 300, 150));
+        assertIsInDirection(View.FOCUS_DOWN, src, new Rect(50, 150, 150, 250));
     }
 
     @Test
     public void testNotInDirection() {
         final Rect src = new Rect(100, 100, 200, 200);
 
+        // None of destRect is in the given direction of srcRect.
         assertIsNotInDirection(View.FOCUS_LEFT, src, new Rect(100, 300, 150, 400));
         assertIsNotInDirection(View.FOCUS_RIGHT, src, new Rect(150, 300, 200, 400));
         assertIsNotInDirection(View.FOCUS_UP, src, new Rect(300, 100, 400, 150));
         assertIsNotInDirection(View.FOCUS_DOWN, src, new Rect(300, 150, 400, 200));
+
+        // destRect is strictly in other direction of srcRect.
+        assertIsNotInDirection(View.FOCUS_LEFT, src, new Rect(0, 0, 200, 50));
+        assertIsNotInDirection(View.FOCUS_RIGHT, src, new Rect(100, 300, 300, 400));
+        assertIsNotInDirection(View.FOCUS_UP, src, new Rect(50, 0, 150, 200));
+        assertIsNotInDirection(View.FOCUS_DOWN, src, new Rect(50, 100, 150, 300));
     }
 
     @Test
