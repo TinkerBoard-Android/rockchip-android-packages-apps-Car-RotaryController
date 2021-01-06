@@ -42,3 +42,37 @@ android_app {
         },
     },
 }
+
+android_library {
+    name: "CarRotaryControllerForUnitTesting",
+
+    manifest: "tests/unit/AndroidManifest.xml",
+
+    srcs: ["src/**/*.java"],
+
+    resource_dirs: [
+        "res",
+    ],
+
+    platform_apis: true,
+
+    optimize: {
+        enabled: false,
+    },
+    dex_preopt: {
+        enabled: false,
+    },
+    libs: [
+        "android.car",
+    ],
+    static_libs: [
+        "car-ui-lib",
+    ],
+    product_variables: {
+        pdk: {
+            enabled: false,
+        },
+    },
+
+    aaptflags: ["--extra-packages com.android.car.rotary"],
+}
