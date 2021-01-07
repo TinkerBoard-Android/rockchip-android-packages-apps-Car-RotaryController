@@ -36,4 +36,8 @@
     these events so this needs to be fairly long.
     -->
     <integer name="after_focus_timeout_ms">60000</integer>
+
+    <!-- How many milliseconds the center button must be held down to trigger a long-press. Zero
+    indicates the system default long-press timeout should be used. -->
+    <integer name="long_press_ms">0</integer>
 </resources>
