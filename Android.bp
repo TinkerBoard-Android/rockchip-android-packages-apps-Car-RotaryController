@@ -51,6 +51,7 @@ android_library {
     srcs: ["src/**/*.java"],
 
     resource_dirs: [
+        "tests/unit/res",
         "res",
     ],
 
