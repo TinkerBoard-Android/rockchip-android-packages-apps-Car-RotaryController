@@ -71,6 +71,13 @@ final class Utils {
         }
     }
 
+    /** Recycles all specified nodes. */
+    static void recycleNodes(AccessibilityNodeInfo... nodes) {
+        for (AccessibilityNodeInfo node : nodes) {
+            recycleNode(node);
+        }
+    }
+
     /** Recycles a list of nodes. */
     static void recycleNodes(@Nullable List<AccessibilityNodeInfo> nodes) {
         if (nodes != null) {
