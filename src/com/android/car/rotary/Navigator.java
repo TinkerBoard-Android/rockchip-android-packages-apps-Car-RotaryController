@@ -538,6 +538,11 @@ class Navigator {
                     if (isInWebView(candidateNode)) {
                         return Utils.canPerformFocus(candidateNode);
                     }
+                    // If a node isn't visible to the user, e.g. another window is obscuring it,
+                    // skip it.
+                    if (!candidateNode.isVisibleToUser()) {
+                        return false;
+                    }
                     // If a node can't take focus, it represents a focus area, so we return false to
                     // skip the node and let it search its descendants.
                     if (!Utils.canTakeFocus(candidateNode)) {
