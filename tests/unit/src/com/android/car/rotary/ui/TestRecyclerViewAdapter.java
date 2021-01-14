@@ -25,23 +25,22 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.car.rotary.R;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Test adapter for recycler view. */
 public class TestRecyclerViewAdapter extends RecyclerView.Adapter<TestRecyclerViewViewHolder> {
 
     private final Context mContext;
-    private List<String> mItems;
+    private final List<String> mItems;
     private boolean mItemsFocusable;
 
-    public TestRecyclerViewAdapter(Context context) {
+    public TestRecyclerViewAdapter(Context context, int numItems) {
         mContext = context;
-        mItemsFocusable = false;
-    }
-
-    /** Strings to show in recycler view. */
-    public void setItems(List<String> items) {
-        mItems = items;
+        mItems = new ArrayList<>();
+        for (int i = 0; i < numItems; i++) {
+            mItems.add("Test Item " + (i + 1));
+        }
     }
 
     public void setItemsFocusable(boolean itemsFocusable) {

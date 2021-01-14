@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
 
 import androidx.annotation.LayoutRes;
@@ -34,14 +35,13 @@ import androidx.test.rule.ActivityTestRule;
 import com.android.car.rotary.Navigator.FindRotateTargetResult;
 import com.android.car.rotary.ui.TestRecyclerViewAdapter;
 
-import com.google.common.collect.Lists;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -55,6 +55,7 @@ public class NavigatorTest {
     private Rect mHunWindowBounds;
     private Navigator mNavigator;
     private AccessibilityNodeInfo mWindowRoot;
+    private NodeBuilder mNodeBuilder;
 
     @BeforeClass
     public static void oneTimeSetup() {
@@ -70,6 +71,8 @@ public class NavigatorTest {
         // The values of displayWidth and displayHeight don't affect the test, so just use 0.
         mNavigator = new Navigator(/* displayWidth= */ 0, /* displayHeight= */ 0,
                 mHunWindowBounds.left, mHunWindowBounds.right,/* showHunOnBottom= */ false);
+        mNavigator.setNodeCopier(MockNodeCopierProvider.get());
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
 
     @After
@@ -250,11 +253,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 3);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2", "Test Item 3"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -334,10 +335,8 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 1);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Collections.singletonList("Test Item 1"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -403,11 +402,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 2);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -478,11 +475,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 2);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -548,11 +543,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 3);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2", "Test Item 3"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -841,6 +834,71 @@ public class NavigatorTest {
         Utils.recycleNode(target);
 
         Utils.recycleNodes(root, button2);
+    }
+
+
+    /**
+     * Tests {@link Navigator#findNudgeTargetFocusArea} in the following layout:
+     * <pre>
+     *
+     *            =====focusArea1==============
+     *            =  =========focusArea2====  =
+     *            =  =       *view*        =  =
+     *            =  =======================  =
+     *            =                           =
+     *            =                           =
+     *            =   *scrollableContainer*   =
+     *            =                           =
+     *            =============================
+     * </pre>
+     * Where scrollableContainer has the same size as focusArea1. The top offset of focusArea1
+     * equals the height of focusArea2.
+     */
+    @Test
+    public void test_findNudgeTargetFocusArea_fromScrollableContainer() {
+        initActivity(R.layout.navigator_find_nudge_target_focus_area_1_test_activity);
+        Activity activity = mActivityRule.getActivity();
+        RecyclerView scrollable = activity.findViewById(R.id.scrollable_container);
+        scrollable.post(() -> {
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 20);
+            scrollable.setAdapter(adapter);
+            scrollable.requestFocus();
+        });
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(scrollable.isFocused()).isEqualTo(true);
+
+        AccessibilityNodeInfo currentFocusArea = createNode("focus_area1");
+
+        // Only an AccessibilityService with the permission to retrieve the active window content
+        // can create an AccessibilityWindowInfo. So the AccessibilityWindowInfo and the associated
+        // AccessibilityNodeInfos have to be mocked.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setRoot(mWindowRoot)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .build();
+        AccessibilityNodeInfo sourceNode = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .setParent(currentFocusArea)
+                .setRotaryContainer()
+                .build();
+        // Though there are 20 children in the layout, only one child is mocked. This is fine as
+        // long as the bounds are correct so that it can occupy the entire container.
+        AccessibilityNodeInfo childNode = mNodeBuilder
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .setParent(sourceNode)
+                .build();
+
+        List<AccessibilityWindowInfo> windows = Collections.singletonList(window);
+
+        int direction = View.FOCUS_UP;
+        AccessibilityNodeInfo targetFocusArea = createNode("focus_area2");
+        AccessibilityNodeInfo result = mNavigator.findNudgeTargetFocusArea(
+                windows, sourceNode, currentFocusArea, direction);
+        assertThat(result).isEqualTo(targetFocusArea);
+
+        // Note: only real nodes (and windows) need to be recycled.
+        Utils.recycleNodes(currentFocusArea, targetFocusArea, result);
     }
 
     /**
