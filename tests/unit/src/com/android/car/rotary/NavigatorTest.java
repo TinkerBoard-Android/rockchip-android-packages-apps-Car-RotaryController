@@ -221,6 +221,67 @@ public class NavigatorTest {
     /**
      * Tests {@link Navigator#findRotateTarget} in the following node tree:
      * <pre>
+     *      ============ focus area ============
+     *      =                                  =
+     *      =  *****     recycler view    **** =
+     *      =  *                             * =
+     *      =  *  ........ text 1   ........ * =
+     *      =  *  .        visible         . * =
+     *      =  *  .......................... * =
+     *      =  *                             * =
+     *      =  *  ........ text 2   ........ * =
+     *      =  *  .        visible         . * =
+     *      =  *  .......................... * =
+     *      =  *                             * =
+     *      =  *  ........ text 3   ........ * =
+     *      =  *  .        offscreen ....... * =
+     *      =  *  .......................... * =
+     *      =  *                             * =
+     *      =  ******************************* =
+     *      =                                  =
+     *      ============ focus area ============
+     * </pre>
+     */
+    @Test
+    public void testFindRotateTargetDoesNotSkipOffscreenNode() {
+        initActivity(
+                R.layout.navigator_find_rotate_target_does_not_skip_offscreen_node_test_activity);
+
+        Activity activity = mActivityRule.getActivity();
+        RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
+        recyclerView.post(() -> {
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            adapter.setItemsFocusable(true);
+            recyclerView.setAdapter(adapter);
+            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2", "Test Item 3"));
+            adapter.notifyDataSetChanged();
+        });
+
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+
+        AccessibilityNodeInfo text1 = createNodeByText("Test Item 1");
+        AccessibilityNodeInfo text2 = createNodeByText("Test Item 2");
+
+        int direction = View.FOCUS_FORWARD;
+
+        FindRotateTargetResult target = mNavigator.findRotateTarget(text1, direction, 1);
+        assertThat(target.node).isEqualTo(text2);
+        Utils.recycleNode(target.node);
+
+        AccessibilityNodeInfo text3 = createNodeByText("Test Item 3");
+        assertThat(text3).isNull();
+
+        target = mNavigator.findRotateTarget(text2, direction, 1);
+        // Need to query for text3 after the rotation, so that it is visible on the screen for the
+        // instrumentation to pick it up.
+        text3 = createNodeByText("Test Item 3");
+        assertThat(target.node).isEqualTo(text3);
+        Utils.recycleNodes(text1, text2, text3, target.node);
+    }
+
+    /**
+     * Tests {@link Navigator#findRotateTarget} in the following node tree:
+     * <pre>
      *              root
      *               |
      *           focusArea
