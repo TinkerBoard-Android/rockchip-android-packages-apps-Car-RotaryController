@@ -46,7 +46,12 @@ class WindowBuilder {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
         when(window.getId()).thenReturn(mId);
         when(window.getRoot())
-                .thenReturn(MockNodeCopierProvider.get().copy(mRoot));
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenThrow(new RuntimeException(
+                        "Exceeded the maximum calls. Please add more parameters"));
         if (mBoundsInScreen != null) {
             // Mock AccessibilityWindowInfo#getBoundsInScreen(Rect).
             doAnswer(invocation -> {
