@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
 
 import androidx.annotation.LayoutRes;
@@ -34,14 +35,13 @@ import androidx.test.rule.ActivityTestRule;
 import com.android.car.rotary.Navigator.FindRotateTargetResult;
 import com.android.car.rotary.ui.TestRecyclerViewAdapter;
 
-import com.google.common.collect.Lists;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -50,11 +50,14 @@ public class NavigatorTest {
 
     private static UiAutomation sUiAutomoation;
 
+    private final List<AccessibilityNodeInfo> mNodes = new ArrayList<>();
+
     private ActivityTestRule<NavigatorTestActivity> mActivityRule;
     private Intent mIntent;
     private Rect mHunWindowBounds;
     private Navigator mNavigator;
     private AccessibilityNodeInfo mWindowRoot;
+    private NodeBuilder mNodeBuilder;
 
     @BeforeClass
     public static void oneTimeSetup() {
@@ -70,12 +73,15 @@ public class NavigatorTest {
         // The values of displayWidth and displayHeight don't affect the test, so just use 0.
         mNavigator = new Navigator(/* displayWidth= */ 0, /* displayHeight= */ 0,
                 mHunWindowBounds.left, mHunWindowBounds.right,/* showHunOnBottom= */ false);
+        mNavigator.setNodeCopier(MockNodeCopierProvider.get());
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
 
     @After
     public void tearDown() {
         mActivityRule.finishActivity();
         Utils.recycleNode(mWindowRoot);
+        Utils.recycleNodes(mNodes);
     }
 
     /**
@@ -104,14 +110,14 @@ public class NavigatorTest {
         assertThat(target.node).isEqualTo(button2);
         assertThat(target.advancedCount).isEqualTo(1);
 
-        Utils.recycleNodes(target.node);
+        Utils.recycleNode(target.node);
 
         // Rotate twice, the focus should move from button1 to button3.
         target = mNavigator.findRotateTarget(button1, direction, 2);
         assertThat(target.node).isEqualTo(button3);
         assertThat(target.advancedCount).isEqualTo(2);
 
-        Utils.recycleNodes(button1, button2, button3, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -137,8 +143,6 @@ public class NavigatorTest {
         // Rotate at the end of focus area, no wrap-around should happen.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
-
-        Utils.recycleNode(button2);
     }
 
     /**
@@ -164,8 +168,6 @@ public class NavigatorTest {
         // Rotate at the end of focus area, no wrap-around should happen.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
-
-        Utils.recycleNode(button2);
     }
 
     /**
@@ -189,8 +191,6 @@ public class NavigatorTest {
         // Rotate at the end of focus area, no wrap-around should happen.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
-
-        Utils.recycleNode(button2);
     }
 
     /**
@@ -214,8 +214,6 @@ public class NavigatorTest {
         // Rotate at the end of focus area, no wrap-around should happen.
         FindRotateTargetResult target = mNavigator.findRotateTarget(button2, direction, 1);
         assertThat(target).isNull();
-
-        Utils.recycleNode(button2);
     }
 
     /**
@@ -250,11 +248,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 3);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2", "Test Item 3"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -276,7 +272,7 @@ public class NavigatorTest {
         // instrumentation to pick it up.
         text3 = createNodeByText("Test Item 3");
         assertThat(target.node).isEqualTo(text3);
-        Utils.recycleNodes(text1, text2, text3, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -311,7 +307,7 @@ public class NavigatorTest {
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isEqualTo(button3);
 
-        Utils.recycleNodes(button1, button3, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -334,10 +330,8 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 1);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Collections.singletonList("Test Item 1"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -351,7 +345,7 @@ public class NavigatorTest {
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isEqualTo(scrollable);
 
-        Utils.recycleNodes(button1, scrollable, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -379,7 +373,7 @@ public class NavigatorTest {
         FindRotateTargetResult target = mNavigator.findRotateTarget(button1, direction, 1);
         assertThat(target.node).isEqualTo(button2);
 
-        Utils.recycleNodes(button1, button2, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -403,11 +397,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 2);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -421,7 +413,7 @@ public class NavigatorTest {
         assertThat(target.node).isEqualTo(focusable1);
         assertThat(target.advancedCount).isEqualTo(1);
 
-        Utils.recycleNodes(focusable1, focusable2, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -441,8 +433,6 @@ public class NavigatorTest {
 
         FindRotateTargetResult target = mNavigator.findRotateTarget(node, direction, 1);
         assertThat(target).isNull();
-
-        Utils.recycleNode(node);
     }
 
     /**
@@ -478,11 +468,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 2);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -496,23 +484,20 @@ public class NavigatorTest {
         FindRotateTargetResult target = mNavigator.findRotateTarget(text1, direction, 1);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(target.node);
+        Utils.recycleNode(target.node);
 
         // Rotate twice, the focus should move from text1 to text2 since text3 is not a
         // descendant of the scrollable container.
         target = mNavigator.findRotateTarget(text1, direction, 2);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(target.node);
+        Utils.recycleNode(target.node);
 
         // Rotate three times should do the same.
         target = mNavigator.findRotateTarget(text1, direction, 3);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(text1, text2, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -548,11 +533,9 @@ public class NavigatorTest {
         Activity activity = mActivityRule.getActivity();
         RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
         recyclerView.post(() -> {
-            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity);
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 3);
             adapter.setItemsFocusable(true);
             recyclerView.setAdapter(adapter);
-            adapter.setItems(Lists.newArrayList("Test Item 1", "Test Item 2", "Test Item 3"));
-            adapter.notifyDataSetChanged();
         });
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
@@ -566,23 +549,20 @@ public class NavigatorTest {
         FindRotateTargetResult target = mNavigator.findRotateTarget(text1, direction, 1);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(target.node);
+        Utils.recycleNode(target.node);
 
         // Rotate twice, the focus should move from text1 to text2 since text3 is off the
         // screen.
         target = mNavigator.findRotateTarget(text1, direction, 2);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(target.node);
+        Utils.recycleNode(target.node);
 
         // Rotate three times should do the same.
         target = mNavigator.findRotateTarget(text1, direction, 3);
         assertThat(target.node).isEqualTo(text2);
         assertThat(target.advancedCount).isEqualTo(1);
-
-        Utils.recycleNodes(text1, text2, target.node);
+        Utils.recycleNode(target.node);
     }
 
     /**
@@ -614,13 +594,10 @@ public class NavigatorTest {
 
         AccessibilityNodeInfo target = mNavigator.findScrollableContainer(button1);
         assertThat(target).isEqualTo(scrollableContainer);
-
         Utils.recycleNodes(target);
 
         target = mNavigator.findScrollableContainer(button2);
         assertThat(target).isNull();
-
-        Utils.recycleNodes(scrollableContainer, button1, button2);
     }
 
     /**
@@ -652,23 +629,19 @@ public class NavigatorTest {
         AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(container2,
                 button4, direction);
         assertThat(target).isEqualTo(button3);
-
         Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container2, button3, direction);
         assertThat(target).isNull();
-
         Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container1, button2, direction);
         assertThat(target).isEqualTo(button1);
-
         Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container1, button1, direction);
         assertThat(target).isNull();
-
-        Utils.recycleNodes(container1, button1, button2, container2, button3, button4, target);
+        Utils.recycleNode(target);
     }
 
     /**
@@ -700,23 +673,17 @@ public class NavigatorTest {
         AccessibilityNodeInfo target = mNavigator.findFocusableDescendantInDirection(container1,
                 button1, direction);
         assertThat(target).isEqualTo(button2);
-
-        Utils.recycleNodes(target);
+        Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container1, button2, direction);
         assertThat(target).isNull();
 
-        Utils.recycleNodes(target);
-
         target = mNavigator.findFocusableDescendantInDirection(container2, button3, direction);
         assertThat(target).isEqualTo(button4);
-
-        Utils.recycleNodes(target);
+        Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container2, button4, direction);
         assertThat(target).isNull();
-
-        Utils.recycleNodes(container1, button1, button2, container2, button3, button4, target);
     }
 
     /**
@@ -747,24 +714,20 @@ public class NavigatorTest {
         AccessibilityNodeInfo target =
                 mNavigator.findFocusableDescendantInDirection(container, button1, direction);
         assertThat(target).isEqualTo(button2);
-
-        Utils.recycleNodes(target);
+        Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container, button2, direction);
         assertThat(target).isEqualTo(button1);
-
-        Utils.recycleNodes(target);
+        Utils.recycleNode(target);
 
         target = mNavigator.findFocusableDescendantInDirection(container, button3, direction);
         assertThat(target).isEqualTo(button1);
-
-        Utils.recycleNodes(target);
+        Utils.recycleNode(target);
 
         // Wrap around since there is no Focus Parking View present.
         target = mNavigator.findFocusableDescendantInDirection(container, button4, direction);
         assertThat(target).isEqualTo(button1);
-
-        Utils.recycleNodes(container, button1, button2, button3, button4, target);
+        Utils.recycleNode(target);
     }
 
     /**
@@ -799,8 +762,6 @@ public class NavigatorTest {
         AccessibilityNodeInfo target = mNavigator.findFirstFocusableDescendant(root);
         assertThat(target).isEqualTo(button3);
         Utils.recycleNode(target);
-
-        Utils.recycleNodes(root, button3);
     }
 
     /**
@@ -835,12 +796,248 @@ public class NavigatorTest {
 
         AccessibilityNodeInfo root = createNode("root");
         AccessibilityNodeInfo button2 = createNode("button2");
-
         AccessibilityNodeInfo target = mNavigator.findLastFocusableDescendant(root);
         assertThat(target).isEqualTo(button2);
         Utils.recycleNode(target);
+    }
 
-        Utils.recycleNodes(root, button2);
+
+    /**
+     * Tests {@link Navigator#findNudgeTargetFocusArea} in the following layout:
+     * <pre>
+     *
+     *            =====focusArea1==============
+     *            =  =========focusArea2====  =
+     *            =  =       *view*        =  =
+     *            =  =======================  =
+     *            =                           =
+     *            =                           =
+     *            =   *scrollableContainer*   =
+     *            =                           =
+     *            =============================
+     * </pre>
+     * Where scrollableContainer has the same size as focusArea1. The top offset of focusArea1
+     * equals the height of focusArea2.
+     */
+    @Test
+    public void test_findNudgeTargetFocusArea_fromScrollableContainer() {
+        initActivity(R.layout.navigator_find_nudge_target_focus_area_1_test_activity);
+        Activity activity = mActivityRule.getActivity();
+        RecyclerView scrollable = activity.findViewById(R.id.scrollable_container);
+        scrollable.post(() -> {
+            TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 20);
+            scrollable.setAdapter(adapter);
+            scrollable.requestFocus();
+        });
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(scrollable.isFocused()).isEqualTo(true);
+
+        AccessibilityNodeInfo currentFocusArea = createNode("focus_area1");
+
+        // Only an AccessibilityService with the permission to retrieve the active window content
+        // can create an AccessibilityWindowInfo. So the AccessibilityWindowInfo and the associated
+        // AccessibilityNodeInfos have to be mocked.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setRoot(mWindowRoot)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .build();
+        AccessibilityNodeInfo sourceNode = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .setParent(currentFocusArea)
+                .setRotaryContainer()
+                .build();
+        // Though there are 20 children in the layout, only one child is mocked. This is fine as
+        // long as the bounds are correct so that it can occupy the entire container.
+        AccessibilityNodeInfo childNode = mNodeBuilder
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .setParent(sourceNode)
+                .build();
+
+        List<AccessibilityWindowInfo> windows = Collections.singletonList(window);
+
+        int direction = View.FOCUS_UP;
+        AccessibilityNodeInfo targetFocusArea = createNode("focus_area2");
+        AccessibilityNodeInfo result = mNavigator.findNudgeTargetFocusArea(
+                windows, sourceNode, currentFocusArea, direction);
+        assertThat(result).isEqualTo(targetFocusArea);
+
+        // Note: only real nodes (and windows) need to be recycled.
+        Utils.recycleNode(result);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTargetFocusArea} in the following layout:
+     * <pre>
+     *    ========topLeft focus area========    ========topRight focus area========
+     *    =                                =    =                                 =
+     *    =  .............  .............  =    =  .............                  =
+     *    =  .           .  .           .  =    =  .           .                  =
+     *    =  . topLeft1  .  .  topLeft2 .  =    =  . topRight1 .                  =
+     *    =  .           .  .           .  =    =  .           .                  =
+     *    =  .............  .............  =    =  .............                  =
+     *    =                                =    =                                 =
+     *    ==================================    ===================================
+     *
+     *    =======middleLeft focus area======
+     *    =                                =
+     *    =  .............  .............  =
+     *    =  .           .  .           .  =
+     *    =  .middleLeft1.  .middleLeft2.  =
+     *    =  . disabled  .  . disabled  .  =
+     *    =  .............  .............  =
+     *    =                                =
+     *    ==================================
+     *
+     *    =======bottomLeft focus area======
+     *    =                                =
+     *    =  .............  .............  =
+     *    =  .           .  .           .  =
+     *    =  .bottomLeft1.  .bottomLeft2.  =
+     *    =  .           .  .           .  =
+     *    =  .............  .............  =
+     *    =                                =
+     *    ==================================
+     * </pre>
+     */
+    @Test
+    public void testFindNudgeTargetFocusArea2() {
+        initActivity(R.layout.navigator_find_nudge_target_focus_area_2_test_activity);
+
+        // The only way to create a AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setRoot(mWindowRoot)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window);
+
+        // Nudge down from topLeft1.
+        AccessibilityNodeInfo topLeftFocusArea = createNode("top_left");
+        AccessibilityNodeInfo bottomLeftFocusArea = createNode("bottom_left");
+        AccessibilityNodeInfo topLeft1 = createNode("top_left1");
+        AccessibilityNodeInfo mockTopLeft1 = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(topLeft1.getBoundsInScreen())
+                .setParent(topLeftFocusArea)
+                .build();
+        AccessibilityNodeInfo target1 = mNavigator.findNudgeTargetFocusArea(
+                windows, mockTopLeft1, topLeftFocusArea, View.FOCUS_DOWN);
+        assertThat(target1).isEqualTo(bottomLeftFocusArea);
+
+        // Reach to the boundary.
+        AccessibilityNodeInfo bottomLeft1 = createNode("bottom_left1");
+        AccessibilityNodeInfo mockBottomLeft1 = mNodeBuilder
+                .setWindow(window)
+                .setBoundsInScreen(bottomLeft1.getBoundsInScreen())
+                .setParent(bottomLeftFocusArea)
+                .build();
+        AccessibilityNodeInfo target2 = mNavigator.findNudgeTargetFocusArea(
+                windows, mockBottomLeft1, bottomLeftFocusArea, View.FOCUS_DOWN);
+        assertThat(target2).isNull();
+
+        // Nudge to the right.
+        AccessibilityNodeInfo topRightFocusArea = createNode("top_right");
+        AccessibilityNodeInfo target3 = mNavigator.findNudgeTargetFocusArea(
+                windows, mockBottomLeft1, bottomLeftFocusArea, View.FOCUS_RIGHT);
+        assertThat(target3).isEqualTo(topRightFocusArea);
+
+        Utils.recycleNodes(target1, target2, target3);
+    }
+
+    /**
+     * Tests {@link Navigator#findFocusParkingView} in the following node tree:
+     * <pre>
+     *                      root
+     *                     /    \
+     *                    /      \
+     *              parent       button
+     *               |
+     *               |
+     *        focusParkingView
+     * </pre>
+     */
+    @Test
+    public void testFindFocusParkingView() {
+        initActivity(R.layout.navigator_find_focus_parking_view_test_activity);
+
+        // The only way to create a AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder().setRoot(mWindowRoot).build();
+        AccessibilityNodeInfo button = mNodeBuilder.setWindow(window).build();
+
+        AccessibilityNodeInfo fpv = createNode("focusParkingView");
+        AccessibilityNodeInfo result = mNavigator.findFocusParkingView(button);
+        assertThat(result).isEqualTo(fpv);
+        Utils.recycleNode(result);
+    }
+
+    @Test
+    public void testfindHunWindow() {
+        // The only way to create a AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo hunWindow = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
+                .setBoundsInScreen(mHunWindowBounds)
+                .build();
+        AccessibilityWindowInfo window2 = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
+                .setBoundsInScreen(mHunWindowBounds)
+                .build();
+        AccessibilityWindowInfo window3 = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(window2);
+        windows.add(window3);
+        windows.add(hunWindow);
+
+        AccessibilityWindowInfo result = mNavigator.findHunWindow(windows);
+        assertThat(result).isEqualTo(hunWindow);
+    }
+
+    @Test
+    public void testIsHunWindow() {
+        // The only way to create a AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
+                .setBoundsInScreen(mHunWindowBounds)
+                .build();
+        boolean isHunWindow = mNavigator.isHunWindow(window);
+        assertThat(isHunWindow).isEqualTo(true);
+    }
+
+    /**
+     * Tests {@link Navigator#getAncestorFocusArea} in the following node tree:
+     * <pre>
+     *                      root
+     *                     /    \
+     *                    /      \
+     *            focusArea    button3
+     *             /    \
+     *            /      \
+     *        parent  button2
+     *          |
+     *          |
+     *       button1
+     * </pre>
+     */
+    @Test
+    public void testGetAncestorFocusArea() {
+        initActivity(R.layout.navigator_get_ancestor_focus_area_test_activity);
+
+        AccessibilityNodeInfo focusArea = createNode("focusArea");
+        AccessibilityNodeInfo button1 = createNode("button1");
+        AccessibilityNodeInfo result1 = mNavigator.getAncestorFocusArea(button1);
+        assertThat(result1).isEqualTo(focusArea);
+
+        AccessibilityNodeInfo button2 = createNode("button2");
+        AccessibilityNodeInfo result2 = mNavigator.getAncestorFocusArea(button2);
+        assertThat(result2).isEqualTo(focusArea);
+
+        AccessibilityNodeInfo button3 = createNode("button3");
+        AccessibilityNodeInfo result3 = mNavigator.getAncestorFocusArea(button3);
+        assertThat(result3).isEqualTo(mWindowRoot);
+
+        Utils.recycleNodes(result1, result2, result3);
     }
 
     /**
@@ -856,8 +1053,8 @@ public class NavigatorTest {
 
     /**
      * Returns the {@link AccessibilityNodeInfo} related to the provided viewId. Returns null if no
-     * such node exists. Callers should ensure {@link #initActivity} has already been called
-     * and also recycle the result.
+     * such node exists. Callers should ensure {@link #initActivity} has already been called. Caller
+     * shouldn't recycle the result because it will be recycled in {@link #tearDown}.
      */
     private AccessibilityNodeInfo createNode(String viewId) {
         String fullViewId = "com.android.car.rotary.tests.unit:id/" + viewId;
@@ -866,6 +1063,7 @@ public class NavigatorTest {
         if (nodes.isEmpty()) {
             return null;
         }
+        mNodes.addAll(nodes);
         return nodes.get(0);
     }
 
