@@ -157,7 +157,7 @@ public class RotaryService extends AccessibilityService implements
     @Nullable private static WeakReference<Context> sWindowContext;
 
     @NonNull
-    private NodeCopier mNodeCopier = new NodeCopier();
+    private final NodeCopier mNodeCopier = new NodeCopier();
 
     private Navigator mNavigator;
 
@@ -940,13 +940,13 @@ public class RotaryService extends AccessibilityService implements
         if (type != null) {
             mWindowCache.remove(windowId);
             // No longer need to keep track of the node being edited if the IME window was closed.
-            if (type.intValue() == TYPE_INPUT_METHOD) {
+            if (type == TYPE_INPUT_METHOD) {
                 setEditNode(null);
             }
             // No need to restore the focus if it's an application window. When an application
             // window is removed, another window will gain focus shortly and the FocusParkingView
             // in that window will restore the focus.
-            if (type.intValue() == TYPE_APPLICATION) {
+            if (type == TYPE_APPLICATION) {
                 return;
             }
         } else {
@@ -1194,31 +1194,22 @@ public class RotaryService extends AccessibilityService implements
 
         // If the focused node is not in direct manipulation mode, try to move the focus to another
         // node.
-        boolean success = nudgeTo(windows, direction);
+        nudgeTo(windows, direction);
         Utils.recycleWindows(windows);
-
-        // If the user is nudging out of the IME to the node being edited, we no longer need
-        // to keep track of the node being edited.
-        if (success) {
-            mEditNode = Utils.refreshNode(mEditNode);
-            if (mEditNode != null && mEditNode.isFocused()) {
-                setEditNode(null);
-            }
-        }
     }
 
-    private boolean nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+    private void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
         // If the HUN is in the nudge direction, nudge to it.
         boolean hunFocusResult = focusHunsWindow(windows, direction);
         if (hunFocusResult) {
             L.d("Nudge to HUN successful");
-            return true;
+            return;
         }
 
         // Try to move the focus to the shortcut node.
         if (mFocusArea == null) {
             L.e("mFocusArea shouldn't be null");
-            return false;
+            return;
         }
         Bundle arguments = new Bundle();
         arguments.putInt(NUDGE_DIRECTION, direction);
@@ -1229,7 +1220,7 @@ public class RotaryService extends AccessibilityService implements
                 findFocusedNode(root);
                 root.recycle();
             }
-            return true;
+            return;
         }
 
         // No shortcut node, so move the focus in the given direction.
@@ -1243,7 +1234,7 @@ public class RotaryService extends AccessibilityService implements
                 findFocusedNode(root);
                 root.recycle();
             }
-            return true;
+            return;
         }
 
         // No specified FocusArea or cached FocusArea in the direction, so mFocusArea doesn't know
@@ -1252,8 +1243,35 @@ public class RotaryService extends AccessibilityService implements
                 mNavigator.findNudgeTargetFocusArea(windows, mFocusedNode, mFocusArea, direction);
         if (targetFocusArea == null) {
             L.d("Failed to find a target FocusArea for the nudge");
-            return false;
+            return;
         }
+
+        // If the user is nudging out of the IME, set mFocusedNode to the node being edited (which
+        // should already be focused) and hide the IME.
+        if (mEditNode != null && mFocusArea.getWindowId() != targetFocusArea.getWindowId()) {
+            AccessibilityWindowInfo fromWindow = mFocusArea.getWindow();
+            if (fromWindow != null && fromWindow.getType() == TYPE_INPUT_METHOD) {
+                setFocusedNode(mEditNode);
+                L.d("Returned to node being edited");
+                // Ask the FocusParkingView to hide the IME.
+                AccessibilityNodeInfo fpv = mNavigator.findFocusParkingView(mEditNode);
+                if (fpv != null) {
+                    if (!fpv.performAction(ACTION_HIDE_IME)) {
+                        L.w("Failed to close IME");
+                    }
+                    fpv.recycle();
+                }
+                setEditNode(null);
+                Utils.recycleWindow(fromWindow);
+                targetFocusArea.recycle();
+                return;
+            }
+            Utils.recycleWindow(fromWindow);
+        }
+
+        // targetFocusArea is an explicit FocusArea (i.e., an instance of the FocusArea class), so
+        // perform ACTION_FOCUS on it. The FocusArea will handle this by focusing one of its
+        // descendants.
         if (Utils.isFocusArea(targetFocusArea)) {
             arguments.clear();
             arguments.putInt(NUDGE_DIRECTION, direction);
@@ -1261,7 +1279,7 @@ public class RotaryService extends AccessibilityService implements
             L.d("Nudging to the nearest FocusArea "
                     + (success ? "succeeded" : "failed: " + targetFocusArea));
             targetFocusArea.recycle();
-            return success;
+            return;
         }
 
         // targetFocusArea is an implicit FocusArea (i.e., the root node of a window without any
@@ -1270,7 +1288,6 @@ public class RotaryService extends AccessibilityService implements
         L.d("Nudging to the nearest implicit focus area "
                 + (success ? "succeeded" : "failed: " + targetFocusArea));
         targetFocusArea.recycle();
-        return success;
     }
 
     private void handleRotaryEvent(RotaryEvent rotaryEvent) {
@@ -1519,20 +1536,20 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    private boolean injectKeyEventForDirection(int direction, int action) {
+    private void injectKeyEventForDirection(int direction, int action) {
         Integer keyCode = DIRECTION_TO_KEYCODE_MAP.get(direction);
         if (keyCode == null) {
             throw new IllegalArgumentException("direction must be one of "
                     + "{FOCUS_UP, FOCUS_DOWN, FOCUS_LEFT, FOCUS_RIGHT}.");
         }
-        return injectKeyEvent(keyCode, action);
+        injectKeyEvent(keyCode, action);
     }
 
-    private boolean injectKeyEvent(int keyCode, int action) {
+    private void injectKeyEvent(int keyCode, int action) {
         long upTime = SystemClock.uptimeMillis();
         KeyEvent keyEvent = new KeyEvent(
                 /* downTime= */ upTime, /* eventTime= */ upTime, action, keyCode, /* repeat= */ 0);
-        return mInputManager.injectInputEvent(keyEvent, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        mInputManager.injectInputEvent(keyEvent, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 
     /**
@@ -1600,7 +1617,7 @@ public class RotaryService extends AccessibilityService implements
 
         // If we were not in rotary mode before and we can focus the HUNs window for the given
         // nudge, focus the window and ensure that there is no previously touched node.
-        if (!prevInRotaryMode && windows != null && focusHunsWindow(windows, direction)) {
+        if (!prevInRotaryMode && focusHunsWindow(windows, direction)) {
             setLastTouchedNode(null);
             return true;
         }
