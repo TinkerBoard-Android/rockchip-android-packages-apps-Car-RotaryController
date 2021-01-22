@@ -87,6 +87,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
 
@@ -1046,17 +1047,7 @@ public class RotaryService extends AccessibilityService implements
         }
         Utils.recycleNode(fpv);
 
-        AccessibilityWindowInfo window = node.getWindow();
-        if (window == null) {
-            L.e("No window found for the generic FocusParkingView");
-            return false;
-        }
-        AccessibilityNodeInfo root = window.getRoot();
-        window.recycle();
-        if (root == null) {
-            L.w("No root node in " + window);
-            return false;
-        }
+        AccessibilityNodeInfo root = Utils.getRoot(node);
         AccessibilityNodeInfo firstFocusable = mNavigator.findFirstFocusableDescendant(root);
         root.recycle();
         if (firstFocusable == null) {
@@ -1580,7 +1571,8 @@ public class RotaryService extends AccessibilityService implements
      * @return whether the event was consumed by this method. When {@code false},
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
-    private boolean initFocus() {
+    @VisibleForTesting
+    boolean initFocus() {
         List<AccessibilityWindowInfo> windows = getWindows();
         boolean consumed = initFocus(windows, INVALID_NUDGE_DIRECTION);
         Utils.recycleWindows(windows);
@@ -1758,7 +1750,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * Sets {@link #mFocusedNode} to a copy of the given node, and clears {@link #mLastTouchedNode}.
      */
-    private void setFocusedNode(@Nullable AccessibilityNodeInfo focusedNode) {
+    @VisibleForTesting
+    void setFocusedNode(@Nullable AccessibilityNodeInfo focusedNode) {
         // Android doesn't clear focus automatically when focus is set in another window, so we need
         // to do it explicitly.
         maybeClearFocusInCurrentWindow(focusedNode);
@@ -1855,7 +1848,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * Sets {@link #mLastTouchedNode} to a copy of the given node, and clears {@link #mFocusedNode}.
      */
-    private void setLastTouchedNode(@Nullable AccessibilityNodeInfo lastTouchedNode) {
+    @VisibleForTesting
+    void setLastTouchedNode(@Nullable AccessibilityNodeInfo lastTouchedNode) {
         setLastTouchedNodeInternal(lastTouchedNode);
         if (mLastTouchedNode != null && mFocusedNode != null) {
             setFocusedNodeInternal(null);
@@ -2042,7 +2036,8 @@ public class RotaryService extends AccessibilityService implements
      * @param eventTime the {@link SystemClock#uptimeMillis} when the event occurred
      * @return the number of "ticks" to rotate
      */
-    private int getRotateAcceleration(int count, long eventTime) {
+    @VisibleForTesting
+    int getRotateAcceleration(int count, long eventTime) {
         // count is 0 when testing key "C" or "V" is pressed.
         if (count <= 0) {
             count = 1;
@@ -2076,5 +2071,15 @@ public class RotaryService extends AccessibilityService implements
         String enabledInputMethods = Settings.Secure.getString(
                 getContentResolver(), Settings.Secure.ENABLED_INPUT_METHODS);
         return enabledInputMethods != null && enabledInputMethods.contains(componentName);
+    }
+
+    @VisibleForTesting
+    AccessibilityNodeInfo getFocusedNode() {
+        return mFocusedNode;
+    }
+
+    @VisibleForTesting
+    void setNavigator(@NonNull Navigator navigator) {
+        mNavigator = navigator;
     }
 }
