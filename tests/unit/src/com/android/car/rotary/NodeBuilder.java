@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,14 @@ import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_O
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_CONTAINER;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.internal.util.MockUtil.isMock;
 
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -48,16 +50,13 @@ import java.util.List;
  * need to be recycled.
  */
 class NodeBuilder {
-
     private static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 100, 100);
-
     /**
      * A list of mock nodes created via NodeBuilder. This list is used for searching for a
      * node's child nodes.
      */
     @NonNull
     private final List<AccessibilityNodeInfo> mNodeList;
-
     /** The window to which this node belongs. */
     @Nullable
     private AccessibilityWindowInfo mWindow;
@@ -102,14 +101,28 @@ class NodeBuilder {
     AccessibilityNodeInfo build() {
         // Make a copy of the current NodeBuilder.
         NodeBuilder builder = cut();
-
         AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
-
         when(node.getWindow()).thenReturn(builder.mWindow);
         when(node.getWindowId()).thenReturn(builder.mWindowId);
-        when(node.getParent()).thenReturn(builder.mParent);
-
-        if (builder.mParent != null) {
+        when(node.getParent()).thenReturn(
+                // In Navigator, nodes will be recycled once they're no longer used. When a real
+                // node is recycled, it can't be used again, such as performing an action, otherwise
+                // it will cause the "Cannot perform this action on a not sealed instance"
+                // exception. If the mock getParent() always returns the same instance and
+                // mParent is a real node, it might cause the exception when getParent() is called
+                // multiple on the same mock node.
+                // To fix it, this method returns a different instance each time it's called.
+                // Note: if this method is called too many times and triggers the "Exceeded the
+                // maximum calls", please add more parameters.
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent))
+                .thenThrow(new RuntimeException("Exceeded the maximum calls"));
+        // There is no need to mock getChildCount() or getChild() if mParent is null or a real node.
+        if (builder.mParent != null && isMock(builder.mParent)) {
             // Mock AccessibilityNodeInfo#getChildCount().
             doAnswer(invocation -> {
                 int childCount = 0;
@@ -120,7 +133,6 @@ class NodeBuilder {
                 }
                 return childCount;
             }).when(builder.mParent).getChildCount();
-
             // Mock AccessibilityNodeInfo#getChild(int).
             doAnswer(invocation -> {
                 Object[] args = invocation.getArguments();
@@ -137,9 +149,7 @@ class NodeBuilder {
                 return null;
             }).when(builder.mParent).getChild(any(Integer.class));
         }
-
         when(node.getClassName()).thenReturn(builder.mClassName);
-
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
             ((Rect) args[0]).set(builder.mBoundsInParent);
@@ -150,7 +160,6 @@ class NodeBuilder {
             ((Rect) args[0]).set(builder.mBoundsInScreen);
             return null;
         }).when(node).getBoundsInScreen(any(Rect.class));
-
         when(node.isFocusable()).thenReturn(builder.mFocusable);
         when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
         when(node.isEnabled()).thenReturn(builder.mEnabled);
@@ -159,7 +168,6 @@ class NodeBuilder {
         when(node.getContentDescription()).thenReturn(builder.mContentDescription);
         when(node.getActionList()).thenReturn(builder.mActionList);
         when(node.getExtras()).thenReturn(builder.mExtras);
-
         builder.mNodeList.add(node);
         return node;
     }
@@ -175,7 +183,9 @@ class NodeBuilder {
     }
 
     NodeBuilder setParent(@Nullable AccessibilityNodeInfo parent) {
-        mParent = parent;
+        // The parent node could be a mock node or a real node. In the latter case, a copy is
+        // saved.
+        mParent = MockNodeCopierProvider.get().copy(parent);
         return this;
     }
 
@@ -253,6 +263,10 @@ class NodeBuilder {
         return setContentDescription(ROTARY_VERTICALLY_SCROLLABLE);
     }
 
+    NodeBuilder setRotaryContainer() {
+        return setContentDescription(ROTARY_CONTAINER);
+    }
+
     /**
      * Creates a copy of the current NodeBuilder, and clears the states of the current NodeBuilder
      * except for {@link #mNodeList}.
@@ -274,7 +288,6 @@ class NodeBuilder {
         copy.mContentDescription = mContentDescription;
         copy.mActionList = mActionList;
         copy.mExtras = mExtras;
-
         // Clear the states so that it doesn't infect the next NodeBuilder we create.
         mWindow = null;
         mWindowId = UNDEFINED_WINDOW_ID;
@@ -290,7 +303,6 @@ class NodeBuilder {
         mContentDescription = null;
         mActionList = new ArrayList<>();
         mExtras = new Bundle();
-
         return copy;
     }
 }

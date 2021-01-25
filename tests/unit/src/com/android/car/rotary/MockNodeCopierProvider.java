@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,24 @@
  */
 package com.android.car.rotary;
 
+import static org.mockito.internal.util.MockUtil.isMock;
+
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.Nullable;
 
 /** A class that can provide a mock {@link NodeCopier}. */
 class MockNodeCopierProvider {
-
     private static final NodeCopier sNodeCopier = new NodeCopier() {
         // NodeCopier#copyNode() doesn't work when passed a mock node, so we create the mock method
-        // which returns the passed node itself rather than a copy. As a result, nodes created by
-        // the mock method shouldn't be recycled.
+        // which returns the passed node itself rather than a copy when the parameter is a mocked
+        // node. As a result, mocked nodes created by the mock method shouldn't be recycled.
         @Override
         AccessibilityNodeInfo copy(@Nullable AccessibilityNodeInfo node) {
-            return node;
+            if (isMock(node)) {
+                return node;
+            }
+            return node == null ? null : AccessibilityNodeInfo.obtain(node);
         }
     };
 

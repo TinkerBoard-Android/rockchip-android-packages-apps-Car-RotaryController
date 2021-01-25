@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_O
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_CONTAINER;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -33,19 +34,18 @@ import android.os.Bundle;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 
-@RunWith(RobolectricTestRunner.class)
+@RunWith(AndroidJUnit4.class)
 public class NodeBuilderTest {
-
     private static final String CLASS_NAME = "class_name";
     private static final String CONTENT_DESCRIPTION = "content_description";
-
     private NodeBuilder mNodeBuilder;
 
     @Before
@@ -87,7 +87,6 @@ public class NodeBuilderTest {
         assertThat(node.refresh()).isFalse();
     }
 
-
     @Test
     public void testSetScrollable() {
         AccessibilityNodeInfo node = mNodeBuilder.setScrollable(true).build();
@@ -104,7 +103,7 @@ public class NodeBuilderTest {
     public void testSetWindow() {
         AccessibilityWindowInfo window = new WindowBuilder().build();
         AccessibilityNodeInfo node = mNodeBuilder.setWindow(window).build();
-        assertThat(node.getWindow()).isSameInstanceAs(window);
+        assertThat(node.getWindow()).isEqualTo(window);
     }
 
     @Test
@@ -143,11 +142,10 @@ public class NodeBuilderTest {
         AccessibilityNodeInfo parent = mNodeBuilder.build();
         AccessibilityNodeInfo child1 = mNodeBuilder.setParent(parent).build();
         AccessibilityNodeInfo child2 = mNodeBuilder.setParent(parent).build();
-
-        assertThat(child1.getParent()).isSameInstanceAs(parent);
+        assertThat(child1.getParent()).isEqualTo(parent);
         assertThat(parent.getChildCount()).isEqualTo(2);
-        assertThat(parent.getChild(0)).isSameInstanceAs(child1);
-        assertThat(parent.getChild(1)).isSameInstanceAs(child2);
+        assertThat(parent.getChild(0)).isEqualTo(child1);
+        assertThat(parent.getChild(1)).isEqualTo(child2);
         assertThat(parent.getChild(2)).isNull();
     }
 
@@ -196,5 +194,11 @@ public class NodeBuilderTest {
     public void testSetScrollableContainer() {
         AccessibilityNodeInfo node = mNodeBuilder.setScrollableContainer().build();
         assertThat(node.getContentDescription().toString()).isEqualTo(ROTARY_VERTICALLY_SCROLLABLE);
+    }
+
+    @Test
+    public void testSetRotaryContainer() {
+        AccessibilityNodeInfo node = mNodeBuilder.setRotaryContainer().build();
+        assertThat(node.getContentDescription().toString()).isEqualTo(ROTARY_CONTAINER);
     }
 }

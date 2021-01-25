@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,15 +23,15 @@ import android.graphics.Rect;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 
-@RunWith(RobolectricTestRunner.class)
+@RunWith(AndroidJUnit4.class)
 public class WindowBuilderTest {
-
     @Test
     public void testSetId() {
         AccessibilityWindowInfo window = new WindowBuilder().setId(0x42).build();
@@ -42,7 +42,7 @@ public class WindowBuilderTest {
     public void testSetRoot() {
         AccessibilityNodeInfo root = new NodeBuilder(new ArrayList<>()).build();
         AccessibilityWindowInfo window = new WindowBuilder().setRoot(root).build();
-        assertThat(window.getRoot()).isSameInstanceAs(root);
+        assertThat(window.getRoot()).isEqualTo(root);
     }
 
     @Test

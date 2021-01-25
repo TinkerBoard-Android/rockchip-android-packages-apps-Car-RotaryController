@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,8 +45,13 @@ class WindowBuilder {
     AccessibilityWindowInfo build() {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
         when(window.getId()).thenReturn(mId);
-        when(window.getRoot()).thenReturn(mRoot);
-
+        when(window.getRoot())
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenReturn(MockNodeCopierProvider.get().copy(mRoot))
+                .thenThrow(new RuntimeException(
+                        "Exceeded the maximum calls. Please add more parameters"));
         if (mBoundsInScreen != null) {
             // Mock AccessibilityWindowInfo#getBoundsInScreen(Rect).
             doAnswer(invocation -> {
@@ -55,9 +60,7 @@ class WindowBuilder {
                 return null;
             }).when(window).getBoundsInScreen(any(Rect.class));
         }
-
         when(window.getType()).thenReturn(mType);
-
         return window;
     }
 
@@ -67,7 +70,7 @@ class WindowBuilder {
     }
 
     WindowBuilder setRoot(@Nullable AccessibilityNodeInfo root) {
-        mRoot = root;
+        mRoot = MockNodeCopierProvider.get().copy(root);
         return this;
     }
 
