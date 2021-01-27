@@ -27,4 +27,6 @@ android_test {
     jni_libs: ["libdexmakerjvmtiagent", "libstaticjvmtiagent"],
 
     aaptflags: ["--extra-packages com.android.car.rotary"],
+
+    test_suites: ["device-tests"]
 }
