@@ -16,10 +16,14 @@
 
 package com.android.car.rotary;
 
+import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.testng.AssertJUnit.assertNull;
 
@@ -28,6 +32,7 @@ import android.app.UiAutomation;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.Intent;
+import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
@@ -64,6 +69,8 @@ public class RotaryServiceTest {
 
     private @Spy
     RotaryService mRotaryService;
+    private @Spy
+    Navigator mNavigator;
 
     @BeforeClass
     public static void setUpClass() {
@@ -77,9 +84,7 @@ public class RotaryServiceTest {
         mIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
 
         MockitoAnnotations.initMocks(this);
-        Navigator navigator = new Navigator(/* displayWidth= */ 0, /* displayHeight= */ 0,
-                /* hunLeft= */ 0, /* hunRight= */ 0, /* showHunOnBottom= */ false);
-        mRotaryService.setNavigator(navigator);
+        mRotaryService.setNavigator(mNavigator);
     }
 
     @After
@@ -403,6 +408,279 @@ public class RotaryServiceTest {
         events = Collections.singletonList(rotaryEvent);
         mRotaryService.onRotaryEvents(validDisplayId, events);
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(defaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#nudgeTo(List, int)} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      HUN FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testNudgeTo_nudgeToHun() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo hunRoot = createNode("hun_root");
+        AccessibilityWindowInfo hunWindow = new WindowBuilder()
+                .setRoot(hunRoot)
+                .build();
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(hunWindow);
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        AccessibilityNodeInfo hunButton1 = createNode("hun_button1");
+        AccessibilityNodeInfo mockHunFpv = mock(AccessibilityNodeInfo.class);
+        doAnswer(invocation -> {
+            mRotaryService.setFocusedNode(hunButton1);
+            return true;
+        }).when(mockHunFpv).performAction(ACTION_RESTORE_DEFAULT_FOCUS);
+        when(mockHunFpv.refresh()).thenReturn(true);
+        when(mockHunFpv.getClassName()).thenReturn(Utils.FOCUS_PARKING_VIEW_CLASS_NAME);
+        when(mNavigator.findFocusParkingView(hunRoot)).thenReturn(mockHunFpv);
+        when(mNavigator.findHunWindow(anyList())).thenReturn(hunWindow);
+
+        assertThat(mRotaryService.getFocusedNode()).isNotEqualTo(hunButton1);
+
+        int hunNudgeDirection = mRotaryService.mHunNudgeDirection;
+        mRotaryService.nudgeTo(windows, hunNudgeDirection);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(hunButton1);
+    }
+
+    /**
+     * Tests {@link RotaryService#nudgeTo(List, int)} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      HUN FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testNudgeTo_nudgeToNudgeShortcut() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton1 = activity.findViewById(R.id.app_button1);
+        appButton1.post(() -> appButton1.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton1.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton1Node = createNode("app_button1");
+        mRotaryService.setFocusedNode(appButton1Node);
+
+        mRotaryService.nudgeTo(windows, View.FOCUS_RIGHT);
+        AccessibilityNodeInfo nudgeShortcutNode = createNode("nudge_shortcut");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(nudgeShortcutNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#nudgeTo(List, int)} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      HUN FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testNudgeTo_nudgeToUserSpecifiedTarget() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton2 = activity.findViewById(R.id.app_button2);
+        appButton2.post(() -> appButton2.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton2.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton2Node = createNode("app_button2");
+        mRotaryService.setFocusedNode(appButton2Node);
+
+        mRotaryService.nudgeTo(windows, View.FOCUS_LEFT);
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#nudgeTo(List, int)} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      HUN FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testNudgeTo_nudgeToNearestTarget() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        AccessibilityNodeInfo appFocusArea3Node = createNode("app_focus_area3");
+        mRotaryService.setFocusedNode(appButton3Node);
+
+        AccessibilityNodeInfo appFocusArea1Node = createNode("app_focus_area1");
+        when(mNavigator.findNudgeTargetFocusArea(
+                windows, appButton3Node, appFocusArea3Node, View.FOCUS_UP))
+                .thenReturn(AccessibilityNodeInfo.obtain(appFocusArea1Node));
+
+        mRotaryService.nudgeTo(windows, View.FOCUS_UP);
+        AccessibilityNodeInfo appButton1Node = createNode("app_button1");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appButton1Node);
     }
 
     /**
