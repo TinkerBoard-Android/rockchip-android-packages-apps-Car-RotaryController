@@ -40,4 +40,24 @@
     <!-- How many milliseconds the center button must be held down to trigger a long-press. Zero
     indicates the system default long-press timeout should be used. -->
     <integer name="long_press_ms">0</integer>
+
+    <!-- Global actions to perform when the user nudges up, down, left, or right off the edge of the
+         screen. No global action is performed if the relevant element of this array is -1
+         (INVALID_GLOBAL_ACTION). -->
+    <integer-array name="off_screen_nudge_global_actions">
+        <item>-1</item>
+        <item>-1</item>
+        <item>-1</item>
+        <item>-1</item>
+    </integer-array>
+
+    <!-- Key codes of click events to inject when the user nudges up, down, left, or right off the
+         edge of the screen. No event is injected if the relevant element of this array is 0
+         (KEYCODE_UNKNOWN). -->
+    <integer-array name="off_screen_nudge_key_codes">
+        <item>0</item>
+        <item>0</item>
+        <item>0</item>
+        <item>0</item>
+    </integer-array>
 </resources>
