@@ -382,17 +382,29 @@ final class Utils {
     }
 
     /**
-     * Returns the root node in the tree containing {@code node}. Returns null if unable to get
-     * the root node for any reason. The caller is responsible for recycling the result.
+     * Returns the root node in the tree containing {@code node}. The caller is responsible for
+     * recycling the result.
      */
-    @Nullable
+    @NonNull
     static AccessibilityNodeInfo getRoot(@NonNull AccessibilityNodeInfo node) {
+        // Get the root node directly via the window.
         AccessibilityWindowInfo window = node.getWindow();
-        if (window == null) {
-            return null;
+        if (window != null) {
+            AccessibilityNodeInfo root = window.getRoot();
+            window.recycle();
+            if (root != null) {
+                return root;
+            }
         }
-        AccessibilityNodeInfo root = window.getRoot();
-        window.recycle();
-        return root;
+
+        // If the root node can't be accessed via the window, navigate up the node tree.
+        AccessibilityNodeInfo child = AccessibilityNodeInfo.obtain(node);
+        AccessibilityNodeInfo parent = node.getParent();
+        while (parent != null) {
+            child.recycle();
+            child = parent;
+            parent = child.getParent();
+        }
+        return child;
     }
 }

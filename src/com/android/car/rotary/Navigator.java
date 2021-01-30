@@ -198,17 +198,7 @@ class Navigator {
      */
     @Nullable
     AccessibilityNodeInfo findFocusParkingView(@NonNull AccessibilityNodeInfo node) {
-        AccessibilityWindowInfo window = node.getWindow();
-        if (window == null) {
-            L.w("Failed to get window for node " + node);
-            return null;
-        }
-        AccessibilityNodeInfo root = window.getRoot();
-        window.recycle();
-        if (root == null) {
-            L.e("No root node that contains " + node);
-            return null;
-        }
+        AccessibilityNodeInfo root = Utils.getRoot(node);
         AccessibilityNodeInfo fpv = mTreeTraverser.depthFirstSearch(
                 root,
                 /* skipPredicate= */ Utils::isFocusArea,
