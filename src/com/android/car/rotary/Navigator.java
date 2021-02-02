@@ -189,7 +189,7 @@ class Navigator {
         return target == null ? null : new FindRotateTargetResult(target, advancedCount);
     }
 
-    /** Sets a mock Utils instance for testing. */
+    /** Sets a NodeCopier instance for testing. */
     @VisibleForTesting
     void setNodeCopier(@NonNull NodeCopier nodeCopier) {
         mNodeCopier = nodeCopier;

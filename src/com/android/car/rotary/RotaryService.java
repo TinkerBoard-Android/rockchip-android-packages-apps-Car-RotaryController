@@ -224,7 +224,7 @@ public class RotaryService extends AccessibilityService implements
     @Nullable private static WeakReference<Context> sWindowContext;
 
     @NonNull
-    private final NodeCopier mNodeCopier = new NodeCopier();
+    private NodeCopier mNodeCopier = new NodeCopier();
 
     private Navigator mNavigator;
 
@@ -288,7 +288,8 @@ public class RotaryService extends AccessibilityService implements
      * are ignored if they occur within {@link #mIgnoreViewClickedMs} of {@link
      * #mLastViewClickedTime}.
      */
-    private AccessibilityNodeInfo mIgnoreViewClickedNode;
+    @VisibleForTesting
+    AccessibilityNodeInfo mIgnoreViewClickedNode;
 
     /**
      * The time of the last {@link AccessibilityEvent#TYPE_VIEW_CLICKED} event in {@link
@@ -398,7 +399,8 @@ public class RotaryService extends AccessibilityService implements
      * How many milliseconds the center buttons must be held down before a long-press is triggered.
      * This doesn't apply to the application window.
      */
-    private long mLongPressMs;
+    @VisibleForTesting
+    long mLongPressMs;
 
     /**
      * Whether the center button was held down long enough to trigger a long-press. In this case, a
@@ -1840,7 +1842,8 @@ public class RotaryService extends AccessibilityService implements
         injectKeyEvent(keyCode, action);
     }
 
-    private void injectKeyEvent(int keyCode, int action) {
+    @VisibleForTesting
+    void injectKeyEvent(int keyCode, int action) {
         long upTime = SystemClock.uptimeMillis();
         KeyEvent keyEvent = new KeyEvent(
                 /* downTime= */ upTime, /* eventTime= */ upTime, action, keyCode, /* repeat= */ 0);
@@ -2396,6 +2399,14 @@ public class RotaryService extends AccessibilityService implements
         return mNodeCopier.copy(node);
     }
 
+    /** Sets a NodeCopier instance for testing. */
+    @VisibleForTesting
+    void setNodeCopier(@NonNull NodeCopier nodeCopier) {
+        mNodeCopier = nodeCopier;
+        mNavigator.setNodeCopier(nodeCopier);
+        mWindowCache.setNodeCopier(nodeCopier);
+    }
+
     /**
      * Checks if the {@code componentName} is an enabled input method.
      * The string should be in the format {@code "PackageName/.ClassName"}.
@@ -2418,5 +2429,10 @@ public class RotaryService extends AccessibilityService implements
     @VisibleForTesting
     void setNavigator(@NonNull Navigator navigator) {
         mNavigator = navigator;
+    }
+
+    @VisibleForTesting
+    void setInputManager(@NonNull InputManager inputManager) {
+        mInputManager = inputManager;
     }
 }
