@@ -57,8 +57,11 @@ import android.car.Car;
 import android.car.CarOccupantZoneManager;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.database.ContentObserver;
@@ -370,6 +373,62 @@ public class RotaryService extends AccessibilityService implements
         DIRECTION_TO_KEYCODE_MAP = Collections.unmodifiableMap(map);
     }
 
+    private final BroadcastReceiver mHomeButtonReceiver = new BroadcastReceiver() {
+        // Should match the values in PhoneWindowManager.java
+        private static final String SYSTEM_DIALOG_REASON_KEY = "reason";
+        private static final String SYSTEM_DIALOG_REASON_HOME_KEY = "homekey";
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String reason = intent.getStringExtra(SYSTEM_DIALOG_REASON_KEY);
+            if (!SYSTEM_DIALOG_REASON_HOME_KEY.equals(reason)) {
+                L.d("Skipping the processing of ACTION_CLOSE_SYSTEM_DIALOGS broadcast event due "
+                        + "to reason: " + reason);
+                return;
+            }
+
+            // Trigger a back action in order to exit direct manipulation mode.
+            if (mInDirectManipulationMode) {
+                handleBackButtonEvent(ACTION_DOWN);
+                handleBackButtonEvent(ACTION_UP);
+            }
+
+            List<AccessibilityWindowInfo> windows = getWindows();
+            for (AccessibilityWindowInfo window : windows) {
+                if (window == null) {
+                    continue;
+                }
+
+                if (mInRotaryMode && mNavigator.isMainApplicationWindow(window)) {
+                    // Post this in a handler so that there is no race condition between app
+                    // transitions and restoration of focus.
+                    getMainThreadHandler().post(() -> {
+                        AccessibilityNodeInfo rootView = window.getRoot();
+                        if (rootView == null) {
+                            L.e("Root view in application window no longer exists");
+                            return;
+                        }
+                        boolean result = restoreDefaultFocus(rootView);
+                        if (!result) {
+                            L.e("Failed to focus the default element in the application window");
+                        }
+                        Utils.recycleNode(rootView);
+                    });
+                } else {
+                    // Post this in a handler so that there is no race condition between app
+                    // transitions and restoration of focus.
+                    getMainThreadHandler().post(() -> {
+                        boolean result = clearFocusInWindow(window);
+                        if (!result) {
+                            L.e("Failed to clear the focus in window: " + window);
+                        }
+                    });
+                }
+            }
+            Utils.recycleWindows(windows);
+        }
+    };
+
     private Car mCar;
     private CarInputManager mCarInputManager;
     private InputManager mInputManager;
@@ -444,6 +503,9 @@ public class RotaryService extends AccessibilityService implements
         if (mLongPressMs == 0) {
             mLongPressMs = ViewConfiguration.getLongPressTimeout();
         }
+
+        getWindowContext().registerReceiver(mHomeButtonReceiver,
+                new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
     }
 
     /**
@@ -508,6 +570,8 @@ public class RotaryService extends AccessibilityService implements
 
     @Override
     public void onDestroy() {
+        getWindowContext().unregisterReceiver(mHomeButtonReceiver);
+
         unregisterInputMethodObserver();
         if (mCarInputManager != null) {
             mCarInputManager.releaseInputEventCapture(CarOccupantZoneManager.DISPLAY_TYPE_MAIN);
@@ -1694,24 +1758,55 @@ public class RotaryService extends AccessibilityService implements
             L.e("Don't call clearFocusInCurrentWindow() when mFocusedNode is null");
             return false;
         }
-        AccessibilityNodeInfo fpv = mNavigator.findFocusParkingView(mFocusedNode);
+        AccessibilityWindowInfo window = mFocusedNode.getWindow();
+        if (window == null) {
+            L.e("Current focused node has a null window");
+            return false;
+        }
+        boolean result = clearFocusInWindow(window);
+        window.recycle();
+        return result;
+    }
+
+    /**
+     * Clears the rotary focus in the given {@code window}.
+     * <p>
+     * If we really clear focus in a window, Android will re-focus a view in that window
+     * automatically. To avoid that we don't really clear the focus. Instead, we "park" the focus on
+     * a FocusParkingView in the given window. FocusParkingView is transparent no matter whether
+     * it's focused or not, so it's invisible to the user.
+     *
+     * @return whether the FocusParkingView was focused successfully
+     */
+    private boolean clearFocusInWindow(@NonNull AccessibilityWindowInfo window) {
+        AccessibilityNodeInfo root = window.getRoot();
+        if (root == null) {
+            L.e("No root node in the window " + window);
+            return false;
+        }
+
+        AccessibilityNodeInfo fpv = mNavigator.findFocusParkingView(root);
 
         // Refresh the node to ensure the focused state is up to date. The node came directly from
         // the node tree but it could have been cached by the accessibility framework.
         fpv = Utils.refreshNode(fpv);
 
         if (fpv == null) {
-            L.e("No FocusParkingView in the window that contains " + mFocusedNode);
+            L.e("No FocusParkingView in the window that contains " + root);
+            root.recycle();
             return false;
         }
         if (fpv.isFocused()) {
             L.d("FocusParkingView is already focused " + fpv);
+            root.recycle();
+            fpv.recycle();
             return true;
         }
         boolean result = performFocusAction(fpv);
         if (!result) {
             L.w("Failed to perform ACTION_FOCUS on " + fpv);
         }
+        root.recycle();
         fpv.recycle();
         return result;
     }

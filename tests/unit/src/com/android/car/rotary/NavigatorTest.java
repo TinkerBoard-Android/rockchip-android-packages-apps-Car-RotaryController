@@ -21,6 +21,7 @@ import android.app.Activity;
 import android.app.UiAutomation;
 import android.content.Intent;
 import android.graphics.Rect;
+import android.view.Display;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -54,6 +55,7 @@ public class NavigatorTest {
 
     private ActivityTestRule<NavigatorTestActivity> mActivityRule;
     private Intent mIntent;
+    private Rect mDisplayBounds;
     private Rect mHunWindowBounds;
     private Navigator mNavigator;
     private AccessibilityNodeInfo mWindowRoot;
@@ -69,10 +71,12 @@ public class NavigatorTest {
         mActivityRule = new ActivityTestRule<>(NavigatorTestActivity.class);
         mIntent = new Intent();
         mIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+        mDisplayBounds = new Rect(0, 0, 1080, 920);
         mHunWindowBounds = new Rect(50, 10, 950, 200);
         // The values of displayWidth and displayHeight don't affect the test, so just use 0.
-        mNavigator = new Navigator(/* displayWidth= */ 0, /* displayHeight= */ 0,
-                mHunWindowBounds.left, mHunWindowBounds.right,/* showHunOnBottom= */ false);
+        mNavigator = new Navigator(/* displayWidth= */ mDisplayBounds.right,
+                /* displayHeight= */ mDisplayBounds.bottom,
+                mHunWindowBounds.left, mHunWindowBounds.right, /* showHunOnBottom= */ false);
         mNavigator.setNodeCopier(MockNodeCopierProvider.get());
         mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
@@ -996,13 +1000,61 @@ public class NavigatorTest {
 
     @Test
     public void testIsHunWindow() {
-        // The only way to create a AccessibilityWindowInfo in the test is via mock.
+        // The only way to create an AccessibilityWindowInfo in the test is via mock.
         AccessibilityWindowInfo window = new WindowBuilder()
                 .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
                 .setBoundsInScreen(mHunWindowBounds)
                 .build();
         boolean isHunWindow = mNavigator.isHunWindow(window);
-        assertThat(isHunWindow).isEqualTo(true);
+        assertThat(isHunWindow).isTrue();
+    }
+
+    @Test
+    public void testIsMainApplicationWindow_returnsTrue() {
+        // The only way to create an AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
+                .setBoundsInScreen(mDisplayBounds)
+                .setDisplayId(Display.DEFAULT_DISPLAY)
+                .build();
+        boolean isMainApplicationWindow = mNavigator.isMainApplicationWindow(window);
+        assertThat(isMainApplicationWindow).isTrue();
+    }
+
+    @Test
+    public void testIsMainApplicationWindow_wrongDisplay_returnsFalse() {
+        // The only way to create an AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
+                .setBoundsInScreen(mDisplayBounds)
+                .setDisplayId(1)
+                .build();
+        boolean isMainApplicationWindow = mNavigator.isMainApplicationWindow(window);
+        assertThat(isMainApplicationWindow).isFalse();
+    }
+
+    @Test
+    public void testIsMainApplicationWindow_wrongType_returnsFalse() {
+        // The only way to create an AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_SYSTEM)
+                .setBoundsInScreen(mDisplayBounds)
+                .setDisplayId(Display.DEFAULT_DISPLAY)
+                .build();
+        boolean isMainApplicationWindow = mNavigator.isMainApplicationWindow(window);
+        assertThat(isMainApplicationWindow).isFalse();
+    }
+
+    @Test
+    public void testIsMainApplicationWindow_wrongBounds_returnsFalse() {
+        // The only way to create an AccessibilityWindowInfo in the test is via mock.
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setType(AccessibilityWindowInfo.TYPE_APPLICATION)
+                .setBoundsInScreen(mHunWindowBounds)
+                .setDisplayId(Display.DEFAULT_DISPLAY)
+                .build();
+        boolean isMainApplicationWindow = mNavigator.isMainApplicationWindow(window);
+        assertThat(isMainApplicationWindow).isFalse();
     }
 
     /**
