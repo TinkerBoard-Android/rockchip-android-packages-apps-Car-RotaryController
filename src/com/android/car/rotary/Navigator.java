@@ -67,6 +67,11 @@ class Navigator {
         mAppWindowBounds = new Rect(0, 0, displayWidth, displayHeight);
     }
 
+    @VisibleForTesting
+    Navigator() {
+        this(0, 0, 0, 0, false);
+    }
+
     @Nullable
     AccessibilityWindowInfo findHunWindow(@NonNull List<AccessibilityWindowInfo> windows) {
         for (AccessibilityWindowInfo window : windows) {
