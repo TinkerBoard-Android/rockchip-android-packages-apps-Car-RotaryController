@@ -258,8 +258,9 @@ public class RotaryService extends AccessibilityService implements
      * direction will move focus to a node outside the HUN, while nudging to other directions
      * will do nothing.
      */
+    @VisibleForTesting
     @View.FocusRealDirection
-    private int mHunEscapeNudgeDirection;
+    int mHunEscapeNudgeDirection;
 
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
