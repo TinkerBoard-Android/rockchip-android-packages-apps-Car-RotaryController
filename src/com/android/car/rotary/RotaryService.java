@@ -249,8 +249,9 @@ public class RotaryService extends AccessibilityService implements
      * The direction of the HUN. If there is no focused node, or the focused node is outside the
      * HUN, nudging to this direction will focus on a node inside the HUN.
      */
+    @VisibleForTesting
     @View.FocusRealDirection
-    private int mHunNudgeDirection;
+    int mHunNudgeDirection;
 
     /**
      * The direction to escape the HUN. If the focused node is inside the HUN, nudging to this
@@ -1253,7 +1254,8 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleWindows(windows);
     }
 
-    private void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+    @VisibleForTesting
+    void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
         // If the HUN is in the nudge direction, nudge to it.
         boolean hunFocusResult = focusHunsWindow(windows, direction);
         if (hunFocusResult) {
