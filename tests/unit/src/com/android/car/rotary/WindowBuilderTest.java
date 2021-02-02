@@ -60,4 +60,11 @@ public class WindowBuilderTest {
                 new WindowBuilder().setType(TYPE_SYSTEM).build();
         assertThat(window.getType()).isEqualTo(TYPE_SYSTEM);
     }
+
+    @Test
+    public void testSetDisplayId() {
+        AccessibilityWindowInfo window =
+                new WindowBuilder().setDisplayId(3).build();
+        assertThat(window.getDisplayId()).isEqualTo(3);
+    }
 }
