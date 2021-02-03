@@ -67,6 +67,11 @@ class Navigator {
         mAppWindowBounds = new Rect(0, 0, displayWidth, displayHeight);
     }
 
+    @VisibleForTesting
+    Navigator() {
+        this(0, 0, 0, 0, false);
+    }
+
     @Nullable
     AccessibilityWindowInfo findHunWindow(@NonNull List<AccessibilityWindowInfo> windows) {
         for (AccessibilityWindowInfo window : windows) {
@@ -368,6 +373,18 @@ class Navigator {
         Rect bounds = new Rect();
         window.getBoundsInScreen(bounds);
         return bounds.left == mHunLeft && bounds.right == mHunRight;
+    }
+
+    /**
+     * Returns whether the {@code window} is the main application window. A main application
+     * window is an application window on the default display that takes up the entire display.
+     */
+    boolean isMainApplicationWindow(@NonNull AccessibilityWindowInfo window) {
+        Rect windowBounds = new Rect();
+        window.getBoundsInScreen(windowBounds);
+        return window.getType() == TYPE_APPLICATION
+                && window.getDisplayId() == Display.DEFAULT_DISPLAY
+                && mAppWindowBounds.equals(windowBounds);
     }
 
     /**

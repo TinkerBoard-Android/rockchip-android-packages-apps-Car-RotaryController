@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Rect;
+import android.view.Display;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
@@ -41,6 +42,8 @@ class WindowBuilder {
     private Rect mBoundsInScreen;
     /** The window type, if specified. */
     private int mType;
+    /** The display ID, if specified. */
+    private int mDisplayId = Display.DEFAULT_DISPLAY;
 
     AccessibilityWindowInfo build() {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
@@ -61,6 +64,7 @@ class WindowBuilder {
             }).when(window).getBoundsInScreen(any(Rect.class));
         }
         when(window.getType()).thenReturn(mType);
+        when(window.getDisplayId()).thenReturn(mDisplayId);
         return window;
     }
 
@@ -81,6 +85,11 @@ class WindowBuilder {
 
     WindowBuilder setType(int type) {
         mType = type;
+        return this;
+    }
+
+    WindowBuilder setDisplayId(int displayId) {
+        mDisplayId = displayId;
         return this;
     }
 }
