@@ -366,8 +366,8 @@ class Navigator {
      * HUN appears at the top or bottom of the screen and on the height of the notification being
      * displayed so they aren't used.
      */
-    boolean isHunWindow(@NonNull AccessibilityWindowInfo window) {
-        if (window.getType() != AccessibilityWindowInfo.TYPE_SYSTEM) {
+    boolean isHunWindow(@Nullable AccessibilityWindowInfo window) {
+        if (window == null || window.getType() != AccessibilityWindowInfo.TYPE_SYSTEM) {
             return false;
         }
         Rect bounds = new Rect();

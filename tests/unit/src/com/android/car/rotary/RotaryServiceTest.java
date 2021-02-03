@@ -32,6 +32,7 @@ import android.app.UiAutomation;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.Intent;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -681,6 +682,347 @@ public class RotaryServiceTest {
         mRotaryService.nudgeTo(windows, View.FOCUS_UP);
         AccessibilityNodeInfo appButton1Node = createNode("app_button1");
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(appButton1Node);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  . (target)  .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (source)  .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_nudgeUp_moveFocus() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        AccessibilityNodeInfo appFocusArea3Node = createNode("app_focus_area3");
+        mRotaryService.setFocusedNode(appButton3Node);
+
+        AccessibilityNodeInfo appFocusArea1Node = createNode("app_focus_area1");
+        when(mNavigator.findNudgeTargetFocusArea(
+                windows, appButton3Node, appFocusArea3Node, View.FOCUS_UP))
+                .thenReturn(AccessibilityNodeInfo.obtain(appFocusArea1Node));
+
+        // Nudge up the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent nudgeUpEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(nudgeUpEventActionDown));
+
+        // Release the controller.
+        KeyEvent nudgeUpEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeUpEventActionUp));
+
+        // It should move focus to the FocusArea above.
+        AccessibilityNodeInfo appButton1Node = createNode("app_button1");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appButton1Node);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_nudgeUp_initFocus() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // RotaryService.mFocusedNode is not initialized.
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+        when(mRotaryService.getRootInActiveWindow())
+                .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
+        assertThat(mRotaryService.getFocusedNode()).isNull();
+
+        // Nudge up the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent nudgeUpEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(nudgeUpEventActionDown));
+
+        // Release the controller.
+        KeyEvent nudgeUpEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeUpEventActionUp));
+
+        // It should initialize the focus.
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_nudgeToHunEscapeNudgeDirection_leaveTheHun() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        AccessibilityNodeInfo hunRoot = createNode("hun_root");
+        AccessibilityWindowInfo hunWindow = new WindowBuilder()
+                .setRoot(hunRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        windows.add(hunWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        // A Button in the HUN window is focused.
+        Activity activity = mActivityRule.getActivity();
+        Button hunButton1 = activity.findViewById(R.id.hun_button1);
+        hunButton1.post(() -> hunButton1.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(hunButton1.isFocused()).isTrue();
+        AccessibilityNodeInfo hunButton1Node = createNode("hun_button1");
+        AccessibilityNodeInfo hunFocusAreaNode = createNode("hun_focus_area");
+        mRotaryService.setFocusedNode(hunButton1Node);
+
+        // Set HUN escape nudge direction to View.FOCUS_DOWN.
+        mRotaryService.mHunEscapeNudgeDirection = View.FOCUS_DOWN;
+
+        AccessibilityNodeInfo appFocusArea3Node = createNode("app_focus_area3");
+        when(mNavigator.findNudgeTargetFocusArea(
+                windows, hunButton1Node, hunFocusAreaNode, View.FOCUS_DOWN))
+                .thenReturn(AccessibilityNodeInfo.obtain(appFocusArea3Node));
+
+        // Nudge down the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent nudgeEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionDown));
+
+        // Release the controller.
+        KeyEvent nudgeEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionUp));
+
+        // Nudging down should exit the HUN and focus in app_focus_area3.
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_nudgeToNonHunEscapeNudgeDirection_stayInTheHun() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        AccessibilityNodeInfo hunRoot = createNode("hun_root");
+        AccessibilityWindowInfo hunWindow = new WindowBuilder()
+                .setRoot(hunRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        windows.add(hunWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        // A Button in the HUN window is focused.
+        Activity activity = mActivityRule.getActivity();
+        Button hunButton1 = activity.findViewById(R.id.hun_button1);
+        hunButton1.post(() -> hunButton1.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(hunButton1.isFocused()).isTrue();
+        AccessibilityNodeInfo hunButton1Node = createNode("hun_button1");
+        AccessibilityNodeInfo hunFocusAreaNode = createNode("hun_focus_area");
+        mRotaryService.setFocusedNode(hunButton1Node);
+
+        // Set HUN escape nudge direction to View.FOCUS_UP.
+        mRotaryService.mHunEscapeNudgeDirection = View.FOCUS_UP;
+
+        // RotaryService.mFocusedNode.getWindow() returns null in the test, so just pass null value
+        // to simplify the test.
+        when(mNavigator.isHunWindow(null)).thenReturn(true);
+
+        AccessibilityNodeInfo appFocusArea3Node = createNode("app_focus_area3");
+        when(mNavigator.findNudgeTargetFocusArea(
+                windows, hunButton1Node, hunFocusAreaNode, View.FOCUS_DOWN))
+                .thenReturn(AccessibilityNodeInfo.obtain(appFocusArea3Node));
+
+        // Nudge down the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent nudgeEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionDown));
+
+        // Release the controller.
+        KeyEvent nudgeEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
+        mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionUp));
+
+        // Nudging down should stay in the HUN because HUN escape nudge direction is View.FOCUS_UP.
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(hunButton1Node);
     }
 
     /**
