@@ -20,4 +20,13 @@
     <string name="default_touch_input_method" translatable="false">com.android.inputmethod.latin/.CarLatinIME</string>
     <!-- Component name of rotary IME. Empty if none. -->
     <string name="rotary_input_method" translatable="false"></string>
+
+    <!-- Intents to launch an activity when the user nudges up, down, left, or right off the edge of
+         the screen. No activity is launched if the relevant element of this array is empty. -->
+    <string-array name="off_screen_nudge_intents" translatable="false">
+        <item></item>
+        <item></item>
+        <item></item>
+        <item></item>
+    </string-array>
 </resources>
