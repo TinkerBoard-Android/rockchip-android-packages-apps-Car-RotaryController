@@ -21,6 +21,7 @@ import static android.provider.Settings.Secure.DEFAULT_INPUT_METHOD;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.KeyEvent.ACTION_DOWN;
 import static android.view.KeyEvent.ACTION_UP;
+import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
@@ -58,11 +59,15 @@ import android.car.CarOccupantZoneManager;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
@@ -93,10 +98,12 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
 
 import java.lang.ref.WeakReference;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -153,6 +160,63 @@ public class RotaryService extends AccessibilityService implements
 
     private static final String SHARED_PREFS = "com.android.car.rotary.RotaryService";
     private static final String TOUCH_INPUT_METHOD_PREFIX = "TOUCH_INPUT_METHOD_";
+
+    /**
+     * Key for activity metadata indicating that a nudge in the given direction ("up", "down",
+     * "left", or "right") that would otherwise do nothing should trigger a global action, e.g.
+     * {@link #GLOBAL_ACTION_BACK}.
+     */
+    private static final String OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT = "nudge.%s.globalAction";
+    /**
+     * Key for activity metadata indicating that a nudge in the given direction ("up", "down",
+     * "left", or "right") that would otherwise do nothing should trigger a key click, e.g. {@link
+     * KeyEvent#KEYCODE_BACK}.
+     */
+    private static final String OFF_SCREEN_NUDGE_KEY_CODE_FORMAT = "nudge.%s.keyCode";
+    /**
+     * Key for activity metadata indicating that a nudge in the given direction ("up", "down",
+     * "left", or "right") that would otherwise do nothing should launch an activity via an intent.
+     */
+    private static final String OFF_SCREEN_NUDGE_INTENT_FORMAT = "nudge.%s.intent";
+
+    private static final int INVALID_GLOBAL_ACTION = -1;
+
+    private static final int NUM_DIRECTIONS = 4;
+
+    /**
+     * Maps a direction to a string used to look up an off-screen nudge action in an activity's
+     * metadata.
+     *
+     * @see #OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT
+     * @see #OFF_SCREEN_NUDGE_KEY_CODE_FORMAT
+     * @see #OFF_SCREEN_NUDGE_INTENT_FORMAT
+     */
+    private static final Map<Integer, String> DIRECTION_TO_STRING;
+    static {
+        Map<Integer, String> map = new HashMap<>();
+        map.put(View.FOCUS_UP, "up");
+        map.put(View.FOCUS_DOWN, "down");
+        map.put(View.FOCUS_LEFT, "left");
+        map.put(View.FOCUS_RIGHT, "right");
+        DIRECTION_TO_STRING = Collections.unmodifiableMap(map);
+    }
+
+    /**
+     * Maps a direction to an index used to look up an off-screen nudge action in .
+     *
+     * @see #mOffScreenNudgeGlobalActions
+     * @see #mOffScreenNudgeKeyCodes
+     * @see #mOffScreenNudgeIntents
+     */
+    private static final Map<Integer, Integer> DIRECTION_TO_INDEX;
+    static {
+        Map<Integer, Integer> map = new HashMap<>();
+        map.put(View.FOCUS_UP, 0);
+        map.put(View.FOCUS_DOWN, 1);
+        map.put(View.FOCUS_LEFT, 2);
+        map.put(View.FOCUS_RIGHT, 3);
+        DIRECTION_TO_INDEX = Collections.unmodifiableMap(map);
+    }
 
     /**
      * A reference to {@link #mWindowContext} or null if one hasn't been created. This is static in
@@ -261,6 +325,24 @@ public class RotaryService extends AccessibilityService implements
      */
     @View.FocusRealDirection
     private int mHunEscapeNudgeDirection;
+
+    /**
+     * Global actions to perform when the user nudges up, down, left, or right off the edge of the
+     * screen. No global action is performed if the relevant element of this array is
+     * {@link #INVALID_GLOBAL_ACTION}.
+     */
+    private int[] mOffScreenNudgeGlobalActions;
+    /**
+     * Key codes of click events to inject when the user nudges up, down, left, or right off the
+     * edge of the screen. No event is injected if the relevant element of this array is
+     * {@link KeyEvent#KEYCODE_UNKNOWN}.
+     */
+    private int[] mOffScreenNudgeKeyCodes;
+    /**
+     * Intents to launch an activity when the user nudges up, down, left, or right off the edge of
+     * the screen. No activity is launched if the relevant element of this array is null.
+     */
+    private final Intent[] mOffScreenNudgeIntents = new Intent[NUM_DIRECTIONS];
 
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
@@ -433,8 +515,8 @@ public class RotaryService extends AccessibilityService implements
     private CarInputManager mCarInputManager;
     private InputManager mInputManager;
 
-    /** Package name of foreground app. */
-    private CharSequence mForegroundApp;
+    /** Component name of foreground activity. */
+    private ComponentName mForegroundActivity;
 
     private WindowManager mWindowManager;
 
@@ -502,6 +584,21 @@ public class RotaryService extends AccessibilityService implements
         mLongPressMs = res.getInteger(R.integer.long_press_ms);
         if (mLongPressMs == 0) {
             mLongPressMs = ViewConfiguration.getLongPressTimeout();
+        }
+
+        mOffScreenNudgeGlobalActions = res.getIntArray(R.array.off_screen_nudge_global_actions);
+        mOffScreenNudgeKeyCodes = res.getIntArray(R.array.off_screen_nudge_key_codes);
+        String[] intentUrls = res.getStringArray(R.array.off_screen_nudge_intents);
+        for (int i = 0; i < NUM_DIRECTIONS; i++) {
+            String intentUrl = intentUrls[i];
+            if (intentUrl == null || intentUrl.isEmpty()) {
+                continue;
+            }
+            try {
+                mOffScreenNudgeIntents[i] = Intent.parseUri(intentUrl, Intent.URI_INTENT_SCHEME);
+            } catch (URISyntaxException e) {
+                L.w("Invalid off-screen nudge intent: " + intentUrl);
+            }
         }
 
         getWindowContext().registerReceiver(mHomeButtonReceiver,
@@ -613,8 +710,17 @@ public class RotaryService extends AccessibilityService implements
                 break;
             }
             case TYPE_WINDOW_STATE_CHANGED: {
-                CharSequence packageName = event.getPackageName();
-                onForegroundAppChanged(packageName);
+                if (source != null) {
+                    AccessibilityWindowInfo window = source.getWindow();
+                    if (window != null) {
+                        if (window.getType() == TYPE_APPLICATION
+                                && window.getDisplayId() == DEFAULT_DISPLAY) {
+                            onForegroundActivityChanged(event.getPackageName(),
+                                    event.getClassName());
+                        }
+                        window.recycle();
+                    }
+                }
                 break;
             }
             case TYPE_WINDOWS_CHANGED: {
@@ -1217,7 +1323,7 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    private void handleNudgeEvent(int direction, int action) {
+    private void handleNudgeEvent(@View.FocusRealDirection int direction, int action) {
         if (!isValidAction(action)) {
             return;
         }
@@ -1263,7 +1369,9 @@ public class RotaryService extends AccessibilityService implements
         Utils.recycleWindows(windows);
     }
 
-    private void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+    @VisibleForTesting
+    void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows,
+            @View.FocusRealDirection int direction) {
         // If the HUN is in the nudge direction, nudge to it.
         boolean hunFocusResult = focusHunsWindow(windows, direction);
         if (hunFocusResult) {
@@ -1306,8 +1414,18 @@ public class RotaryService extends AccessibilityService implements
         // what FocusArea to nudge to. In this case, we'll find a target FocusArea using geometry.
         AccessibilityNodeInfo targetFocusArea =
                 mNavigator.findNudgeTargetFocusArea(windows, mFocusedNode, mFocusArea, direction);
+
+        // If the user is nudging off the edge of the screen, execute the app-specific or app-
+        // agnostic off-screen nudge action, if either are specified. The former take precedence
+        // over the latter.
         if (targetFocusArea == null) {
-            L.d("Failed to find a target FocusArea for the nudge");
+            if (handleAppSpecificOffScreenNudge(direction)) {
+                return;
+            }
+            if (handleAppAgnosticOffScreenNudge(direction)) {
+                return;
+            }
+            L.d("Off-screen nudge ignored");
             return;
         }
 
@@ -1353,6 +1471,126 @@ public class RotaryService extends AccessibilityService implements
         L.d("Nudging to the nearest implicit focus area "
                 + (success ? "succeeded" : "failed: " + targetFocusArea));
         targetFocusArea.recycle();
+    }
+
+    /**
+     * Executes the app-specific custom nudge action for the given {@code direction} specified in
+     * {@link #mForegroundActivity}'s metadata, if any, by: <ul>
+     *     <li>performing the specified global action,
+     *     <li>injecting {@code ACTION_DOWN} and {@code ACTION_UP} events with the
+     *         specified key code, or
+     *     <li>starting an activity with the specified intent.
+     * </ul>
+     * Returns whether a custom nudge action was performed.
+     */
+    private boolean handleAppSpecificOffScreenNudge(@View.FocusRealDirection int direction) {
+        Bundle metaData = getForegroundActivityMetaData();
+        if (metaData == null) {
+            L.w("Failed to get metadata for " + mForegroundActivity);
+            return false;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        int globalAction = metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT, directionString),
+                INVALID_GLOBAL_ACTION);
+        if (globalAction != INVALID_GLOBAL_ACTION) {
+            L.d("App-specific off-screen nudge: " + globalActionToString(globalAction));
+            performGlobalAction(globalAction);
+            return true;
+        }
+        int keyCode = metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_KEY_CODE_FORMAT, directionString), KEYCODE_UNKNOWN);
+        if (keyCode != KEYCODE_UNKNOWN) {
+            L.d("App-specific off-screen nudge: " + KeyEvent.keyCodeToString(keyCode));
+            injectKeyEvent(keyCode, ACTION_DOWN);
+            injectKeyEvent(keyCode, ACTION_UP);
+            return true;
+        }
+        String intentString = metaData.getString(
+                String.format(OFF_SCREEN_NUDGE_INTENT_FORMAT, directionString), null);
+        if (intentString == null) {
+            return false;
+        }
+        Intent intent;
+        try {
+            intent = Intent.parseUri(intentString, Intent.URI_INTENT_SCHEME);
+        } catch (URISyntaxException e) {
+            L.w("Failed to parse app-specific off-screen nudge intent: " + intentString);
+            return false;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        List<ResolveInfo> activities =
+                getPackageManager().queryIntentActivities(intent, /* flags= */ 0);
+        if (activities.isEmpty()) {
+            L.w("No activities for app-specific off-screen nudge: " + intent);
+            return false;
+        }
+        L.d("App-specific off-screen nudge: " + intent);
+        startActivity(intent);
+        return true;
+    }
+
+    /**
+     * Executes the app-agnostic custom nudge action for the given {@code direction}, if any. This
+     * method is equivalent to {@link #handleAppSpecificOffScreenNudge} but for global actions
+     * rather than app-specific ones.
+     */
+    private boolean handleAppAgnosticOffScreenNudge(@View.FocusRealDirection int direction) {
+        int directionIndex = DIRECTION_TO_INDEX.get(direction);
+        int globalAction = mOffScreenNudgeGlobalActions[directionIndex];
+        if (globalAction != INVALID_GLOBAL_ACTION) {
+            L.d("App-agnostic off-screen nudge: " + globalActionToString(globalAction));
+            performGlobalAction(globalAction);
+            return true;
+        }
+        int keyCode = mOffScreenNudgeKeyCodes[directionIndex];
+        if (keyCode != KEYCODE_UNKNOWN) {
+            L.d("App-agnostic off-screen nudge: " + KeyEvent.keyCodeToString(keyCode));
+            injectKeyEvent(keyCode, ACTION_DOWN);
+            injectKeyEvent(keyCode, ACTION_UP);
+            return true;
+        }
+        Intent intent = mOffScreenNudgeIntents[directionIndex];
+        if (intent == null) {
+            return false;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PackageManager packageManager = getPackageManager();
+        List<ResolveInfo> activities = packageManager.queryIntentActivities(intent, /* flags= */ 0);
+        if (activities.isEmpty()) {
+            L.w("No activities for app-agnostic off-screen nudge: " + intent);
+            return false;
+        }
+        L.d("App-agnostic off-screen nudge: " + intent);
+        startActivity(intent);
+        return true;
+    }
+
+    @Nullable
+    private Bundle getForegroundActivityMetaData() {
+        try {
+            ActivityInfo activityInfo = getPackageManager().getActivityInfo(mForegroundActivity,
+                    PackageManager.GET_META_DATA);
+            return activityInfo.metaData;
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
+    }
+
+    @NonNull
+    private static String globalActionToString(int globalAction) {
+        switch (globalAction) {
+            case GLOBAL_ACTION_BACK:
+                return "GLOBAL_ACTION_BACK";
+            case GLOBAL_ACTION_HOME:
+                return "GLOBAL_ACTION_HOME";
+            case GLOBAL_ACTION_NOTIFICATIONS:
+                return "GLOBAL_ACTION_NOTIFICATIONS";
+            case GLOBAL_ACTION_QUICK_SETTINGS:
+                return "GLOBAL_ACTION_QUICK_SETTINGS";
+            default:
+                return String.format("global action %d", globalAction);
+        }
     }
 
     private void handleRotaryEvent(RotaryEvent rotaryEvent) {
@@ -1448,11 +1686,12 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    private void onForegroundAppChanged(CharSequence packageName) {
-        if (TextUtils.equals(mForegroundApp, packageName)) {
+    private void onForegroundActivityChanged(CharSequence packageName, CharSequence className) {
+        ComponentName newActivity = new ComponentName(packageName.toString(), className.toString());
+        if (newActivity.equals(mForegroundActivity)) {
             return;
         }
-        mForegroundApp = packageName;
+        mForegroundActivity = newActivity;
         if (mInDirectManipulationMode) {
             L.d("Exit direct manipulation mode because the foreground app has changed");
             mInDirectManipulationMode = false;
@@ -1601,7 +1840,7 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    private void injectKeyEventForDirection(int direction, int action) {
+    private void injectKeyEventForDirection(@View.FocusRealDirection int direction, int action) {
         Integer keyCode = DIRECTION_TO_KEYCODE_MAP.get(direction);
         if (keyCode == null) {
             throw new IllegalArgumentException("direction must be one of "
@@ -1662,7 +1901,8 @@ public class RotaryService extends AccessibilityService implements
      * @return whether the event was consumed by this method. When {@code false},
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
-    private boolean initFocus(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+    private boolean initFocus(@NonNull List<AccessibilityWindowInfo> windows,
+            @View.FocusRealDirection int direction) {
         boolean prevInRotaryMode = mInRotaryMode;
         refreshSavedNodes();
         setInRotaryMode(true);
@@ -1811,7 +2051,8 @@ public class RotaryService extends AccessibilityService implements
         return result;
     }
 
-    private boolean focusHunsWindow(@NonNull List<AccessibilityWindowInfo> windows, int direction) {
+    private boolean focusHunsWindow(@NonNull List<AccessibilityWindowInfo> windows,
+            @View.FocusRealDirection int direction) {
         if (direction != mHunNudgeDirection) {
             return false;
         }
