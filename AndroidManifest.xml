@@ -34,6 +34,9 @@
     <!-- Allows us to get the username of the current user. -->
     <uses-permission android:name="android.permission.GET_ACCOUNTS_PRIVILEGED"/>
 
+    <!-- Allows us to read the current activity's metadata for custom nudge actions. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+
     <!-- RotaryService needs to be directBootAware so that it can start before the user is unlocked. -->
     <application>
         <service
