@@ -16,6 +16,8 @@
 
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT;
+
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
@@ -189,24 +191,18 @@ final class Utils {
     }
 
     /**
-     * Returns whether the given {@code node} has focus (i.e. the node or one of its descendants is
-     * focused).
+     * Searches {@code node} and its descendants for the focused node. Returns whether the focus
+     * was found.
      */
     static boolean hasFocus(@NonNull AccessibilityNodeInfo node) {
-        if (node.isFocused()) {
-            return true;
+        AccessibilityNodeInfo foundFocus = node.findFocus(FOCUS_INPUT);
+        if (foundFocus == null) {
+            L.d("Failed to find focused node in " + node);
+            return false;
         }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo childNode = node.getChild(i);
-            if (childNode != null) {
-                boolean result = hasFocus(childNode);
-                childNode.recycle();
-                if (result) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        L.d("Found focused node " + foundFocus);
+        foundFocus.recycle();
+        return true;
     }
 
     /**
