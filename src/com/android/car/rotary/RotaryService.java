@@ -1736,9 +1736,9 @@ public class RotaryService extends AccessibilityService implements
                         + "in view tree.");
                 return;
             }
-            if (!mFocusedNode.isFocused()) {
-                L.w("Failed to enter direct manipulation mode because mFocusedNode is no longer "
-                        + "focused.");
+            if (!Utils.hasFocus(mFocusedNode)) {
+                L.w("Failed to enter direct manipulation mode because mFocusedNode no longer "
+                        + "has focus.");
                 return;
             }
         }
