@@ -57,6 +57,7 @@ public class NodeBuilderTest {
     public void testBuildDefaultNode() {
         AccessibilityNodeInfo node = mNodeBuilder.build();
         assertThat(node.isFocusable()).isTrue();
+        assertThat(node.isFocused()).isFalse();
         assertThat(node.isVisibleToUser()).isTrue();
         assertThat(node.refresh()).isTrue();
         assertThat(node.isEnabled()).isTrue();
@@ -73,6 +74,12 @@ public class NodeBuilderTest {
     public void testSetFocusable() {
         AccessibilityNodeInfo node = mNodeBuilder.setFocusable(false).build();
         assertThat(node.isFocusable()).isFalse();
+    }
+
+    @Test
+    public void testSetFocused() {
+        AccessibilityNodeInfo node = mNodeBuilder.setFocused(true).build();
+        assertThat(node.isFocused()).isTrue();
     }
 
     @Test
