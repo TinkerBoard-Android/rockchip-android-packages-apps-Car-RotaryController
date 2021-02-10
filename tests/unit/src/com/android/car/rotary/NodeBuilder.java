@@ -76,6 +76,8 @@ class NodeBuilder {
     private Rect mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
     /** Whether this node is focusable. */
     private boolean mFocusable = true;
+    /** Whether this node is focused. */
+    private boolean mFocused = false;
     /** Whether this node is visible to the user. */
     private boolean mVisibleToUser = true;
     /** Whether this node is enabled. */
@@ -161,6 +163,7 @@ class NodeBuilder {
             return null;
         }).when(node).getBoundsInScreen(any(Rect.class));
         when(node.isFocusable()).thenReturn(builder.mFocusable);
+        when(node.isFocused()).thenReturn(builder.mFocused);
         when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
         when(node.isEnabled()).thenReturn(builder.mEnabled);
         when(node.refresh()).thenReturn(builder.mInViewTree);
@@ -206,6 +209,11 @@ class NodeBuilder {
 
     NodeBuilder setFocusable(boolean focusable) {
         mFocusable = focusable;
+        return this;
+    }
+
+    NodeBuilder setFocused(boolean focused) {
+        mFocused = focused;
         return this;
     }
 
@@ -281,6 +289,7 @@ class NodeBuilder {
         copy.mBoundsInParent = mBoundsInParent;
         copy.mBoundsInScreen = mBoundsInScreen;
         copy.mFocusable = mFocusable;
+        copy.mFocused = mFocused;
         copy.mVisibleToUser = mVisibleToUser;
         copy.mEnabled = mEnabled;
         copy.mInViewTree = mInViewTree;
@@ -296,6 +305,7 @@ class NodeBuilder {
         mBoundsInParent = new Rect(DEFAULT_BOUNDS);
         mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
         mFocusable = true;
+        mFocused = false;
         mVisibleToUser = true;
         mEnabled = true;
         mInViewTree = true;

@@ -16,6 +16,8 @@
 
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
+
 import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -24,6 +26,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.AssertJUnit.assertNull;
 
@@ -32,6 +36,7 @@ import android.app.UiAutomation;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.Intent;
+import android.hardware.input.InputManager;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -67,6 +72,7 @@ public class RotaryServiceTest {
     private AccessibilityNodeInfo mWindowRoot;
     private ActivityTestRule<NavigatorTestActivity> mActivityRule;
     private Intent mIntent;
+    private NodeBuilder mNodeBuilder;
 
     private @Spy
     RotaryService mRotaryService;
@@ -86,6 +92,9 @@ public class RotaryServiceTest {
 
         MockitoAnnotations.initMocks(this);
         mRotaryService.setNavigator(mNavigator);
+        mRotaryService.setNodeCopier(MockNodeCopierProvider.get());
+        mRotaryService.setInputManager(mock(InputManager.class));
+        mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
 
     @After
@@ -756,8 +765,6 @@ public class RotaryServiceTest {
                 new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
         mRotaryService.onKeyEvents(validDisplayId,
                 Collections.singletonList(nudgeUpEventActionDown));
-
-        // Release the controller.
         KeyEvent nudgeUpEventActionUp =
                 new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeUpEventActionUp));
@@ -821,7 +828,15 @@ public class RotaryServiceTest {
         when(mRotaryService.getWindows()).thenReturn(windows);
         when(mRotaryService.getRootInActiveWindow())
                 .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
-        assertThat(mRotaryService.getFocusedNode()).isNull();
+
+        // Move focus to the FocusParkingView.
+        Activity activity = mActivityRule.getActivity();
+        FocusParkingView fpv = activity.findViewById(R.id.app_fpv);
+        fpv.setShouldRestoreFocus(false);
+        fpv.post(() -> fpv.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(fpv.isFocused()).isTrue();
+        assertNull(mRotaryService.getFocusedNode());
 
         // Nudge up the controller.
         int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
@@ -829,8 +844,6 @@ public class RotaryServiceTest {
                 new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
         mRotaryService.onKeyEvents(validDisplayId,
                 Collections.singletonList(nudgeUpEventActionDown));
-
-        // Release the controller.
         KeyEvent nudgeUpEventActionUp =
                 new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeUpEventActionUp));
@@ -920,8 +933,6 @@ public class RotaryServiceTest {
         KeyEvent nudgeEventActionDown =
                 new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionDown));
-
-        // Release the controller.
         KeyEvent nudgeEventActionUp =
                 new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionUp));
@@ -1015,14 +1026,347 @@ public class RotaryServiceTest {
         KeyEvent nudgeEventActionDown =
                 new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionDown));
-
-        // Release the controller.
         KeyEvent nudgeEventActionUp =
                 new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN);
         mRotaryService.onKeyEvents(validDisplayId, Collections.singletonList(nudgeEventActionUp));
 
         // Nudging down should stay in the HUN because HUN escape nudge direction is View.FOCUS_UP.
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(hunButton1Node);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_centerButtonClick_initFocus() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // RotaryService.mFocusedNode is not initialized.
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+        when(mRotaryService.getRootInActiveWindow())
+                .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
+        assertThat(mRotaryService.getFocusedNode()).isNull();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+
+        // It should initialize the focus.
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (focused) .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_centerButtonClickInAppWindow_injectDpadCenterEvent() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .setType(TYPE_APPLICATION)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+        when(mRotaryService.getRootInActiveWindow())
+                .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
+
+        AccessibilityNodeInfo mockAppButton3Node = mNodeBuilder
+                .setFocused(true)
+                .setWindow(appWindow)
+                .build();
+        mRotaryService.setFocusedNode(mockAppButton3Node);
+
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+
+        // RotaryService should inject KEYCODE_DPAD_CENTER event because mockAppButton3Node is in
+        // the application window.
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_DOWN);
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_UP);
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isEqualTo(mockAppButton3Node);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(mockAppButton3Node);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (focused) .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_centerButtonClickInSystemWindow_performActionClick() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+        when(mRotaryService.getRootInActiveWindow())
+                .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        appButton3.setOnClickListener(v -> v.setActivated(true));
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        mRotaryService.setFocusedNode(appButton3Node);
+        mRotaryService.mLongPressMs = 400;
+
+        assertThat(appButton3.isActivated()).isFalse();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+
+        // appButton3Node.getWindow() will return null (because the test doesn't have the permission
+        // to create an AccessibilityWindowInfo), so appButton3Node isn't considered in the
+        // application window. Instead, it's considered in the system window. So RotaryService
+        // should perform ACTION_CLICK on it.
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isActivated()).isTrue();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isEqualTo(appButton3Node);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appButton3Node);
+    }
+
+    /**
+     * Tests {@link RotaryService#onKeyEvents} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (focused) .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnKeyEvents_centerButtonLongClickInSystemWindow_performActionLongClick() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        AccessibilityNodeInfo appRoot = createNode("app_root");
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .build();
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+        when(mRotaryService.getRootInActiveWindow())
+                .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        appButton3.setOnLongClickListener(v -> {
+            v.setActivated(true);
+            return true;
+        });
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        mRotaryService.setFocusedNode(appButton3Node);
+        mRotaryService.mLongPressMs = 0;
+
+        assertThat(appButton3.isActivated()).isFalse();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+
+        // appButton3Node.getWindow() will return null (because the test doesn't have the permission
+        // to create an AccessibilityWindowInfo), so appButton3Node isn't considered in the
+        // application window. Instead, it's considered in the system window. So RotaryService
+        // should perform ACTION_LONG_CLICK on it.
+        assertThat(appButton3.isActivated()).isTrue();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appButton3Node);
     }
 
     /**
