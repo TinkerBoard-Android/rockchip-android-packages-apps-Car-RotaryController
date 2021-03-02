@@ -20,6 +20,7 @@ import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_BOTTOM_BOUND_O
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_LEFT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_RIGHT_BOUND_OFFSET;
 import static com.android.car.ui.utils.RotaryConstants.FOCUS_AREA_TOP_BOUND_OFFSET;
+import static com.android.car.ui.utils.RotaryConstants.ROTARY_CONTAINER;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_HORIZONTALLY_SCROLLABLE;
 import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLABLE;
 
@@ -54,6 +55,10 @@ final class Utils {
     static final String FOCUS_AREA_CLASS_NAME = FocusArea.class.getName();
     @VisibleForTesting
     static final String FOCUS_PARKING_VIEW_CLASS_NAME = FocusParkingView.class.getName();
+    @VisibleForTesting
+    static final String GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME =
+            "com.android.car.rotary.FocusParkingView";
+
     private static final String WEB_VIEW_CLASS_NAME = WebView.class.getName();
 
     private Utils() {
@@ -122,10 +127,7 @@ final class Utils {
      * <ul>
      *     <li>To be a focus candidate, a node must be able to perform focus action.
      *     <li>A {@link FocusParkingView} is not a focus candidate.
-     *     <li>A scrollable container is not a focus candidate unless it should scroll (i.e.,
-     *         is scrollable and has no focusable descendants on screen). We skip a container
-     *         because we want to focus on its element directly. We don't skip a container because
-     *         we want to focus on it, thus we can scroll it when the rotary controller is rotated.
+     *     <li>A scrollable container is a focus candidate if it meets certain conditions.
      *     <li>To be a focus candidate, a node must be on the screen. Usually the node off the
      *         screen (its bounds in screen is empty) is ignored by RotaryService, but there are
      *         exceptions, e.g. nodes in a WebView.
@@ -134,8 +136,7 @@ final class Utils {
     static boolean canTakeFocus(@NonNull AccessibilityNodeInfo node) {
         boolean result = canPerformFocus(node)
                 && !isFocusParkingView(node)
-                && (!isScrollableContainer(node)
-                        || (node.isScrollable() && !descendantCanTakeFocus(node)));
+                && (!isScrollableContainer(node) || canScrollableContainerTakeFocus(node));
         if (result) {
             Rect bounds = getBoundsInScreen(node);
             if (!bounds.isEmpty()) {
@@ -144,6 +145,20 @@ final class Utils {
             L.d("node is off the screen but it's not ignored by RotaryService: " + node);
         }
         return false;
+    }
+
+    /**
+     * Returns whether the given {@code scrollableContainer} can be focused by the rotary
+     * controller.
+     * <p>
+     * A scrollable container can take focus if it should scroll (i.e., is scrollable and has no
+     * focusable descendants on screen). A container is skipped so that its element can take focus.
+     * A container is not skipped so that it can be focused and scrolled when the rotary controller
+     * is rotated.
+     */
+    static boolean canScrollableContainerTakeFocus(
+            @NonNull AccessibilityNodeInfo scrollableContainer) {
+        return scrollableContainer.isScrollable() && !descendantCanTakeFocus(scrollableContainer);
     }
 
     /** Returns whether the given {@code node} or its descendants can take focus. */
@@ -187,10 +202,26 @@ final class Utils {
         return false;
     }
 
-    /** Returns whether the given {@code node} represents a {@link FocusParkingView}. */
+    /**
+     * Returns whether the given {@code node} represents a car ui lib {@link FocusParkingView} or a
+     * generic FocusParkingView.
+     */
     static boolean isFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        return isCarUiFocusParkingView(node) || isGenericFocusParkingView(node);
+    }
+    /** Returns whether the given {@code node} represents a car ui lib {@link FocusParkingView}. */
+    static boolean isCarUiFocusParkingView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
         return className != null && FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
+    }
+
+    /**
+     * Returns whether the given {@code node} represents a generic FocusParkingView (primarily used
+     * as a fallback for potential apps that are not using Chassis).
+     */
+    static boolean isGenericFocusParkingView(@NonNull AccessibilityNodeInfo node) {
+        CharSequence className = node.getClassName();
+        return className != null && GENERIC_FOCUS_PARKING_VIEW_CLASS_NAME.contentEquals(className);
     }
 
     /** Returns whether the given {@code node} represents a {@link FocusArea}. */
@@ -212,6 +243,19 @@ final class Utils {
     static boolean isWebView(@NonNull AccessibilityNodeInfo node) {
         CharSequence className = node.getClassName();
         return className != null && WEB_VIEW_CLASS_NAME.contentEquals(className);
+    }
+
+    /**
+     * Returns whether the given node represents a rotary container, as indicated by its content
+     * description. This includes containers that can be scrolled using the rotary controller as
+     * well as other containers."
+     */
+    static boolean isRotaryContainer(@NonNull AccessibilityNodeInfo node) {
+        CharSequence contentDescription = node.getContentDescription();
+        return contentDescription != null
+                && (ROTARY_CONTAINER.contentEquals(contentDescription)
+                || ROTARY_HORIZONTALLY_SCROLLABLE.contentEquals(contentDescription)
+                || ROTARY_VERTICALLY_SCROLLABLE.contentEquals(contentDescription));
     }
 
     /**
@@ -292,9 +336,10 @@ final class Utils {
             bounds.right -= bundle.getInt(FOCUS_AREA_RIGHT_BOUND_OFFSET);
             bounds.top += bundle.getInt(FOCUS_AREA_TOP_BOUND_OFFSET);
             bounds.bottom -= bundle.getInt(FOCUS_AREA_BOTTOM_BOUND_OFFSET);
-        } else if (Utils.isScrollableContainer(node)) {
-            // For a scrollable container, the bounds used for finding the nudge target are the
-            // minimum bounds containing its children.
+        } else if (Utils.isRotaryContainer(node)) {
+            // For a rotary container, the bounds used for finding the nudge target are the
+            // intersection of the two bounds: (1) minimum bounds containing its children, and
+            // (2) its ancestor FocusArea's bounds, if any.
             bounds.setEmpty();
             Rect childBounds = new Rect();
             for (int i = 0; i < node.getChildCount(); i++) {
@@ -305,7 +350,42 @@ final class Utils {
                     bounds.union(childBounds);
                 }
             }
+            AccessibilityNodeInfo focusArea = getAncestorFocusArea(node);
+            if (focusArea != null) {
+                Rect focusAreaBounds = getBoundsInScreen(focusArea);
+                bounds.setIntersect(bounds, focusAreaBounds);
+                focusArea.recycle();
+            }
         }
         return bounds;
+    }
+
+    @Nullable
+    private static AccessibilityNodeInfo getAncestorFocusArea(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo ancestor = node.getParent();
+        while (ancestor != null) {
+            if (isFocusArea(ancestor)) {
+                return ancestor;
+            }
+            AccessibilityNodeInfo nextAncestor = ancestor.getParent();
+            ancestor.recycle();
+            ancestor = nextAncestor;
+        }
+        return null;
+    }
+
+    /**
+     * Returns the root node in the tree containing {@code node}. Returns null if unable to get
+     * the root node for any reason. The caller is responsible for recycling the result.
+     */
+    @Nullable
+    static AccessibilityNodeInfo getRoot(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityWindowInfo window = node.getWindow();
+        if (window == null) {
+            return null;
+        }
+        AccessibilityNodeInfo root = window.getRoot();
+        window.recycle();
+        return root;
     }
 }
