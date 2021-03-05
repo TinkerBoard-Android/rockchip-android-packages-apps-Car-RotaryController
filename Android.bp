@@ -17,12 +17,18 @@ android_app {
     srcs: ["src/**/*.java"],
     resource_dirs: ["res"],
 
+    // This app uses allowlisted privileged permissions.
+    required: ["allowed_privapp_com.android.car.rotary"],
+
     // Because it uses a platform API (CarInputManager).
     platform_apis: true,
 
     // This app should be platform signed because it requires android.permission.MONITOR_INPUT
     // permission, which is of type "signature".
     certificate: "platform",
+
+    // This app uses allowlisted privileged permissions.
+    privileged: true,
 
     optimize: {
         enabled: false,
