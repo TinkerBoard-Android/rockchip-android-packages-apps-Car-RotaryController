@@ -19,9 +19,11 @@ package com.android.car.rotary;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.text.TextUtils;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +52,7 @@ class SurfaceViewHelper {
     private final Set<CharSequence> mClientApps = new HashSet<>();
 
     /** Package name of the host app. */
+    @Nullable
     private String mHostApp;
 
     /** Initializes the package name of the host app. */
@@ -70,7 +73,7 @@ class SurfaceViewHelper {
 
     /** Returns whether the given {@code node} represents a view of the host app. */
     boolean isHostNode(@NonNull AccessibilityNodeInfo node) {
-        return mHostApp.equals(node.getPackageName());
+        return !TextUtils.isEmpty(mHostApp) && mHostApp.equals(node.getPackageName());
     }
 
     /** Returns whether the given {@code node} represents a view of the client app. */
