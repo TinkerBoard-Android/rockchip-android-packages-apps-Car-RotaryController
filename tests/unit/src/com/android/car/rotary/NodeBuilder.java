@@ -15,6 +15,7 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT;
 import static android.view.accessibility.AccessibilityWindowInfo.UNDEFINED_WINDOW_ID;
 
 import static com.android.car.rotary.Utils.FOCUS_AREA_CLASS_NAME;
@@ -40,6 +41,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,7 +52,8 @@ import java.util.List;
  * need to be recycled.
  */
 class NodeBuilder {
-    private static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 100, 100);
+    @VisibleForTesting
+    static final Rect DEFAULT_BOUNDS = new Rect(0, 0, 100, 100);
     /**
      * A list of mock nodes created via NodeBuilder. This list is used for searching for a
      * node's child nodes.
@@ -65,6 +68,9 @@ class NodeBuilder {
     /** The parent of this node. */
     @Nullable
     private AccessibilityNodeInfo mParent;
+    /** The package this node comes from. */
+    @Nullable
+    private String mPackageName;
     /** The class this node comes from. */
     @Nullable
     private String mClassName;
@@ -121,6 +127,11 @@ class NodeBuilder {
                 MockNodeCopierProvider.get().copy(builder.mParent),
                 MockNodeCopierProvider.get().copy(builder.mParent),
                 MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
+                MockNodeCopierProvider.get().copy(builder.mParent),
                 MockNodeCopierProvider.get().copy(builder.mParent))
                 .thenThrow(new RuntimeException("Exceeded the maximum calls"));
         // There is no need to mock getChildCount() or getChild() if mParent is null or a real node.
@@ -151,6 +162,7 @@ class NodeBuilder {
                 return null;
             }).when(builder.mParent).getChild(any(Integer.class));
         }
+        when(node.getPackageName()).thenReturn(builder.mPackageName);
         when(node.getClassName()).thenReturn(builder.mClassName);
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();
@@ -162,8 +174,22 @@ class NodeBuilder {
             ((Rect) args[0]).set(builder.mBoundsInScreen);
             return null;
         }).when(node).getBoundsInScreen(any(Rect.class));
+        when(node.getBoundsInScreen()).thenReturn(builder.mBoundsInScreen);
         when(node.isFocusable()).thenReturn(builder.mFocusable);
         when(node.isFocused()).thenReturn(builder.mFocused);
+        doAnswer(invocation -> {
+            if (node.isFocused()) {
+                return node;
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                AccessibilityNodeInfo inputFocus = child.findFocus(FOCUS_INPUT);
+                if (inputFocus != null) {
+                    return inputFocus;
+                }
+            }
+            return null;
+        }).when(node).findFocus(FOCUS_INPUT);
         when(node.isVisibleToUser()).thenReturn(builder.mVisibleToUser);
         when(node.isEnabled()).thenReturn(builder.mEnabled);
         when(node.refresh()).thenReturn(builder.mInViewTree);
@@ -189,6 +215,11 @@ class NodeBuilder {
         // The parent node could be a mock node or a real node. In the latter case, a copy is
         // saved.
         mParent = MockNodeCopierProvider.get().copy(parent);
+        return this;
+    }
+
+    NodeBuilder setPackageName(@Nullable String packageName) {
+        mPackageName = packageName;
         return this;
     }
 
@@ -285,6 +316,7 @@ class NodeBuilder {
         copy.mWindow = mWindow;
         copy.mWindowId = mWindowId;
         copy.mParent = mParent;
+        copy.mPackageName = mPackageName;
         copy.mClassName = mClassName;
         copy.mBoundsInParent = mBoundsInParent;
         copy.mBoundsInScreen = mBoundsInScreen;
@@ -301,6 +333,7 @@ class NodeBuilder {
         mWindow = null;
         mWindowId = UNDEFINED_WINDOW_ID;
         mParent = null;
+        mPackageName = null;
         mClassName = null;
         mBoundsInParent = new Rect(DEFAULT_BOUNDS);
         mBoundsInScreen = new Rect(DEFAULT_BOUNDS);
