@@ -273,7 +273,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * The last clicked node by touching the screen, if any were clicked since we last navigated.
      */
-    private AccessibilityNodeInfo mLastTouchedNode = null;
+    @VisibleForTesting
+    AccessibilityNodeInfo mLastTouchedNode = null;
 
     /**
      * How many milliseconds to ignore {@link AccessibilityEvent#TYPE_VIEW_CLICKED} events after
@@ -380,7 +381,8 @@ public class RotaryService extends AccessibilityService implements
     private long mAfterScrollActionUntil;
 
     /** Whether we're in rotary mode (vs touch mode). */
-    private boolean mInRotaryMode;
+    @VisibleForTesting
+    boolean mInRotaryMode;
 
     /**
      * Whether we're in direct manipulation mode.
@@ -516,8 +518,9 @@ public class RotaryService extends AccessibilityService implements
     private InputManager mInputManager;
 
     /** Component name of foreground activity. */
+    @VisibleForTesting
     @Nullable
-    private ComponentName mForegroundActivity;
+    ComponentName mForegroundActivity;
 
     private WindowManager mWindowManager;
 

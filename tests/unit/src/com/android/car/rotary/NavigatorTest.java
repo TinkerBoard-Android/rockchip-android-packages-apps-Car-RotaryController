@@ -1120,6 +1120,7 @@ public class NavigatorTest {
         List<AccessibilityNodeInfo> nodes =
                 mWindowRoot.findAccessibilityNodeInfosByViewId(fullViewId);
         if (nodes.isEmpty()) {
+            L.e("Failed to create node by View ID " + viewId);
             return null;
         }
         mNodes.addAll(nodes);
@@ -1134,6 +1135,7 @@ public class NavigatorTest {
     private AccessibilityNodeInfo createNodeByText(String text) {
         List<AccessibilityNodeInfo> nodes = mWindowRoot.findAccessibilityNodeInfosByText(text);
         if (nodes.isEmpty()) {
+            L.e("Failed to create node by text '" + text + "'");
             return null;
         }
         return nodes.get(0);
