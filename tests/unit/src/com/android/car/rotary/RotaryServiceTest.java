@@ -485,7 +485,7 @@ public class RotaryServiceTest {
         }).when(mockHunFpv).performAction(ACTION_RESTORE_DEFAULT_FOCUS);
         when(mockHunFpv.refresh()).thenReturn(true);
         when(mockHunFpv.getClassName()).thenReturn(Utils.FOCUS_PARKING_VIEW_CLASS_NAME);
-        when(mNavigator.findFocusParkingView(hunRoot)).thenReturn(mockHunFpv);
+        when(mNavigator.findFocusParkingViewInRoot(hunRoot)).thenReturn(mockHunFpv);
         when(mNavigator.findHunWindow(anyList())).thenReturn(hunWindow);
 
         assertThat(mRotaryService.getFocusedNode()).isNotEqualTo(hunButton1);

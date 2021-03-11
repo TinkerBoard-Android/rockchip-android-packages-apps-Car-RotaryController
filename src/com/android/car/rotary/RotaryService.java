@@ -516,6 +516,7 @@ public class RotaryService extends AccessibilityService implements
     private InputManager mInputManager;
 
     /** Component name of foreground activity. */
+    @Nullable
     private ComponentName mForegroundActivity;
 
     private WindowManager mWindowManager;
@@ -676,6 +677,11 @@ public class RotaryService extends AccessibilityService implements
         if (mCar != null) {
             mCar.disconnect();
         }
+
+        // Reset to touch IME if the current IME is rotary IME.
+        mInRotaryMode = false;
+        updateIme();
+
         super.onDestroy();
     }
 
@@ -843,11 +849,9 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void onTouchEvent() {
-        if (!mInRotaryMode) {
-            return;
-        }
-
-        // Enter touch mode once the user touches the screen.
+        // The user touched the screen, so exit rotary mode. Do this even if mInRotaryMode is
+        // already false because this service might have crashed causing mInRotaryMode to be reset
+        // without a corresponding change to the IME.
         setInRotaryMode(false);
 
         // Set mFocusedNode to null when user uses touch.
@@ -1563,6 +1567,12 @@ public class RotaryService extends AccessibilityService implements
 
     @Nullable
     private Bundle getForegroundActivityMetaData() {
+        // The foreground activity can be null in a cold boot when the user has an active
+        // lockscreen.
+        if (mForegroundActivity == null) {
+            return null;
+        }
+
         try {
             ActivityInfo activityInfo = getPackageManager().getActivityInfo(mForegroundActivity,
                     PackageManager.GET_META_DATA);
@@ -2234,14 +2244,15 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void setInRotaryMode(boolean inRotaryMode) {
-        if (inRotaryMode == mInRotaryMode) {
-            return;
-        }
         mInRotaryMode = inRotaryMode;
+        if (!mInRotaryMode) {
+            setEditNode(null);
+        }
+        updateIme();
 
         // If we're controlling direct manipulation mode (i.e., the focused node supports rotate
         // directly), exit the mode when the user touches the screen.
-        if (!inRotaryMode && mInDirectManipulationMode) {
+        if (!mInRotaryMode && mInDirectManipulationMode) {
             if (mFocusedNode == null) {
                 L.e("mFocused is null in direct manipulation mode");
             } else if (DirectManipulationHelper.supportRotateDirectly(mFocusedNode)) {
@@ -2255,8 +2266,9 @@ public class RotaryService extends AccessibilityService implements
                 L.d("The client app should exit direct manipulation mode");
             }
         }
+    }
 
-        // Update IME.
+    private void updateIme() {
         if (TextUtils.isEmpty(mRotaryInputMethod)) {
             L.w("No rotary IME configured");
             return;
@@ -2265,20 +2277,16 @@ public class RotaryService extends AccessibilityService implements
             L.w("No touch IME configured");
             return;
         }
-        if (!inRotaryMode) {
-            setEditNode(null);
-        }
-        // Switch to the rotary IME or the touch IME.
-        String newIme = inRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
-        if (!isValidIme(newIme)) {
-            L.w("Invalid IME: " + newIme);
+        // Switch to the rotary IME or the touch IME if needed.
+        String newIme = mInRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
+        String oldIme = Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
+        if (newIme.equals(oldIme)) {
+            L.v("No need to switch IME: " + newIme);
             return;
         }
         boolean result =
                 Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
-        if (!result) {
-            L.w("Failed to switch IME: " + newIme);
-        }
+        L.successOrFailure("Switching to IME: " + newIme, result);
     }
 
     /**
