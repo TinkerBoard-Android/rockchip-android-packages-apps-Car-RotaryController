@@ -515,6 +515,7 @@ public class RotaryService extends AccessibilityService implements
     private InputManager mInputManager;
 
     /** Component name of foreground activity. */
+    @Nullable
     private ComponentName mForegroundActivity;
 
     private WindowManager mWindowManager;
@@ -1560,6 +1561,12 @@ public class RotaryService extends AccessibilityService implements
 
     @Nullable
     private Bundle getForegroundActivityMetaData() {
+        // The foreground activity can be null in a cold boot when the user has an active
+        // lockscreen.
+        if (mForegroundActivity == null) {
+            return null;
+        }
+
         try {
             ActivityInfo activityInfo = getPackageManager().getActivityInfo(mForegroundActivity,
                     PackageManager.GET_META_DATA);
