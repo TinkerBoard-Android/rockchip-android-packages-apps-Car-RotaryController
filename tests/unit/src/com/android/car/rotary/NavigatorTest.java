@@ -782,7 +782,7 @@ public class NavigatorTest {
      * where {@code button3} and {@code button4} are disabled.
      */
     @Test
-    public void testFindLastFocusableDescendant() throws Exception {
+    public void testFindLastFocusableDescendant() {
         initActivity(R.layout.navigator_find_focusable_descendant_test_activity);
 
         Activity activity = mActivityRule.getActivity();
@@ -794,9 +794,16 @@ public class NavigatorTest {
             button4View.setEnabled(false);
         });
 
-        // TODO: Remove this. Due to synchronization issues, this is required for button4 to be
-        //  disabled.
-        Thread.sleep(1000);
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        // Creating button3 and button4 is necessary to make the test pass. When searching for the
+        // target node, even though the states of the views are correct(i.e., button3View and
+        // button4View have been disabled), the states of the nodes might not be up to date (i.e.,
+        // button3 and button4 haven't been disabled yet) because they're fetched from the node
+        // pool. So creating new nodes here to refresh their states.
+        AccessibilityNodeInfo button3 = createNode("button3");
+        assertThat(button3.isEnabled()).isFalse();
+        AccessibilityNodeInfo button4 = createNode("button4");
+        assertThat(button4.isEnabled()).isFalse();
 
         AccessibilityNodeInfo root = createNode("root");
         AccessibilityNodeInfo button2 = createNode("button2");

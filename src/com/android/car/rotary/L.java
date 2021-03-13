@@ -61,4 +61,13 @@ class L {
             Log.e(TAG, msg);
         }
     }
+
+    /** Logs conditional logs if loggable or on a debug build. */
+    static void successOrFailure(@NonNull String msg, boolean success) {
+        if (success) {
+            d(msg + " succeeded");
+        } else {
+            w(msg + " failed");
+        }
+    }
 }
