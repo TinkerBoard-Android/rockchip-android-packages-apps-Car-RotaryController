@@ -95,6 +95,9 @@ class NodeBuilder {
     /** The content description for this node. */
     @Nullable
     private String mContentDescription;
+    /** The state description for this node. */
+    @Nullable
+    private String mStateDescription;
     /** The action list for this node. */
     @NonNull
     private List<AccessibilityNodeInfo.AccessibilityAction> mActionList = new ArrayList<>();
@@ -195,6 +198,7 @@ class NodeBuilder {
         when(node.refresh()).thenReturn(builder.mInViewTree);
         when(node.isScrollable()).thenReturn(builder.mScrollable);
         when(node.getContentDescription()).thenReturn(builder.mContentDescription);
+        when(node.getStateDescription()).thenReturn(builder.mStateDescription);
         when(node.getActionList()).thenReturn(builder.mActionList);
         when(node.getExtras()).thenReturn(builder.mExtras);
         builder.mNodeList.add(node);
@@ -273,6 +277,11 @@ class NodeBuilder {
         return this;
     }
 
+    NodeBuilder setStateDescription(@Nullable String stateDescription) {
+        mStateDescription = stateDescription;
+        return this;
+    }
+
     NodeBuilder setActions(AccessibilityNodeInfo.AccessibilityAction... actions) {
         mActionList = Arrays.asList(actions);
         return this;
@@ -327,6 +336,7 @@ class NodeBuilder {
         copy.mInViewTree = mInViewTree;
         copy.mScrollable = mScrollable;
         copy.mContentDescription = mContentDescription;
+        copy.mStateDescription = mStateDescription;
         copy.mActionList = mActionList;
         copy.mExtras = mExtras;
         // Clear the states so that it doesn't infect the next NodeBuilder we create.
@@ -344,6 +354,7 @@ class NodeBuilder {
         mInViewTree = true;
         mScrollable = false;
         mContentDescription = null;
+        mStateDescription = null;
         mActionList = new ArrayList<>();
         mExtras = new Bundle();
         return copy;
