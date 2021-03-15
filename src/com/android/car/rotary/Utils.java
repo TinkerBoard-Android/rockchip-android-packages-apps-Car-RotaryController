@@ -63,7 +63,8 @@ final class Utils {
             "com.android.car.rotary.FocusParkingView";
 
     private static final String WEB_VIEW_CLASS_NAME = WebView.class.getName();
-    private static final String SURFACE_VIEW_CLASS_NAME = SurfaceView.class.getName();
+    @VisibleForTesting
+    static final String SURFACE_VIEW_CLASS_NAME = SurfaceView.class.getName();
 
     private Utils() {
     }

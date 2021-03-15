@@ -24,6 +24,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import java.util.HashSet;
 import java.util.List;
@@ -53,7 +54,8 @@ class SurfaceViewHelper {
 
     /** Package name of the host app. */
     @Nullable
-    private String mHostApp;
+    @VisibleForTesting
+    String mHostApp;
 
     /** Initializes the package name of the host app. */
     void initHostApp(@NonNull PackageManager packageManager) {
