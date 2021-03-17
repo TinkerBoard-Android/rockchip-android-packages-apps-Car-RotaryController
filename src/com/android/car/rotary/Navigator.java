@@ -53,7 +53,8 @@ class Navigator {
     private final TreeTraverser mTreeTraverser = new TreeTraverser();
 
     @NonNull
-    private final SurfaceViewHelper mSurfaceViewHelper = new SurfaceViewHelper();
+    @VisibleForTesting
+    final SurfaceViewHelper mSurfaceViewHelper = new SurfaceViewHelper();
 
     private final int mHunLeft;
     private final int mHunRight;
@@ -230,7 +231,7 @@ class Navigator {
         // If the node represents a view in the embedded view hierarchy hosted by a SurfaceView,
         // return the root node of the hierarchy, which is the only child of the SurfaceView node.
         if (isHostNode(node)) {
-            AccessibilityNodeInfo child = AccessibilityNodeInfo.obtain(node);
+            AccessibilityNodeInfo child = mNodeCopier.copy(node);
             AccessibilityNodeInfo parent = node.getParent();
             while (parent != null && !Utils.isSurfaceView(parent)) {
                 child.recycle();
@@ -252,7 +253,7 @@ class Navigator {
         }
 
         // If the root node can't be accessed via the window, navigate up the node tree.
-        AccessibilityNodeInfo child = AccessibilityNodeInfo.obtain(node);
+        AccessibilityNodeInfo child = mNodeCopier.copy(node);
         AccessibilityNodeInfo parent = node.getParent();
         while (parent != null) {
             child.recycle();
@@ -498,7 +499,8 @@ class Navigator {
      * them. If there are no explicitly declared {@link FocusArea}s, returns the root view. The
      * caller is responsible for recycling the result.
      */
-    private @NonNull
+    @NonNull
+    @VisibleForTesting
     List<AccessibilityNodeInfo> findFocusAreas(@NonNull AccessibilityWindowInfo window) {
         List<AccessibilityNodeInfo> results = new ArrayList<>();
         AccessibilityNodeInfo rootNode = window.getRoot();

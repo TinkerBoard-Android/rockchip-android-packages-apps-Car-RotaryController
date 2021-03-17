@@ -16,6 +16,10 @@
 
 package com.android.car.rotary;
 
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED;
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED;
+import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
 
 import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
@@ -35,10 +39,12 @@ import android.app.Activity;
 import android.app.UiAutomation;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.hardware.input.InputManager;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
@@ -64,6 +70,9 @@ import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
 public class RotaryServiceTest {
+
+    private final static String HOST_APP_PACKAGE_NAME = "host.app.package.name";
+    private final static String CLIENT_APP_PACKAGE_NAME = "client.app.package.name";
 
     private static UiAutomation sUiAutomoation;
 
@@ -178,7 +187,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -219,7 +228,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -264,7 +273,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -309,6 +318,64 @@ public class RotaryServiceTest {
         AccessibilityNodeInfo button1Node = createNode("button1");
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(button1Node);
         assertThat(consumed).isTrue();
+    }
+
+    /**
+     * Tests {@link RotaryService#initFocus()} in the following node tree:
+     * <pre>
+     *                  clientAppRoot
+     *                     /    \
+     *                    /      \
+     *              button1  surfaceView(focused)
+     *                             |
+     *                        hostAppRoot
+     *                           /    \
+     *                         /       \
+     *            focusParkingView     button2(focused)
+     * </pre>
+     * and {@link RotaryService#mFocusedNode} is null.
+     */
+    @Test
+    public void testInitFocus_focusOnHostNode() {
+        mNavigator.addClientApp(CLIENT_APP_PACKAGE_NAME);
+        mNavigator.mSurfaceViewHelper.mHostApp = HOST_APP_PACKAGE_NAME;
+
+        AccessibilityNodeInfo clientAppRoot = mNodeBuilder
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder
+                .setParent(clientAppRoot)
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo surfaceView = mNodeBuilder
+                .setParent(clientAppRoot)
+                .setFocused(true)
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .setClassName(Utils.SURFACE_VIEW_CLASS_NAME)
+                .build();
+
+        AccessibilityNodeInfo hostAppRoot = mNodeBuilder
+                .setParent(surfaceView)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder
+                .setParent(hostAppRoot)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .setFpv()
+                .build();
+        AccessibilityNodeInfo button2 = mNodeBuilder
+                .setParent(hostAppRoot)
+                .setFocused(true)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .build();
+
+        AccessibilityWindowInfo window = new WindowBuilder().setRoot(clientAppRoot).build();
+        List<AccessibilityWindowInfo> windows = Collections.singletonList(window);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        boolean consumed = mRotaryService.initFocus();
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button2);
+        assertThat(consumed).isFalse();
     }
 
     /**
@@ -1370,6 +1437,291 @@ public class RotaryServiceTest {
     }
 
     /**
+     * Tests {@link RotaryService#onAccessibilityEvent} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnAccessibilityEvent_typeViewFocused() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // The app focuses appDefaultFocus, then the accessibility framework sends a
+        // TYPE_VIEW_FOCUSED event.
+        // RotaryService should set mFocusedNode to appDefaultFocusNode.
+
+        Activity activity = mActivityRule.getActivity();
+        Button appDefaultFocus = activity.findViewById(R.id.app_default_focus);
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(appDefaultFocus.isFocused()).isTrue();
+        assertThat(mRotaryService.getFocusedNode()).isNull();
+
+        mRotaryService.mInRotaryMode = true;
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(appDefaultFocusNode));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_FOCUSED);
+        mRotaryService.onAccessibilityEvent(event);
+
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#onAccessibilityEvent} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnAccessibilityEvent_typeViewFocused2() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // RotaryService focuses appDefaultFocus, then the app focuses on the FocusParkingView
+        // and the accessibility framework sends a TYPE_VIEW_FOCUSED event.
+        // RotaryService should set mFocusedNode to null.
+
+        Activity activity = mActivityRule.getActivity();
+        Button appDefaultFocus = activity.findViewById(R.id.app_default_focus);
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(appDefaultFocus.isFocused()).isTrue();
+        mRotaryService.setFocusedNode(appDefaultFocusNode);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+
+        mRotaryService.mInRotaryMode = true;
+
+        AccessibilityNodeInfo fpvNode = createNode("app_fpv");
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(fpvNode));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_FOCUSED);
+        mRotaryService.onAccessibilityEvent(event);
+
+        assertThat(mRotaryService.getFocusedNode()).isNull();
+    }
+
+    /**
+     * Tests {@link RotaryService#onAccessibilityEvent} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnAccessibilityEvent_typeViewClicked() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // The focus is on appDefaultFocus, then the user clicks it via the rotary controller.
+
+        Activity activity = mActivityRule.getActivity();
+        Button appDefaultFocus = activity.findViewById(R.id.app_default_focus);
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(appDefaultFocus.isFocused()).isTrue();
+        mRotaryService.setFocusedNode(appDefaultFocusNode);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+
+        mRotaryService.mInRotaryMode = true;
+        mRotaryService.mIgnoreViewClickedNode = AccessibilityNodeInfo.obtain(appDefaultFocusNode);
+
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(appDefaultFocusNode));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_CLICKED);
+        when(event.getEventTime()).thenReturn(-1l);
+        mRotaryService.onAccessibilityEvent(event);
+
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+        assertThat(mRotaryService.mLastTouchedNode).isNull();
+    }
+
+    /**
+     * Tests {@link RotaryService#onAccessibilityEvent} in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  . (focused) .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  .           .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testOnAccessibilityEvent_typeViewClicked2() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        // The focus is on appDefaultFocus, then the user clicks appButton3 via the touch screen.
+
+        Activity activity = mActivityRule.getActivity();
+        Button appDefaultFocus = activity.findViewById(R.id.app_default_focus);
+        AccessibilityNodeInfo appDefaultFocusNode = createNode("app_default_focus");
+        assertThat(appDefaultFocus.isFocused()).isTrue();
+        mRotaryService.setFocusedNode(appDefaultFocusNode);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(appDefaultFocusNode);
+
+        mRotaryService.mInRotaryMode = true;
+
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(appButton3Node));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_CLICKED);
+        when(event.getEventTime()).thenReturn(-1l);
+        mRotaryService.onAccessibilityEvent(event);
+
+        assertThat(mRotaryService.getFocusedNode()).isNull();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+        assertThat(mRotaryService.mLastTouchedNode).isEqualTo(appButton3Node);
+    }
+
+    @Test
+    public void testOnAccessibilityEvent_typeWindowStateChanged() {
+        AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
+        when(window.getType()).thenReturn(TYPE_APPLICATION);
+        when(window.getDisplayId()).thenReturn(DEFAULT_DISPLAY);
+
+        AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
+        when(node.getWindow()).thenReturn(window);
+
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(node);
+        when(event.getEventType()).thenReturn(TYPE_WINDOW_STATE_CHANGED);
+        final String packageName = "package.name";
+        final String className = "class.name";
+        when(event.getPackageName()).thenReturn(packageName);
+        when(event.getClassName()).thenReturn(className);
+        mRotaryService.onAccessibilityEvent(event);
+
+        ComponentName foregroundActivity = new ComponentName(packageName, className);
+        assertThat(mRotaryService.mForegroundActivity).isEqualTo(foregroundActivity);
+    }
+
+    /**
      * Starts the test activity with the given layout and initializes the root
      * {@link AccessibilityNodeInfo}.
      */
@@ -1389,6 +1741,7 @@ public class RotaryServiceTest {
         List<AccessibilityNodeInfo> nodes =
                 mWindowRoot.findAccessibilityNodeInfosByViewId(fullViewId);
         if (nodes.isEmpty()) {
+            L.e("Failed to create node by View ID " + viewId);
             return null;
         }
         mNodes.addAll(nodes);
