@@ -65,6 +65,9 @@ import java.util.List;
 @RunWith(AndroidJUnit4.class)
 public class RotaryServiceTest {
 
+    private final static String HOST_APP_PACKAGE_NAME = "host.app.package.name";
+    private final static String CLIENT_APP_PACKAGE_NAME = "client.app.package.name";
+
     private static UiAutomation sUiAutomoation;
 
     private final List<AccessibilityNodeInfo> mNodes = new ArrayList<>();
@@ -178,7 +181,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -219,7 +222,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -264,7 +267,7 @@ public class RotaryServiceTest {
     }
 
     /**
-     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * Tests {@link RotaryService#initFocus()} in the following view tree:
      * <pre>
      *                      root
      *                     /    \
@@ -309,6 +312,64 @@ public class RotaryServiceTest {
         AccessibilityNodeInfo button1Node = createNode("button1");
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(button1Node);
         assertThat(consumed).isTrue();
+    }
+
+    /**
+     * Tests {@link RotaryService#initFocus()} in the following node tree:
+     * <pre>
+     *                  clientAppRoot
+     *                     /    \
+     *                    /      \
+     *              button1  surfaceView(focused)
+     *                             |
+     *                        hostAppRoot
+     *                           /    \
+     *                         /       \
+     *            focusParkingView     button2(focused)
+     * </pre>
+     * and {@link RotaryService#mFocusedNode} is null.
+     */
+    @Test
+    public void testInitFocus_focusOnHostNode() {
+        mNavigator.addClientApp(CLIENT_APP_PACKAGE_NAME);
+        mNavigator.mSurfaceViewHelper.mHostApp = HOST_APP_PACKAGE_NAME;
+
+        AccessibilityNodeInfo clientAppRoot = mNodeBuilder
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo button1 = mNodeBuilder
+                .setParent(clientAppRoot)
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo surfaceView = mNodeBuilder
+                .setParent(clientAppRoot)
+                .setFocused(true)
+                .setPackageName(CLIENT_APP_PACKAGE_NAME)
+                .setClassName(Utils.SURFACE_VIEW_CLASS_NAME)
+                .build();
+
+        AccessibilityNodeInfo hostAppRoot = mNodeBuilder
+                .setParent(surfaceView)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .build();
+        AccessibilityNodeInfo focusParkingView = mNodeBuilder
+                .setParent(hostAppRoot)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .setFpv()
+                .build();
+        AccessibilityNodeInfo button2 = mNodeBuilder
+                .setParent(hostAppRoot)
+                .setFocused(true)
+                .setPackageName(HOST_APP_PACKAGE_NAME)
+                .build();
+
+        AccessibilityWindowInfo window = new WindowBuilder().setRoot(clientAppRoot).build();
+        List<AccessibilityWindowInfo> windows = Collections.singletonList(window);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        boolean consumed = mRotaryService.initFocus();
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button2);
+        assertThat(consumed).isFalse();
     }
 
     /**
