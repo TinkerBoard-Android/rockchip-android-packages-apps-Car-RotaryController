@@ -48,6 +48,7 @@ public class NodeBuilderTest {
     private static final String PACKAGE_NAME = "package_name";
     private static final String CLASS_NAME = "class_name";
     private static final String CONTENT_DESCRIPTION = "content_description";
+    private static final String STATE_DESCRIPTION = "state_description";
     private NodeBuilder mNodeBuilder;
 
     @Before
@@ -151,6 +152,13 @@ public class NodeBuilderTest {
         AccessibilityNodeInfo node =
                 mNodeBuilder.setContentDescription(CONTENT_DESCRIPTION).build();
         assertThat(node.getContentDescription().toString()).isEqualTo(CONTENT_DESCRIPTION);
+    }
+
+    @Test
+    public void testSetStateDescription() {
+        AccessibilityNodeInfo node =
+                mNodeBuilder.setStateDescription(STATE_DESCRIPTION).build();
+        assertThat(node.getStateDescription().toString()).isEqualTo(STATE_DESCRIPTION);
     }
 
     @Test
