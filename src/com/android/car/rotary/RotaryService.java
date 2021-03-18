@@ -391,7 +391,8 @@ public class RotaryService extends AccessibilityService implements
      * this mode is controlled by the client app, which is responsible for updating the mode by
      * calling {@link DirectManipulationHelper#enableDirectManipulationMode} when needed.
      */
-    private boolean mInDirectManipulationMode;
+    @VisibleForTesting
+    boolean mInDirectManipulationMode;
 
     /** The {@link SystemClock#uptimeMillis} when the last rotary rotation event occurred. */
     private long mLastRotateEventTime;
@@ -1739,7 +1740,8 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /** Returns whether the given {@code node} is in the application window. */
-    private static boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
+    @VisibleForTesting
+    boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
         AccessibilityWindowInfo window = node.getWindow();
         if (window == null) {
             L.w("Failed to get window of " + node);

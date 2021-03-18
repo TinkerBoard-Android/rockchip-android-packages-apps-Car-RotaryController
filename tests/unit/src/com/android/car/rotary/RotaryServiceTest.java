@@ -17,11 +17,14 @@
 package com.android.car.rotary;
 
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED;
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_CLICKED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED;
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
 
+import static com.android.car.ui.utils.DirectManipulationHelper.DIRECT_MANIPULATION;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_RESTORE_DEFAULT_FOCUS;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -55,6 +58,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.ActivityTestRule;
 
 import com.android.car.ui.FocusParkingView;
+import com.android.car.ui.utils.DirectManipulationHelper;
 
 import org.junit.After;
 import org.junit.Before;
@@ -1719,6 +1723,205 @@ public class RotaryServiceTest {
 
         ComponentName foregroundActivity = new ComponentName(packageName, className);
         assertThat(mRotaryService.mForegroundActivity).isEqualTo(foregroundActivity);
+    }
+
+    /**
+     * Tests Direct Manipulation mode in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (focused) .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testDirectManipulationMode1() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        DirectManipulationHelper.setSupportsRotateDirectly(appButton3, true);
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        mRotaryService.setFocusedNode(appButton3Node);
+        mRotaryService.mInRotaryMode = true;
+        assertThat(mRotaryService.mInDirectManipulationMode).isFalse();
+        assertThat(appButton3.isSelected()).isFalse();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+
+        // RotaryService should enter Direct Manipulation mode because appButton3Node
+        // supports rotate directly.
+        assertThat(mRotaryService.mInDirectManipulationMode).isTrue();
+        assertThat(appButton3.isSelected()).isTrue();
+
+        // Click the back button of the controller.
+        KeyEvent backButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(backButtonEventActionDown));
+        KeyEvent backButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(backButtonEventActionUp));
+
+        // RotaryService should exit Direct Manipulation mode because appButton3Node
+        // supports rotate directly.
+        assertThat(mRotaryService.mInDirectManipulationMode).isFalse();
+        assertThat(appButton3.isSelected()).isFalse();
+    }
+
+    /**
+     * Tests Direct Manipulation mode in the following view tree:
+     * <pre>
+     *      The HUN window:
+     *
+     *      hun FocusParkingView
+     *      ==========HUN focus area==========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .hun button1.  .hun button2.  =
+     *      =  .           .  .           .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     *
+     *      The app window:
+     *
+     *      app FocusParkingView
+     *      ===========focus area 1===========    ============focus area 2===========
+     *      =                                =    =                                 =
+     *      =  .............  .............  =    =  .............                  =
+     *      =  .           .  .           .  =    =  .           .                  =
+     *      =  .app button1.  .   nudge   .  =    =  .app button2.                  =
+     *      =  .           .  .  shortcut .  =    =  .           .                  =
+     *      =  .............  .............  =    =  .............                  =
+     *      =                                =    =                                 =
+     *      ==================================    ===================================
+     *
+     *      ===========focus area 3===========
+     *      =                                =
+     *      =  .............  .............  =
+     *      =  .           .  .           .  =
+     *      =  .app button3.  .  default  .  =
+     *      =  . (focused) .  .   focus   .  =
+     *      =  .............  .............  =
+     *      =                                =
+     *      ==================================
+     * </pre>
+     */
+    @Test
+    public void testDirectManipulationMode2() {
+        initActivity(R.layout.rotary_service_test_2_activity);
+
+        Activity activity = mActivityRule.getActivity();
+        Button appButton3 = activity.findViewById(R.id.app_button3);
+        appButton3.post(() -> appButton3.requestFocus());
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertThat(appButton3.isFocused()).isTrue();
+        AccessibilityNodeInfo appButton3Node = createNode("app_button3");
+        mRotaryService.setFocusedNode(appButton3Node);
+        mRotaryService.mInRotaryMode = true;
+        when(mRotaryService.isInApplicationWindow(appButton3Node)).thenReturn(true);
+        assertThat(mRotaryService.mInDirectManipulationMode).isFalse();
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
+
+        // Click the center button of the controller.
+        int validDisplayId = CarInputManager.TARGET_DISPLAY_TYPE_MAIN;
+        KeyEvent centerButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionDown));
+        KeyEvent centerButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(centerButtonEventActionUp));
+
+        // RotaryService should inject KEYCODE_DPAD_CENTER event because appButton3Node doesn't
+        // support rotate directly and is in the application window.
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_DOWN);
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.ACTION_UP);
+        assertThat(mRotaryService.mIgnoreViewClickedNode).isEqualTo(appButton3Node);
+
+        // The app sends a TYPE_VIEW_ACCESSIBILITY_FOCUSED event to RotaryService.
+        // RotaryService should enter Direct Manipulation mode when receiving the event.
+        AccessibilityEvent event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(appButton3Node));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_ACCESSIBILITY_FOCUSED);
+        when(event.getClassName()).thenReturn(DIRECT_MANIPULATION);
+        mRotaryService.onAccessibilityEvent(event);
+        assertThat(mRotaryService.mInDirectManipulationMode).isTrue();
+
+        // Click the back button of the controller.
+        KeyEvent backButtonEventActionDown =
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(backButtonEventActionDown));
+        KeyEvent backButtonEventActionUp =
+                new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK);
+        mRotaryService.onKeyEvents(validDisplayId,
+                Collections.singletonList(backButtonEventActionUp));
+
+        // RotaryService should inject KEYCODE_BACK event because appButton3Node doesn't
+        // support rotate directly and is in the application window.
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_DOWN);
+        verify(mRotaryService, times(1))
+                .injectKeyEvent(KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP);
+
+        // The app sends a TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED event to RotaryService.
+        // RotaryService should exit Direct Manipulation mode when receiving the event.
+        event = mock(AccessibilityEvent.class);
+        when(event.getSource()).thenReturn(AccessibilityNodeInfo.obtain(appButton3Node));
+        when(event.getEventType()).thenReturn(TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED);
+        when(event.getClassName()).thenReturn(DIRECT_MANIPULATION);
+        mRotaryService.onAccessibilityEvent(event);
+        assertThat(mRotaryService.mInDirectManipulationMode).isFalse();
     }
 
     /**
