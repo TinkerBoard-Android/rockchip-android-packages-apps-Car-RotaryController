@@ -38,6 +38,13 @@
     <!-- Allows us to read the current activity's metadata for custom nudge actions. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
 
+    <!-- Ensures the host app is visible to RotaryService. -->
+    <queries>
+        <intent>
+            <action android:name="android.car.template.host.RendererService" />
+        </intent>
+    </queries>
+
     <!-- RotaryService needs to be directBootAware so that it can start before the user is unlocked. -->
     <application>
         <service

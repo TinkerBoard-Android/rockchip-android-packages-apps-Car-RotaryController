@@ -538,6 +538,26 @@ public class RotaryService extends AccessibilityService implements
     /** Expiration time for {@link #mPendingFocusedNode} in {@link SystemClock#uptimeMillis}. */
     private long mPendingFocusedExpirationTime;
 
+    private final BroadcastReceiver mAppInstallUninstallReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String packageName = intent.getData().getSchemeSpecificPart();
+            if (TextUtils.isEmpty(packageName)) {
+                L.e("System sent an empty app install/uninstall broadcast");
+                return;
+            }
+            if (mNavigator == null) {
+                L.v("mNavigator is not initialized");
+                return;
+            }
+            if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())) {
+                mNavigator.clearHostApp(packageName);
+            } else {
+                mNavigator.initHostApp(getPackageManager());
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -609,6 +629,14 @@ public class RotaryService extends AccessibilityService implements
 
         getWindowContext().registerReceiver(mHomeButtonReceiver,
                 new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addDataScheme("package");
+        registerReceiver(mAppInstallUninstallReceiver, filter);
     }
 
     /**
@@ -672,6 +700,7 @@ public class RotaryService extends AccessibilityService implements
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(mAppInstallUninstallReceiver);
         getWindowContext().unregisterReceiver(mHomeButtonReceiver);
 
         unregisterInputMethodObserver();
