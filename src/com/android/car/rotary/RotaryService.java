@@ -226,7 +226,7 @@ public class RotaryService extends AccessibilityService implements
     @Nullable private static WeakReference<Context> sWindowContext;
 
     @NonNull
-    private final NodeCopier mNodeCopier = new NodeCopier();
+    private NodeCopier mNodeCopier = new NodeCopier();
 
     private Navigator mNavigator;
 
@@ -276,7 +276,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * The last clicked node by touching the screen, if any were clicked since we last navigated.
      */
-    private AccessibilityNodeInfo mLastTouchedNode = null;
+    @VisibleForTesting
+    AccessibilityNodeInfo mLastTouchedNode = null;
 
     /**
      * How many milliseconds to ignore {@link AccessibilityEvent#TYPE_VIEW_CLICKED} events after
@@ -290,7 +291,8 @@ public class RotaryService extends AccessibilityService implements
      * are ignored if they occur within {@link #mIgnoreViewClickedMs} of {@link
      * #mLastViewClickedTime}.
      */
-    private AccessibilityNodeInfo mIgnoreViewClickedNode;
+    @VisibleForTesting
+    AccessibilityNodeInfo mIgnoreViewClickedNode;
 
     /**
      * The time of the last {@link AccessibilityEvent#TYPE_VIEW_CLICKED} event in {@link
@@ -314,16 +316,18 @@ public class RotaryService extends AccessibilityService implements
      * The direction of the HUN. If there is no focused node, or the focused node is outside the
      * HUN, nudging to this direction will focus on a node inside the HUN.
      */
+    @VisibleForTesting
     @View.FocusRealDirection
-    private int mHunNudgeDirection;
+    int mHunNudgeDirection;
 
     /**
      * The direction to escape the HUN. If the focused node is inside the HUN, nudging to this
      * direction will move focus to a node outside the HUN, while nudging to other directions
      * will do nothing.
      */
+    @VisibleForTesting
     @View.FocusRealDirection
-    private int mHunEscapeNudgeDirection;
+    int mHunEscapeNudgeDirection;
 
     /**
      * Global actions to perform when the user nudges up, down, left, or right off the edge of the
@@ -380,7 +384,8 @@ public class RotaryService extends AccessibilityService implements
     private long mAfterScrollActionUntil;
 
     /** Whether we're in rotary mode (vs touch mode). */
-    private boolean mInRotaryMode;
+    @VisibleForTesting
+    boolean mInRotaryMode;
 
     /**
      * Whether we're in direct manipulation mode.
@@ -389,7 +394,8 @@ public class RotaryService extends AccessibilityService implements
      * this mode is controlled by the client app, which is responsible for updating the mode by
      * calling {@link DirectManipulationHelper#enableDirectManipulationMode} when needed.
      */
-    private boolean mInDirectManipulationMode;
+    @VisibleForTesting
+    boolean mInDirectManipulationMode;
 
     /** The {@link SystemClock#uptimeMillis} when the last rotary rotation event occurred. */
     private long mLastRotateEventTime;
@@ -398,7 +404,8 @@ public class RotaryService extends AccessibilityService implements
      * How many milliseconds the center buttons must be held down before a long-press is triggered.
      * This doesn't apply to the application window.
      */
-    private long mLongPressMs;
+    @VisibleForTesting
+    long mLongPressMs;
 
     /**
      * Whether the center button was held down long enough to trigger a long-press. In this case, a
@@ -515,8 +522,9 @@ public class RotaryService extends AccessibilityService implements
     private InputManager mInputManager;
 
     /** Component name of foreground activity. */
+    @VisibleForTesting
     @Nullable
-    private ComponentName mForegroundActivity;
+    ComponentName mForegroundActivity;
 
     private WindowManager mWindowManager;
 
@@ -1733,7 +1741,8 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /** Returns whether the given {@code node} is in the application window. */
-    private static boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
+    @VisibleForTesting
+    boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
         AccessibilityWindowInfo window = node.getWindow();
         if (window == null) {
             L.w("Failed to get window of " + node);
@@ -1859,7 +1868,8 @@ public class RotaryService extends AccessibilityService implements
         injectKeyEvent(keyCode, action);
     }
 
-    private void injectKeyEvent(int keyCode, int action) {
+    @VisibleForTesting
+    void injectKeyEvent(int keyCode, int action) {
         long upTime = SystemClock.uptimeMillis();
         KeyEvent keyEvent = new KeyEvent(
                 /* downTime= */ upTime, /* eventTime= */ upTime, action, keyCode, /* repeat= */ 0);
@@ -1894,7 +1904,8 @@ public class RotaryService extends AccessibilityService implements
      * @return whether the event was consumed by this method. When {@code false},
      *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
      */
-    private boolean initFocus() {
+    @VisibleForTesting
+    boolean initFocus() {
         List<AccessibilityWindowInfo> windows = getWindows();
         boolean consumed = initFocus(windows, INVALID_NUDGE_DIRECTION);
         Utils.recycleWindows(windows);
@@ -2110,7 +2121,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * Sets {@link #mFocusedNode} to a copy of the given node, and clears {@link #mLastTouchedNode}.
      */
-    private void setFocusedNode(@Nullable AccessibilityNodeInfo focusedNode) {
+    @VisibleForTesting
+    void setFocusedNode(@Nullable AccessibilityNodeInfo focusedNode) {
         // Android doesn't clear focus automatically when focus is set in another window, so we need
         // to do it explicitly.
         maybeClearFocusInCurrentWindow(focusedNode);
@@ -2208,7 +2220,8 @@ public class RotaryService extends AccessibilityService implements
     /**
      * Sets {@link #mLastTouchedNode} to a copy of the given node, and clears {@link #mFocusedNode}.
      */
-    private void setLastTouchedNode(@Nullable AccessibilityNodeInfo lastTouchedNode) {
+    @VisibleForTesting
+    void setLastTouchedNode(@Nullable AccessibilityNodeInfo lastTouchedNode) {
         setLastTouchedNodeInternal(lastTouchedNode);
         if (mLastTouchedNode != null && mFocusedNode != null) {
             setFocusedNodeInternal(null);
@@ -2394,7 +2407,8 @@ public class RotaryService extends AccessibilityService implements
      * @param eventTime the {@link SystemClock#uptimeMillis} when the event occurred
      * @return the number of "ticks" to rotate
      */
-    private int getRotateAcceleration(int count, long eventTime) {
+    @VisibleForTesting
+    int getRotateAcceleration(int count, long eventTime) {
         // count is 0 when testing key "C" or "V" is pressed.
         if (count <= 0) {
             count = 1;
@@ -2416,6 +2430,14 @@ public class RotaryService extends AccessibilityService implements
         return mNodeCopier.copy(node);
     }
 
+    /** Sets a NodeCopier instance for testing. */
+    @VisibleForTesting
+    void setNodeCopier(@NonNull NodeCopier nodeCopier) {
+        mNodeCopier = nodeCopier;
+        mNavigator.setNodeCopier(nodeCopier);
+        mWindowCache.setNodeCopier(nodeCopier);
+    }
+
     /**
      * Checks if the {@code componentName} is an enabled input method.
      * The string should be in the format {@code "PackageName/.ClassName"}.
@@ -2428,5 +2450,20 @@ public class RotaryService extends AccessibilityService implements
         String enabledInputMethods = Settings.Secure.getString(
                 getContentResolver(), Settings.Secure.ENABLED_INPUT_METHODS);
         return enabledInputMethods != null && enabledInputMethods.contains(componentName);
+    }
+
+    @VisibleForTesting
+    AccessibilityNodeInfo getFocusedNode() {
+        return mFocusedNode;
+    }
+
+    @VisibleForTesting
+    void setNavigator(@NonNull Navigator navigator) {
+        mNavigator = navigator;
+    }
+
+    @VisibleForTesting
+    void setInputManager(@NonNull InputManager inputManager) {
+        mInputManager = inputManager;
     }
 }
