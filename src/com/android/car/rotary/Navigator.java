@@ -83,6 +83,11 @@ class Navigator {
         mSurfaceViewHelper.initHostApp(packageManager);
     }
 
+    /** Clears the package name of the host app if the given {@code packageName} matches. */
+    void clearHostApp(@NonNull String packageName) {
+        mSurfaceViewHelper.clearHostApp(packageName);
+    }
+
     /** Adds the package name of the client app. */
     void addClientApp(@NonNull CharSequence clientAppPackageName) {
         mSurfaceViewHelper.addClientApp(clientAppPackageName);

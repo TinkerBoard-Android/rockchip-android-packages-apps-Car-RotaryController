@@ -45,9 +45,8 @@ import java.util.Set;
  */
 class SurfaceViewHelper {
 
-    // TODO: update this once b/177448399 is fixed.
     /** The intent action to be used by the host app to bind to the RendererService. */
-    private static final String RENDER_ACTION = "android.car.template.host.action.RENDER";
+    private static final String RENDER_ACTION = "android.car.template.host.RendererService";
 
     /** Package names of the client apps. */
     private final Set<CharSequence> mClientApps = new HashSet<>();
@@ -62,10 +61,19 @@ class SurfaceViewHelper {
         List<ResolveInfo> rendererServices = packageManager.queryIntentServices(
                 new Intent(RENDER_ACTION), PackageManager.GET_RESOLVED_FILTER);
         if (rendererServices == null || rendererServices.isEmpty()) {
+            L.v("No host app found");
             return;
         }
         mHostApp = rendererServices.get(0).serviceInfo.packageName;
         L.v("Host app has been initialized: " + mHostApp);
+    }
+
+    /** Clears the package name of the host app if the given {@code packageName} matches. */
+    void clearHostApp(@NonNull String packageName) {
+        if (packageName.equals(mHostApp)) {
+            mHostApp = null;
+            L.v("Host app has been set to null");
+        }
     }
 
     /** Adds the package name of the client app. */
