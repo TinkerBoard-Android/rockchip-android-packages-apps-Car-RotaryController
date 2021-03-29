@@ -26,6 +26,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -89,5 +91,10 @@ class SurfaceViewHelper {
     /** Returns whether the given {@code node} represents a view of the client app. */
     boolean isClientNode(@NonNull AccessibilityNodeInfo node) {
         return mClientApps.contains(node.getPackageName());
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        writer.println("    hostApp: " + mHostApp);
+        writer.println("    clientApps: " + mClientApps);
     }
 }
