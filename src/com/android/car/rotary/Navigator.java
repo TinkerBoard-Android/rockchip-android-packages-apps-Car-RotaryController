@@ -35,6 +35,8 @@ import androidx.annotation.VisibleForTesting;
 import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -81,6 +83,11 @@ class Navigator {
     /** Initializes the package name of the host app. */
     void initHostApp(@NonNull PackageManager packageManager) {
         mSurfaceViewHelper.initHostApp(packageManager);
+    }
+
+    /** Clears the package name of the host app if the given {@code packageName} matches. */
+    void clearHostApp(@NonNull String packageName) {
+        mSurfaceViewHelper.clearHostApp(packageName);
     }
 
     /** Adds the package name of the client app. */
@@ -887,6 +894,30 @@ class Navigator {
                     }
                     return false;
                 });
+    }
+
+    void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        writer.println("  hunLeft: " + mHunLeft + ", right: " + mHunRight);
+        writer.println("  hunNudgeDirection: " + directionToString(mHunNudgeDirection));
+        writer.println("  appWindowBounds: " + mAppWindowBounds);
+
+        writer.println("  surfaceViewHelper:");
+        mSurfaceViewHelper.dump(fd, writer, args);
+    }
+
+    static String directionToString(@View.FocusRealDirection int direction) {
+        switch (direction) {
+            case View.FOCUS_UP:
+                return "FOCUS_UP";
+            case View.FOCUS_DOWN:
+                return "FOCUS_DOWN";
+            case View.FOCUS_LEFT:
+                return "FOCUS_LEFT";
+            case View.FOCUS_RIGHT:
+                return "FOCUS_RIGHT";
+            default:
+                return "<unknown direction " + direction + ">";
+        }
     }
 
     /** Result from {@link #findRotateTarget}. */

@@ -101,8 +101,11 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -303,7 +306,10 @@ public class RotaryService extends AccessibilityService implements
     /** Component name of rotary IME. Empty if none. */
     @Nullable private String mRotaryInputMethod;
 
-    /** Component name of IME used in touch mode. */
+    /** Component name of default IME used in touch mode. */
+    @Nullable private String mDefaultTouchInputMethod;
+
+    /** Component name of current IME used in touch mode. */
     @Nullable private String mTouchInputMethod;
 
     /** Observer to update {@link #mTouchInputMethod} when the user switches IMEs. */
@@ -541,6 +547,26 @@ public class RotaryService extends AccessibilityService implements
     /** Expiration time for {@link #mPendingFocusedNode} in {@link SystemClock#uptimeMillis}. */
     private long mPendingFocusedExpirationTime;
 
+    private final BroadcastReceiver mAppInstallUninstallReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String packageName = intent.getData().getSchemeSpecificPart();
+            if (TextUtils.isEmpty(packageName)) {
+                L.e("System sent an empty app install/uninstall broadcast");
+                return;
+            }
+            if (mNavigator == null) {
+                L.v("mNavigator is not initialized");
+                return;
+            }
+            if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())) {
+                mNavigator.clearHostApp(packageName);
+            } else {
+                mNavigator.initHostApp(getPackageManager());
+            }
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -573,10 +599,10 @@ public class RotaryService extends AccessibilityService implements
         // Verify that the component names for default_touch_input_method and rotary_input_method
         // are valid. If mTouchInputMethod or mRotaryInputMethod is empty, IMEs should not switch
         // because RotaryService won't be able to switch them back.
-        String defaultTouchInputMethod = res.getString(R.string.default_touch_input_method);
-        if (isValidIme(defaultTouchInputMethod)) {
+        mDefaultTouchInputMethod = res.getString(R.string.default_touch_input_method);
+        if (isValidIme(mDefaultTouchInputMethod)) {
             mTouchInputMethod = mPrefs.getString(
-                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(), defaultTouchInputMethod);
+                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(), mDefaultTouchInputMethod);
             // Set the DEFAULT_INPUT_METHOD in case Android defaults to the rotary_input_method.
             // TODO(b/169423887): Figure out how to configure the default IME through Android
             // without needing to do this.
@@ -612,6 +638,14 @@ public class RotaryService extends AccessibilityService implements
 
         getWindowContext().registerReceiver(mHomeButtonReceiver,
                 new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addDataScheme("package");
+        registerReceiver(mAppInstallUninstallReceiver, filter);
     }
 
     /**
@@ -676,6 +710,7 @@ public class RotaryService extends AccessibilityService implements
 
     @Override
     public void onDestroy() {
+        unregisterReceiver(mAppInstallUninstallReceiver);
         getWindowContext().unregisterReceiver(mHomeButtonReceiver);
 
         unregisterInputMethodObserver();
@@ -2465,5 +2500,53 @@ public class RotaryService extends AccessibilityService implements
     @VisibleForTesting
     void setInputManager(@NonNull InputManager inputManager) {
         mInputManager = inputManager;
+    }
+
+    @Override
+    protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        long uptimeMillis = SystemClock.uptimeMillis();
+        writer.println("rotationAcceleration2x: " + mRotationAcceleration2xMs
+                + " ms, 3x: " + mRotationAcceleration3xMs + " ms");
+        writer.println("focusedNode: " + mFocusedNode);
+        writer.println("editNode: " + mEditNode);
+        writer.println("focusArea: " + mFocusArea);
+        writer.println("lastTouchedNode: " + mLastTouchedNode);
+        writer.println("ignoreViewClicked: " + mIgnoreViewClickedMs + "ms");
+        writer.println("ignoreViewClickedNode: " + mIgnoreViewClickedNode
+                + ", time: " + (mLastViewClickedTime - uptimeMillis));
+        writer.println("rotaryInputMethod: " + mRotaryInputMethod);
+        writer.println("defaultTouchInputMethod: " + mDefaultTouchInputMethod);
+        writer.println("touchInputMethod: " + mTouchInputMethod);
+        writer.println("hunNudgeDirection: " + Navigator.directionToString(mHunNudgeDirection)
+                + ", escape: " + Navigator.directionToString(mHunEscapeNudgeDirection));
+        writer.println("offScreenNudgeGlobalActions: "
+                + Arrays.toString(mOffScreenNudgeGlobalActions));
+        writer.print("offScreenNudgeKeyCodes: [");
+        for (int i = 0; i < mOffScreenNudgeKeyCodes.length; i++) {
+            if (i > 0) {
+                writer.print(", ");
+            }
+            writer.print(KeyEvent.keyCodeToString(mOffScreenNudgeKeyCodes[i]));
+        }
+        writer.println("]");
+        writer.println("offScreenNudgeIntents: " + Arrays.toString(mOffScreenNudgeIntents));
+        writer.println("afterScrollTimeout: " + mAfterScrollTimeoutMs + " ms");
+        writer.println("afterScrollAction: " + mAfterScrollAction
+                + ", until: " + (mAfterScrollActionUntil - uptimeMillis));
+        writer.println("inRotaryMode: " + mInRotaryMode);
+        writer.println("inDirectManipulationMode: " + mInDirectManipulationMode);
+        writer.println("lastRotateEventTime: " + (mLastRotateEventTime - uptimeMillis));
+        writer.println("longPress: " + mLongPressMs + " ms, triggered: " + mLongPressTriggered);
+        writer.println("foregroundActivity: " + (mForegroundActivity == null
+                ? "null" : mForegroundActivity.flattenToShortString()));
+        writer.println("afterFocusTimeout: " + mAfterFocusTimeoutMs + " ms");
+        writer.println("pendingFocusedNode: " + mPendingFocusedNode
+                + ", expiration: " + (mPendingFocusedExpirationTime - uptimeMillis));
+
+        writer.println("navigator:");
+        mNavigator.dump(fd, writer, args);
+
+        writer.println("windowCache:");
+        mWindowCache.dump(fd, writer, args);
     }
 }
