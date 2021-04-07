@@ -342,6 +342,8 @@ public class RotaryServiceTest {
      */
     @Test
     public void testInitFocus_focusOnHostNode() {
+        initActivity(R.layout.rotary_service_test_1_activity);
+
         mNavigator.addClientApp(CLIENT_APP_PACKAGE_NAME);
         mNavigator.mSurfaceViewHelper.mHostApp = HOST_APP_PACKAGE_NAME;
 
