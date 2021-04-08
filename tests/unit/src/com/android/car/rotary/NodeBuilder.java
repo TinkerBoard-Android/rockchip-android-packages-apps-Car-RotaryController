@@ -104,6 +104,8 @@ class NodeBuilder {
     /** The extras of this node. */
     @NonNull
     private Bundle mExtras = new Bundle();
+    /** Whether this node is checkable. */
+    private boolean mCheckable = false;
 
     NodeBuilder(@NonNull List<AccessibilityNodeInfo> nodeList) {
         mNodeList = nodeList;
@@ -201,6 +203,7 @@ class NodeBuilder {
         when(node.getStateDescription()).thenReturn(builder.mStateDescription);
         when(node.getActionList()).thenReturn(builder.mActionList);
         when(node.getExtras()).thenReturn(builder.mExtras);
+        when(node.isCheckable()).thenReturn(builder.mCheckable);
         builder.mNodeList.add(node);
         return node;
     }
@@ -315,6 +318,11 @@ class NodeBuilder {
         return setContentDescription(ROTARY_CONTAINER);
     }
 
+    NodeBuilder setCheckable(boolean checkable) {
+        mCheckable = checkable;
+        return this;
+    }
+
     /**
      * Creates a copy of the current NodeBuilder, and clears the states of the current NodeBuilder
      * except for {@link #mNodeList}.
@@ -339,6 +347,7 @@ class NodeBuilder {
         copy.mStateDescription = mStateDescription;
         copy.mActionList = mActionList;
         copy.mExtras = mExtras;
+        copy.mCheckable = mCheckable;
         // Clear the states so that it doesn't infect the next NodeBuilder we create.
         mWindow = null;
         mWindowId = UNDEFINED_WINDOW_ID;
@@ -357,6 +366,7 @@ class NodeBuilder {
         mStateDescription = null;
         mActionList = new ArrayList<>();
         mExtras = new Bundle();
+        mCheckable = false;
         return copy;
     }
 }

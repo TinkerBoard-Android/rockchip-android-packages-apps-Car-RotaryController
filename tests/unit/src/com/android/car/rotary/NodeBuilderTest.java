@@ -72,6 +72,7 @@ public class NodeBuilderTest {
         node.getBoundsInScreen(boundsInScreen);
         assertThat(boundsInScreen).isEqualTo(NodeBuilder.DEFAULT_BOUNDS);
         assertThat(node.getBoundsInScreen()).isEqualTo(NodeBuilder.DEFAULT_BOUNDS);
+        assertThat(node.isCheckable()).isFalse();
     }
 
     @Test
@@ -244,5 +245,11 @@ public class NodeBuilderTest {
     public void testSetRotaryContainer() {
         AccessibilityNodeInfo node = mNodeBuilder.setRotaryContainer().build();
         assertThat(node.getContentDescription().toString()).isEqualTo(ROTARY_CONTAINER);
+    }
+
+    @Test
+    public void testSetCheckable() {
+        AccessibilityNodeInfo node = mNodeBuilder.setCheckable(true).build();
+        assertThat(node.isCheckable()).isTrue();
     }
 }
