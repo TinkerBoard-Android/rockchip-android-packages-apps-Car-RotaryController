@@ -1316,13 +1316,16 @@ public class RotaryService extends AccessibilityService implements
 
         // Case 2: the focused node doesn't support rotate directly, it's in application window,
         // and it's not in the host app.
-        // We should inject KEYCODE_DPAD_CENTER event (or KEYCODE_ENTER in a WebView), then the
-        // application will handle the injected event.
+        // We should inject KEYCODE_DPAD_CENTER event (or KEYCODE_ENTER/KEYCODE_SPACE in a WebView),
+        // then the application will handle the injected event.
         if (isInApplicationWindow(mFocusedNode) && !mNavigator.isHostNode(mFocusedNode)) {
             L.d("Inject KeyEvent in application window");
-            int keyCode = mNavigator.isInWebView(mFocusedNode)
-                    ? KeyEvent.KEYCODE_ENTER
-                    : KeyEvent.KEYCODE_DPAD_CENTER;
+            int keyCode = KeyEvent.KEYCODE_DPAD_CENTER;
+            if (mNavigator.isInWebView(mFocusedNode)) {
+                keyCode = mFocusedNode.isCheckable()
+                    ? KeyEvent.KEYCODE_SPACE
+                    : KeyEvent.KEYCODE_ENTER;
+            }
             injectKeyEvent(keyCode, action);
             setIgnoreViewClickedNode(mFocusedNode);
             return;
