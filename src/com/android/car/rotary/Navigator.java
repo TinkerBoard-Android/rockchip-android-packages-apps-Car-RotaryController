@@ -34,9 +34,8 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.FocusArea;
 import com.android.car.ui.FocusParkingView;
+import com.android.internal.util.dump.DualDumpOutputStream;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -896,13 +895,18 @@ class Navigator {
                 });
     }
 
-    void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
-        writer.println("  hunLeft: " + mHunLeft + ", right: " + mHunRight);
-        writer.println("  hunNudgeDirection: " + directionToString(mHunNudgeDirection));
-        writer.println("  appWindowBounds: " + mAppWindowBounds);
-
-        writer.println("  surfaceViewHelper:");
-        mSurfaceViewHelper.dump(fd, writer, args);
+    void dump(@NonNull DualDumpOutputStream dumpOutputStream, boolean dumpAsProto,
+            @NonNull String fieldName, long fieldId) {
+        long fieldToken = dumpOutputStream.start(fieldName, fieldId);
+        dumpOutputStream.write("hunLeft", RotaryProtos.Navigator.HUN_LEFT, mHunLeft);
+        dumpOutputStream.write("hunRight", RotaryProtos.Navigator.HUN_RIGHT, mHunRight);
+        DumpUtils.writeFocusDirection(dumpOutputStream, dumpAsProto, "hunNudgeDirection",
+                RotaryProtos.Navigator.HUN_NUDGE_DIRECTION, mHunNudgeDirection);
+        DumpUtils.writeRect(dumpOutputStream, mAppWindowBounds, "appWindowBounds",
+                RotaryProtos.Navigator.APP_WINDOW_BOUNDS);
+        mSurfaceViewHelper.dump(dumpOutputStream, dumpAsProto, "surfaceViewHelper",
+                RotaryProtos.Navigator.SURFACE_VIEW_HELPER);
+        dumpOutputStream.end(fieldToken);
     }
 
     static String directionToString(@View.FocusRealDirection int direction) {

@@ -16,14 +16,13 @@
 package com.android.car.rotary;
 
 import android.view.accessibility.AccessibilityNodeInfo;
-import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
+import com.android.internal.util.dump.DualDumpOutputStream;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
@@ -120,16 +119,16 @@ class WindowCache {
         return mNodeCopier.copy(node);
     }
 
-    void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
-        writer.println("  windowIds: " + mWindowIds);
-        writer.println("  windowTypes:");
-        for (Map.Entry<Integer, Integer> entry : mWindowTypes.entrySet()) {
-            writer.println("    windowId: " + entry.getKey()
-                    + ", type: " + AccessibilityWindowInfo.typeToString(entry.getValue()));
-        }
-        writer.println("  focusedNodes:");
-        for (Map.Entry<Integer, AccessibilityNodeInfo> entry : mFocusedNodes.entrySet()) {
-            writer.println("    windowId: " + entry.getKey() + ", node: " + entry.getValue());
-        }
+    void dump(@NonNull DualDumpOutputStream dumpOutputStream, boolean dumpAsProto,
+            @NonNull String fieldName, long fieldId) {
+        long fieldToken = dumpOutputStream.start(fieldName, fieldId);
+        DumpUtils.writeIntegers(dumpOutputStream, dumpAsProto, "windowIds",
+                RotaryProtos.WindowCache.WINDOW_IDS, mWindowIds);
+        DumpUtils.writeWindowTypes(dumpOutputStream, dumpAsProto, "windowTypes",
+                RotaryProtos.WindowCache.WINDOW_TYPES, mWindowTypes);
+        DumpUtils.writeFocusedNodes(dumpOutputStream, dumpAsProto, "focusedNodes",
+                RotaryProtos.WindowCache.FOCUSED_NODES, mFocusedNodes);
+        dumpOutputStream.end(fieldToken);
     }
+
 }
