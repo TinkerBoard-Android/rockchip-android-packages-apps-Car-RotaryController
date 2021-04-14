@@ -82,6 +82,8 @@ import android.os.SystemClock;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.util.IndentingPrintWriter;
+import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -100,12 +102,14 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.car.ui.utils.DirectManipulationHelper;
+import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.dump.DualDumpOutputStream;
 
 import java.io.FileDescriptor;
+import java.io.FileOutputStream;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.net.URISyntaxException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -357,8 +361,9 @@ public class RotaryService extends AccessibilityService implements
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
      *
      * @see #injectScrollEvent
+     * TODO(b/185154771): Replace with #IntDef
      */
-    private enum AfterScrollAction {
+    enum AfterScrollAction {
         /** Do nothing. */
         NONE,
         /**
@@ -2506,50 +2511,71 @@ public class RotaryService extends AccessibilityService implements
     }
 
     @Override
-    protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
-        long uptimeMillis = SystemClock.uptimeMillis();
-        writer.println("rotationAcceleration2x: " + mRotationAcceleration2xMs
-                + " ms, 3x: " + mRotationAcceleration3xMs + " ms");
-        writer.println("focusedNode: " + mFocusedNode);
-        writer.println("editNode: " + mEditNode);
-        writer.println("focusArea: " + mFocusArea);
-        writer.println("lastTouchedNode: " + mLastTouchedNode);
-        writer.println("ignoreViewClicked: " + mIgnoreViewClickedMs + "ms");
-        writer.println("ignoreViewClickedNode: " + mIgnoreViewClickedNode
-                + ", time: " + (mLastViewClickedTime - uptimeMillis));
-        writer.println("rotaryInputMethod: " + mRotaryInputMethod);
-        writer.println("defaultTouchInputMethod: " + mDefaultTouchInputMethod);
-        writer.println("touchInputMethod: " + mTouchInputMethod);
-        writer.println("hunNudgeDirection: " + Navigator.directionToString(mHunNudgeDirection)
-                + ", escape: " + Navigator.directionToString(mHunEscapeNudgeDirection));
-        writer.println("offScreenNudgeGlobalActions: "
-                + Arrays.toString(mOffScreenNudgeGlobalActions));
-        writer.print("offScreenNudgeKeyCodes: [");
-        for (int i = 0; i < mOffScreenNudgeKeyCodes.length; i++) {
-            if (i > 0) {
-                writer.print(", ");
-            }
-            writer.print(KeyEvent.keyCodeToString(mOffScreenNudgeKeyCodes[i]));
-        }
-        writer.println("]");
-        writer.println("offScreenNudgeIntents: " + Arrays.toString(mOffScreenNudgeIntents));
-        writer.println("afterScrollTimeout: " + mAfterScrollTimeoutMs + " ms");
-        writer.println("afterScrollAction: " + mAfterScrollAction
-                + ", until: " + (mAfterScrollActionUntil - uptimeMillis));
-        writer.println("inRotaryMode: " + mInRotaryMode);
-        writer.println("inDirectManipulationMode: " + mInDirectManipulationMode);
-        writer.println("lastRotateEventTime: " + (mLastRotateEventTime - uptimeMillis));
-        writer.println("longPress: " + mLongPressMs + " ms, triggered: " + mLongPressTriggered);
-        writer.println("foregroundActivity: " + (mForegroundActivity == null
-                ? "null" : mForegroundActivity.flattenToShortString()));
-        writer.println("afterFocusTimeout: " + mAfterFocusTimeoutMs + " ms");
-        writer.println("pendingFocusedNode: " + mPendingFocusedNode
-                + ", expiration: " + (mPendingFocusedExpirationTime - uptimeMillis));
-
-        writer.println("navigator:");
-        mNavigator.dump(fd, writer, args);
-
-        writer.println("windowCache:");
-        mWindowCache.dump(fd, writer, args);
+    protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter writer,
+            @Nullable String[] args) {
+        boolean dumpAsProto = args != null && ArrayUtils.indexOf(args, "proto") != -1;
+        DualDumpOutputStream dumpOutputStream = dumpAsProto
+                ? new DualDumpOutputStream(new ProtoOutputStream(new FileOutputStream(fd)))
+                : new DualDumpOutputStream(new IndentingPrintWriter(writer, "  "));
+        dumpOutputStream.write("rotationAcceleration2xMs",
+                RotaryProtos.RotaryService.ROTATION_ACCELERATION_2X_MS, mRotationAcceleration2xMs);
+        dumpOutputStream.write("rotationAcceleration3xMs",
+                RotaryProtos.RotaryService.ROTATION_ACCELERATION_3X_MS, mRotationAcceleration3xMs);
+        DumpUtils.writeObject(dumpOutputStream, "focusedNode",
+                RotaryProtos.RotaryService.FOCUSED_NODE, mFocusedNode);
+        DumpUtils.writeObject(dumpOutputStream, "editNode", RotaryProtos.RotaryService.EDIT_NODE,
+                mEditNode);
+        DumpUtils.writeObject(dumpOutputStream, "focusArea", RotaryProtos.RotaryService.FOCUS_AREA,
+                mFocusArea);
+        DumpUtils.writeObject(dumpOutputStream, "lastTouchedNode",
+                RotaryProtos.RotaryService.LAST_TOUCHED_NODE, mLastTouchedNode);
+        dumpOutputStream.write("rotaryInputMethod", RotaryProtos.RotaryService.ROTARY_INPUT_METHOD,
+                mRotaryInputMethod);
+        dumpOutputStream.write("defaultTouchInputMethod",
+                RotaryProtos.RotaryService.DEFAULT_TOUCH_INPUT_METHOD, mDefaultTouchInputMethod);
+        dumpOutputStream.write("touchInputMethod", RotaryProtos.RotaryService.TOUCH_INPUT_METHOD,
+                mTouchInputMethod);
+        DumpUtils.writeFocusDirection(dumpOutputStream, dumpAsProto, "hunNudgeDirection",
+                RotaryProtos.RotaryService.HUN_NUDGE_DIRECTION, mHunNudgeDirection);
+        DumpUtils.writeFocusDirection(dumpOutputStream, dumpAsProto, "hunEscapeNudgeDirection",
+                RotaryProtos.RotaryService.HUN_ESCAPE_NUDGE_DIRECTION, mHunEscapeNudgeDirection);
+        DumpUtils.writeInts(dumpOutputStream, dumpAsProto, "offScreenNudgeGlobalActions",
+                RotaryProtos.RotaryService.OFF_SCREEN_NUDGE_GLOBAL_ACTIONS,
+                mOffScreenNudgeGlobalActions);
+        DumpUtils.writeKeyCodes(dumpOutputStream, dumpAsProto, "offScreenNudgeKeyCodes",
+                RotaryProtos.RotaryService.OFF_SCREEN_NUDGE_KEY_CODES, mOffScreenNudgeKeyCodes);
+        DumpUtils.writeObjects(dumpOutputStream, dumpAsProto, "offScreenNudgeIntents",
+                RotaryProtos.RotaryService.OFF_SCREEN_NUDGE_INTENTS, mOffScreenNudgeIntents);
+        dumpOutputStream.write("afterScrollTimeoutMs",
+                RotaryProtos.RotaryService.AFTER_SCROLL_TIMEOUT_MS, mAfterFocusTimeoutMs);
+        DumpUtils.writeAfterScrollAction(dumpOutputStream, dumpAsProto, "afterScrollAction",
+                RotaryProtos.RotaryService.AFTER_SCROLL_ACTION, mAfterScrollAction);
+        dumpOutputStream.write("afterScrollActionUntil",
+                RotaryProtos.RotaryService.AFTER_SCROLL_ACTION_UNTIL, mAfterScrollActionUntil);
+        dumpOutputStream.write("inRotaryMode", RotaryProtos.RotaryService.IN_ROTARY_MODE,
+                mInRotaryMode);
+        dumpOutputStream.write("inDirectManipulationMode",
+                RotaryProtos.RotaryService.IN_DIRECT_MANIPULATION_MODE, mInDirectManipulationMode);
+        dumpOutputStream.write("lastRotateEventTime",
+                RotaryProtos.RotaryService.LAST_ROTATE_EVENT_TIME, mLastRotateEventTime);
+        dumpOutputStream.write("longPressMs", RotaryProtos.RotaryService.LONG_PRESS_MS,
+                mLongPressMs);
+        dumpOutputStream.write("longPressTriggered",
+                RotaryProtos.RotaryService.LONG_PRESS_TRIGGERED, mLongPressTriggered);
+        DumpUtils.writeComponentNameToString(dumpOutputStream, "foregroundActivity",
+                RotaryProtos.RotaryService.FOREGROUND_ACTIVITY, mForegroundActivity);
+        dumpOutputStream.write("afterFocusTimeoutMs",
+                RotaryProtos.RotaryService.AFTER_FOCUS_TIMEOUT_MS, mAfterFocusTimeoutMs);
+        DumpUtils.writeObject(dumpOutputStream, "pendingFocusedNode",
+                RotaryProtos.RotaryService.PENDING_FOCUSED_NODE, mPendingFocusedNode);
+        dumpOutputStream.write("pendingFocusedExpirationTime",
+                RotaryProtos.RotaryService.PENDING_FOCUSED_EXPIRATION_TIME,
+                mPendingFocusedExpirationTime);
+        mNavigator.dump(dumpOutputStream, dumpAsProto, "navigator",
+                RotaryProtos.RotaryService.NAVIGATOR);
+        mWindowCache.dump(dumpOutputStream, dumpAsProto, "windowCache",
+                RotaryProtos.RotaryService.WINDOW_CACHE);
+        dumpOutputStream.flush();
     }
+
 }

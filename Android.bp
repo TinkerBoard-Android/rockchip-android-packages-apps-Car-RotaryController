@@ -16,9 +16,44 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
+filegroup {
+    name: "rotary-service-proto-source",
+    srcs: [
+        "proto/car_rotary_controller.proto",
+    ],
+}
+gensrcs {
+    name: "rotary-service-javastream-protos",
+    depfile: true,
+
+    tools: [
+        "aprotoc",
+        "protoc-gen-javastream",
+        "soong_zip",
+    ],
+
+    cmd: "mkdir -p $(genDir)/$(in) " +
+        "&& $(location aprotoc) " +
+        "  --plugin=$(location protoc-gen-javastream) " +
+        "  --dependency_out=$(depfile) " +
+        "  --javastream_out=$(genDir)/$(in) " +
+        "  -Iexternal/protobuf/src " +
+        "  -I . " +
+        "  $(in) " +
+        "&& $(location soong_zip) -jar -o $(out) -C $(genDir)/$(in) -D $(genDir)/$(in)",
+
+    srcs: [
+        ":rotary-service-proto-source",
+    ],
+    output_extension: "srcjar",
+}
+
 android_app {
     name: "CarRotaryController",
-    srcs: ["src/**/*.java"],
+    srcs: [
+        "src/**/*.java",
+        ":rotary-service-javastream-protos",
+    ],
     resource_dirs: ["res"],
 
     // This app uses allowlisted privileged permissions.
@@ -58,7 +93,10 @@ android_library {
 
     manifest: "tests/unit/AndroidManifest.xml",
 
-    srcs: ["src/**/*.java"],
+    srcs: [
+        "src/**/*.java",
+        ":rotary-service-javastream-protos",
+    ],
 
     resource_dirs: [
         "tests/unit/res",
