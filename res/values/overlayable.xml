@@ -16,6 +16,7 @@ limitations under the License.-->
 <resources>
   <overlayable name="CarRotaryController">
     <policy type="public">
+      <item type="array" name="excluded_application_overlay_window_titles"/>
       <item type="array" name="off_screen_nudge_global_actions"/>
       <item type="array" name="off_screen_nudge_intents"/>
       <item type="array" name="off_screen_nudge_key_codes"/>
