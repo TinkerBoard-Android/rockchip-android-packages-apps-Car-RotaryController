@@ -594,7 +594,11 @@ public class RotaryService extends AccessibilityService implements
         mIgnoreViewClickedMs = res.getInteger(R.integer.ignore_view_clicked_ms);
         mAfterScrollTimeoutMs = res.getInteger(R.integer.after_scroll_timeout_ms);
 
-        mNavigator = new Navigator(displayWidth, displayHeight, hunLeft, hunRight, showHunOnBottom);
+        String[] excludedOverlayWindowTitles =
+                res.getStringArray(R.array.excluded_application_overlay_window_titles);
+
+        mNavigator = new Navigator(displayWidth, displayHeight, hunLeft, hunRight, showHunOnBottom,
+                excludedOverlayWindowTitles);
         mNavigator.initHostApp(getPackageManager());
 
         mPrefs = createDeviceProtectedStorageContext().getSharedPreferences(SHARED_PREFS,
