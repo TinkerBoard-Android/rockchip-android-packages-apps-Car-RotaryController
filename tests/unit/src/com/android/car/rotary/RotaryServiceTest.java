@@ -1293,15 +1293,17 @@ public class RotaryServiceTest {
      *      =                                =    =                                 =
      *      ==================================    ===================================
      *
-     *      ===========focus area 3===========
-     *      =                                =
-     *      =  .............  .............  =
-     *      =  .           .  .           .  =
-     *      =  .app button3.  .  default  .  =
-     *      =  . (focused) .  .   focus   .  =
-     *      =  .............  .............  =
-     *      =                                =
-     *      ==================================
+     *      ==============focus area 3==============
+     *      =                                      =
+     *      =  ...................                 =
+     *      =  .     WebView     .  .............  =
+     *      =  .  .............  .  .           .  =
+     *      =  .  .app button3.  .  .  default  .  =
+     *      =  .  . (focused) .  .  .   focus   .  =
+     *      =  .  .............  .  .............  =
+     *      =  ...................                 =
+     *      =                                      =
+     *      ========================================
      * </pre>
      */
     @Test
@@ -1318,10 +1320,15 @@ public class RotaryServiceTest {
         when(mRotaryService.getWindows()).thenReturn(windows);
         when(mRotaryService.getRootInActiveWindow())
                 .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
-        when(mNavigator.isInWebView(any(AccessibilityNodeInfo.class))).thenReturn(true);
+
+        AccessibilityNodeInfo mockWebViewParent = mNodeBuilder
+                .setClassName(Utils.WEB_VIEW_CLASS_NAME)
+                .setWindow(appWindow)
+                .build();
 
         AccessibilityNodeInfo mockAppButton3Node = mNodeBuilder
                 .setFocused(true)
+                .setParent(mockWebViewParent)
                 .setWindow(appWindow)
                 .build();
         mRotaryService.setFocusedNode(mockAppButton3Node);
@@ -1378,15 +1385,17 @@ public class RotaryServiceTest {
      *      =                                =    =                                 =
      *      ==================================    ===================================
      *
-     *      ===========focus area 3===========
-     *      =                                =
-     *      =  .............  .............  =
-     *      =  .           .  .           .  =
-     *      =  .app button3.  .  default  .  =
-     *      =  . (focused) .  .   focus   .  =
-     *      =  .............  .............  =
-     *      =                                =
-     *      ==================================
+     *      ==============focus area 3==============
+     *      =                                      =
+     *      =  ...................                 =
+     *      =  .     WebView     .  .............  =
+     *      =  .  .............  .  .           .  =
+     *      =  .  .app button3.  .  .  default  .  =
+     *      =  .  . (focused) .  .  .   focus   .  =
+     *      =  .  .............  .  .............  =
+     *      =  ...................                 =
+     *      =                                      =
+     *      ========================================
      * </pre>
      */
     @Test
@@ -1404,11 +1413,16 @@ public class RotaryServiceTest {
         when(mRotaryService.getWindows()).thenReturn(windows);
         when(mRotaryService.getRootInActiveWindow())
                 .thenReturn(MockNodeCopierProvider.get().copy(mWindowRoot));
-        when(mNavigator.isInWebView(any(AccessibilityNodeInfo.class))).thenReturn(true);
+
+        AccessibilityNodeInfo mockWebViewParent = mNodeBuilder
+            .setClassName(Utils.WEB_VIEW_CLASS_NAME)
+            .setWindow(appWindow)
+            .build();
 
         AccessibilityNodeInfo mockAppButton3Node = mNodeBuilder
                 .setFocused(true)
                 .setCheckable(true)
+                .setParent(mockWebViewParent)
                 .setWindow(appWindow)
                 .build();
         mRotaryService.setFocusedNode(mockAppButton3Node);
