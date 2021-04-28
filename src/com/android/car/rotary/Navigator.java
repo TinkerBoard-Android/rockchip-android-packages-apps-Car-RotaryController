@@ -510,8 +510,12 @@ class Navigator {
         if (mExcludedOverlayWindowTitles == null) {
             return false;
         }
-        String title = window.getTitle().toString();
-        return Arrays.stream(mExcludedOverlayWindowTitles).anyMatch(title::equals);
+        CharSequence title = window.getTitle();
+        if (title == null) {
+            return false;
+        }
+        String titleString = title.toString();
+        return Arrays.stream(mExcludedOverlayWindowTitles).anyMatch(titleString::equals);
     }
 
     /**
