@@ -34,15 +34,15 @@
     The app window:
 
     app FocusParkingView
-    ===========focus area 1===========    ============focus area 2===========
-    =                                =    =                                 =
-    =  .............  .............  =    =  .............                  =
-    =  .           .  .           .  =    =  .           .                  =
-    =  .app button1.  .   nudge   .  =    =  .app button2.                  =
-    =  .           .  .  shortcut .  =    =  .           .                  =
-    =  .............  .............  =    =  .............                  =
-    =                                =    =                                 =
-    ==================================    ===================================
+    ===========focus area 1===========    ===========focus area 2===========
+    =                                =    =                                =
+    =  .............  .............  =    =  .............  .............  =
+    =  .           .  .           .  =    =  .           .  .           .  =
+    =  .app button1.  .   nudge   .  =    =  .app button2.  .   nudge   .  =
+    =  .           .  . shortcut1 .  =    =  .           .  . shortcut2 .  =
+    =  .............  .............  =    =  .............  .............  =
+    =                                =    =                                =
+    ==================================    ==================================
 
     ===========focus area 3===========
     =                                =
@@ -97,14 +97,14 @@
                 android:id="@+id/app_focus_area1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:nudgeShortcut="@+id/nudge_shortcut"
+                app:nudgeShortcut="@+id/nudge_shortcut1"
                 app:nudgeShortcutDirection="right">
                 <Button
                     android:id="@+id/app_button1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"/>
                 <Button
-                    android:id="@+id/nudge_shortcut"
+                    android:id="@+id/nudge_shortcut1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"/>
             </com.android.car.ui.FocusArea>
@@ -112,9 +112,14 @@
                 android:id="@+id/app_focus_area2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                app:nudgeLeft="@+id/app_focus_area3">
+                app:nudgeLeft="@+id/app_focus_area3"
+                app:nudgeRightShortcut="@+id/nudge_shortcut2">
                 <Button
                     android:id="@+id/app_button2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"/>
+                <Button
+                    android:id="@+id/nudge_shortcut2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"/>
             </com.android.car.ui.FocusArea>
