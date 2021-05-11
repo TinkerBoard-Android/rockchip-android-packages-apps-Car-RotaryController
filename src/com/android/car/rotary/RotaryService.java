@@ -18,6 +18,8 @@ package com.android.car.rotary;
 import static android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
 import static android.car.CarOccupantZoneManager.DisplayTypeEnum;
 import static android.provider.Settings.Secure.DEFAULT_INPUT_METHOD;
+import static android.provider.Settings.Secure.DISABLED_SYSTEM_INPUT_METHODS;
+import static android.provider.Settings.Secure.ENABLED_INPUT_METHODS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.KeyEvent.ACTION_DOWN;
 import static android.view.KeyEvent.ACTION_UP;
@@ -59,7 +61,6 @@ import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -110,6 +111,7 @@ import java.io.FileOutputStream;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -605,22 +607,18 @@ public class RotaryService extends AccessibilityService implements
                 Context.MODE_PRIVATE);
         mUserManager = getSystemService(UserManager.class);
 
-        // Verify that the component names for default_touch_input_method and rotary_input_method
-        // are valid. If mTouchInputMethod or mRotaryInputMethod is empty, IMEs should not switch
-        // because RotaryService won't be able to switch them back.
+        mRotaryInputMethod = res.getString(R.string.rotary_input_method);
         mDefaultTouchInputMethod = res.getString(R.string.default_touch_input_method);
-        if (isValidIme(mDefaultTouchInputMethod)) {
-            mTouchInputMethod = mPrefs.getString(
-                TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(), mDefaultTouchInputMethod);
-            // Set the DEFAULT_INPUT_METHOD in case Android defaults to the rotary_input_method.
+        mTouchInputMethod = mPrefs.getString(TOUCH_INPUT_METHOD_PREFIX + mUserManager.getUserName(),
+                mDefaultTouchInputMethod);
+        if (mRotaryInputMethod != null
+                && mRotaryInputMethod.equals(getCurrentIme())
+                && isValidIme(mTouchInputMethod)) {
+            // Switch from the rotary IME to the touch IME in case Android defaults to the rotary
+            // IME.
             // TODO(b/169423887): Figure out how to configure the default IME through Android
             // without needing to do this.
-            Settings.Secure.putString(
-                    getContentResolver(), DEFAULT_INPUT_METHOD, mTouchInputMethod);
-        }
-        String rotaryInputMethod = res.getString(R.string.rotary_input_method);
-        if (isValidIme(rotaryInputMethod)) {
-            mRotaryInputMethod = rotaryInputMethod;
+            setCurrentIme(mTouchInputMethod);
         }
 
         mAfterFocusTimeoutMs = res.getInteger(R.integer.after_focus_timeout_ms);
@@ -916,15 +914,13 @@ public class RotaryService extends AccessibilityService implements
         if (mInputMethodObserver != null) {
             throw new IllegalStateException("Input method observer already registered");
         }
-        ContentResolver contentResolver = getContentResolver();
         mInputMethodObserver = new ContentObserver(new Handler(Looper.myLooper())) {
             @Override
             public void onChange(boolean selfChange) {
                 // Either the user switched input methods or we did. In the former case, update
                 // mTouchInputMethod and save it so we can switch back after switching to the rotary
                 // input method.
-                String inputMethod =
-                        Settings.Secure.getString(contentResolver, DEFAULT_INPUT_METHOD);
+                String inputMethod = getCurrentIme();
                 if (inputMethod != null && !inputMethod.equals(mRotaryInputMethod)) {
                     mTouchInputMethod = inputMethod;
                     String userName = mUserManager.getUserName();
@@ -934,7 +930,7 @@ public class RotaryService extends AccessibilityService implements
                 }
             }
         };
-        contentResolver.registerContentObserver(
+        getContentResolver().registerContentObserver(
                 Settings.Secure.getUriFor(DEFAULT_INPUT_METHOD),
                 /* notifyForDescendants= */ false,
                 mInputMethodObserver);
@@ -2326,22 +2322,26 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
+    /** Switches to the rotary IME or the touch IME if needed. */
     private void updateIme() {
-        if (TextUtils.isEmpty(mRotaryInputMethod)) {
-            L.w("No rotary IME configured");
-            return;
-        }
-        if (TextUtils.isEmpty(mTouchInputMethod)) {
-            L.w("No touch IME configured");
-            return;
-        }
-        // Switch to the rotary IME or the touch IME if needed.
         String newIme = mInRotaryMode ? mRotaryInputMethod : mTouchInputMethod;
-        String oldIme = Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
-        if (newIme.equals(oldIme)) {
+        if (mInRotaryMode && !isValidIme(newIme)) {
+            L.w("Rotary IME doesn't exist: " + newIme);
+            return;
+        }
+        String oldIme = getCurrentIme();
+        if (oldIme.equals(newIme)) {
             L.v("No need to switch IME: " + newIme);
             return;
         }
+        setCurrentIme(newIme);
+    }
+
+    private String getCurrentIme() {
+        return Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
+    }
+
+    private void setCurrentIme(String newIme) {
         boolean result =
                 Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
         L.successOrFailure("Switching to IME: " + newIme, result);
@@ -2491,17 +2491,34 @@ public class RotaryService extends AccessibilityService implements
     }
 
     /**
-     * Checks if the {@code componentName} is an enabled input method.
-     * The string should be in the format {@code "PackageName/.ClassName"}.
-     * Example: {@code "com.android.inputmethod.latin/.CarLatinIME"}.
+     * Checks if the {@code componentName} is an enabled input method or a disabled system input
+     * method. The string should be in the format {@code "package.name/.ClassName"}, e.g. {@code
+     * "com.android.inputmethod.latin/.CarLatinIME"}. Disabled system input methods are considered
+     * valid because switching back to the touch IME should occur even if it's disabled and because
+     * the rotary IME may be disabled so that it doesn't get used for touch.
      */
     private boolean isValidIme(String componentName) {
         if (TextUtils.isEmpty(componentName)) {
             return false;
         }
-        String enabledInputMethods = Settings.Secure.getString(
-                getContentResolver(), Settings.Secure.ENABLED_INPUT_METHODS);
-        return enabledInputMethods != null && enabledInputMethods.contains(componentName);
+        return imeSettingContains(ENABLED_INPUT_METHODS, componentName)
+                || imeSettingContains(DISABLED_SYSTEM_INPUT_METHODS, componentName);
+    }
+
+    /**
+     * Fetches the secure setting {@code settingName} containing a colon-separated list of IMEs with
+     * their subtypes and returns whether {@code componentName} is one of the IMEs.
+     */
+    private boolean imeSettingContains(@NonNull String settingName, @NonNull String componentName) {
+        String colonSeparatedComponentNamesWithSubtypes =
+                Settings.Secure.getString(getContentResolver(), settingName);
+        if (colonSeparatedComponentNamesWithSubtypes == null) {
+            return false;
+        }
+        return Arrays.stream(colonSeparatedComponentNamesWithSubtypes.split(":"))
+                .map(componentNameWithSubtypes -> componentNameWithSubtypes.split(";"))
+                .anyMatch(componentNameAndSubtypes -> componentNameAndSubtypes.length >= 1
+                        && componentNameAndSubtypes[0].equals(componentName));
     }
 
     @VisibleForTesting
