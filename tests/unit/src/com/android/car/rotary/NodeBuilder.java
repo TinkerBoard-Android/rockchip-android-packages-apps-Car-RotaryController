@@ -117,28 +117,27 @@ class NodeBuilder {
         AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
         when(node.getWindow()).thenReturn(builder.mWindow);
         when(node.getWindowId()).thenReturn(builder.mWindowId);
-        when(node.getParent()).thenReturn(
-                // In Navigator, nodes will be recycled once they're no longer used. When a real
-                // node is recycled, it can't be used again, such as performing an action, otherwise
-                // it will cause the "Cannot perform this action on a not sealed instance"
-                // exception. If the mock getParent() always returns the same instance and
-                // mParent is a real node, it might cause the exception when getParent() is called
-                // multiple on the same mock node.
-                // To fix it, this method returns a different instance each time it's called.
-                // Note: if this method is called too many times and triggers the "Exceeded the
-                // maximum calls", please add more parameters.
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent),
-                MockNodeCopierProvider.get().copy(builder.mParent))
-                .thenThrow(new RuntimeException("Exceeded the maximum calls"));
+        if (builder.mParent == null || isMock(builder.mParent)) {
+            when(node.getParent()).thenReturn(MockNodeCopierProvider.get().copy(builder.mParent));
+        } else {
+            when(node.getParent()).thenReturn(
+                    // In Navigator, nodes will be recycled once they're no longer used. When a real
+                    // node is recycled, it can't be used again, such as performing an action,
+                    // otherwise it will cause the "Cannot perform this action on a not sealed
+                    // instance" exception. If mParent is a real node and the mock getParent()
+                    // always returns the same instance , it might cause the exception when
+                    // getParent() is called multiple on the same mock node.
+                    // To fix it, this method returns a different instance each time it's called.
+                    // Note: if this method is called too many times and triggers the "Exceeded the
+                    // maximum calls", please add more parameters.
+                    MockNodeCopierProvider.get().copy(builder.mParent),
+                    MockNodeCopierProvider.get().copy(builder.mParent),
+                    MockNodeCopierProvider.get().copy(builder.mParent),
+                    MockNodeCopierProvider.get().copy(builder.mParent),
+                    MockNodeCopierProvider.get().copy(builder.mParent),
+                    MockNodeCopierProvider.get().copy(builder.mParent))
+                    .thenThrow(new RuntimeException("Exceeded the maximum calls"));
+        }
         // There is no need to mock getChildCount() or getChild() if mParent is null or a real node.
         if (builder.mParent != null && isMock(builder.mParent)) {
             // Mock AccessibilityNodeInfo#getChildCount().
