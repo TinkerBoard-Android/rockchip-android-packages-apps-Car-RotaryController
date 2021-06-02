@@ -408,27 +408,57 @@ class Navigator {
             }
         }
 
-        // Add candidate focus areas in other windows in the given direction.
-        List<AccessibilityWindowInfo> candidateWindows = new ArrayList<>();
-        boolean isSourceNodeEditable = sourceNode.isEditable();
-        addWindowsInDirection(windows, currentWindow, candidateWindows, direction,
-                isSourceNodeEditable);
-        currentWindow.recycle();
-        for (AccessibilityWindowInfo window : candidateWindows) {
-            List<AccessibilityNodeInfo> focusAreasInAnotherWindow = findFocusAreas(window);
-            candidateFocusAreas.addAll(focusAreasInAnotherWindow);
-        }
-
         // Exclude focus areas that have no descendants to take focus, because once we found a best
         // candidate focus area, we don't dig into other ones. If it has no descendants to take
         // focus, the nudge will fail.
         removeEmptyFocusAreas(candidateFocusAreas);
+
+        if (currentWindow.getType() != TYPE_INPUT_METHOD
+                || shouldNudgeOutOfIme(sourceNode, currentFocusArea, candidateFocusAreas,
+                           direction)) {
+            // Add candidate focus areas in other windows in the given direction.
+            List<AccessibilityWindowInfo> candidateWindows = new ArrayList<>();
+            boolean isSourceNodeEditable = sourceNode.isEditable();
+            addWindowsInDirection(windows, currentWindow, candidateWindows, direction,
+                    isSourceNodeEditable);
+            currentWindow.recycle();
+            for (AccessibilityWindowInfo window : candidateWindows) {
+                List<AccessibilityNodeInfo> focusAreasInAnotherWindow = findFocusAreas(window);
+                candidateFocusAreas.addAll(focusAreasInAnotherWindow);
+            }
+
+            // Exclude focus areas that have no descendants to take focus, because once we found a
+            // best candidate focus area, we don't dig into other ones. If it has no descendants to
+            // take focus, the nudge will fail.
+            removeEmptyFocusAreas(candidateFocusAreas);
+        }
 
         // Choose the best candidate as our target focus area.
         AccessibilityNodeInfo targetFocusArea =
                 chooseBestNudgeCandidate(sourceNode, candidateFocusAreas, direction);
         Utils.recycleNodes(candidateFocusAreas);
         return targetFocusArea;
+    }
+
+    /**
+     * Returns whether it should nudge out the IME window. If the current window is IME window and
+     * there are candidate FocusAreas in it for the given direction, it shouldn't nudge out of the
+     * IME window.
+     */
+    private boolean shouldNudgeOutOfIme(@NonNull AccessibilityNodeInfo sourceNode,
+            @NonNull AccessibilityNodeInfo currentFocusArea,
+            @NonNull List<AccessibilityNodeInfo> focusAreasInCurrentWindow,
+            int direction) {
+        if (!focusAreasInCurrentWindow.isEmpty()) {
+            Rect sourceBounds = Utils.getBoundsInScreen(sourceNode);
+            Rect sourceFocusAreaBounds = Utils.getBoundsInScreen(currentFocusArea);
+            for (AccessibilityNodeInfo candidate : focusAreasInCurrentWindow) {
+                if (isCandidate(sourceBounds, sourceFocusAreaBounds, candidate, direction)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void removeEmptyFocusAreas(@NonNull List<AccessibilityNodeInfo> focusAreas) {
