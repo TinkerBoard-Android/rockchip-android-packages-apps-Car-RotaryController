@@ -15,6 +15,9 @@
  */
 package com.android.car.rotary;
 
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
+import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import android.app.Activity;
@@ -955,6 +958,108 @@ public class NavigatorTest {
         assertThat(target3).isEqualTo(topRightFocusArea);
 
         Utils.recycleNodes(target1, target2, target3);
+    }
+
+    /**
+     * Tests {@link Navigator#findNudgeTargetFocusArea} in the following layout:
+     *
+     * App window:
+     * <pre>
+     *
+     *    ============focus area1===========
+     *    =                                =
+     *    =  .............                 =
+     *    =  .   view1   .                 =
+     *    =  .............                 =
+     *    =                                =
+     *    ==================================
+     *
+     *</pre>
+     *
+     * IME window:
+     *<pre>
+     *
+     *    ============focus area2===========
+     *    =                                =
+     *    =  .............                 =
+     *    =  .           .                 =
+     *    =  .   key1    .                 =
+     *    =  .           .                 =
+     *    =  .............                 =
+     *    =                                =
+     *    ==================================
+     *    ============focus area3===========
+     *    =                                =
+     *    =  .............                 =
+     *    =  .           .                 =
+     *    =  .   key2    .                 =
+     *    =  . (focused) .                 =
+     *    =  .............                 =
+     *    =                                =
+     *    ==================================
+     *
+     * </pre>
+     * where App window and IME window overlap at the bottom.
+     */
+    @Test
+    public void testFindNudgeTargetFocusArea3() {
+        // App window.
+        Rect appWindowBounds = new Rect(0,0, 1080, 600);
+        AccessibilityNodeInfo appRoot = mNodeBuilder
+                .setBoundsInScreen(appWindowBounds)
+                .build();
+        AccessibilityWindowInfo appWindow = new WindowBuilder()
+                .setRoot(appRoot)
+                .setType(TYPE_APPLICATION)
+                .setBoundsInScreen(appWindowBounds)
+                .build();
+        AccessibilityNodeInfo focusArea1 = mNodeBuilder
+                .setBoundsInScreen(appWindowBounds)
+                .setFocusArea()
+                .setParent(appRoot)
+                .build();
+        AccessibilityNodeInfo view1 = mNodeBuilder
+                .setParent(focusArea1)
+                .build();
+
+        // IME window.
+        Rect imeWindowBounds = new Rect(0,528, 1080, 600);
+        AccessibilityNodeInfo imeRoot = mNodeBuilder
+                .setBoundsInScreen(imeWindowBounds)
+                .build();
+        AccessibilityWindowInfo imeWindow = new WindowBuilder()
+                .setRoot(imeRoot)
+                .setType(TYPE_INPUT_METHOD)
+                .setBoundsInScreen(imeWindowBounds)
+                .build();
+        AccessibilityNodeInfo focusArea2 = mNodeBuilder
+                .setBoundsInScreen(new Rect(0, 528, 1080, 564))
+                .setFocusArea()
+                .setParent(imeRoot)
+                .build();
+        AccessibilityNodeInfo key1 = mNodeBuilder
+                .setWindow(imeWindow)
+                .setParent(focusArea2)
+                .build();
+        AccessibilityNodeInfo focusArea3 = mNodeBuilder
+                .setBoundsInScreen(new Rect(0, 564, 1080, 600))
+                .setFocusArea()
+                .setParent(imeRoot)
+                .build();
+        AccessibilityNodeInfo key2 = mNodeBuilder
+                .setWindow(imeWindow)
+                .setBoundsInScreen(new Rect(96, 566, 139, 598))
+                .setParent(focusArea3)
+                .build();
+
+        List<AccessibilityWindowInfo> windows = new ArrayList<>();
+        windows.add(appWindow);
+        windows.add(imeWindow);
+
+        // Nudge up from the second row of IME, it should focus on the first row of IME.
+        AccessibilityNodeInfo targetFocusArea =
+                mNavigator.findNudgeTargetFocusArea(windows, key2, focusArea3, View.FOCUS_UP);
+        assertThat(targetFocusArea).isEqualTo(focusArea2);
     }
 
     /**
