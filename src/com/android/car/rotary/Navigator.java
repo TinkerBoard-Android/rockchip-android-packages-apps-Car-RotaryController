@@ -510,8 +510,7 @@ class Navigator {
         // than the display, then it's an overlay window (such as a Dialog window). Nudging out of
         // the overlay window is not allowed unless the source node is editable and the target
         // window is an IME window (e.g., nudging from the EditText in the Dialog to the IME is
-        // allowed, while nudging from the Button in the Dialog to the IME is not allowed). Windows
-        // for ActivityViews are on virtual displays so they won't be considered overlay windows.
+        // allowed, while nudging from the Button in the Dialog to the IME is not allowed).
         boolean isSourceWindowOverlayWindow = source.getType() == TYPE_APPLICATION
                 && source.getDisplayId() == Display.DEFAULT_DISPLAY
                 && !mAppWindowBounds.equals(sourceBounds)
