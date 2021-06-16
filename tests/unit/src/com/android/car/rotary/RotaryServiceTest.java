@@ -78,8 +78,10 @@ public class RotaryServiceTest {
 
     private final static String HOST_APP_PACKAGE_NAME = "host.app.package.name";
     private final static String CLIENT_APP_PACKAGE_NAME = "client.app.package.name";
+    private static final int ROTATION_ACCELERATION_2X_MS = 50;
+    private static final int ROTATION_ACCELERATION_3X_MS = 25;
 
-    private static UiAutomation sUiAutomoation;
+    private static UiAutomation sUiAutomation;
 
     private final List<AccessibilityNodeInfo> mNodes = new ArrayList<>();
 
@@ -95,7 +97,7 @@ public class RotaryServiceTest {
 
     @BeforeClass
     public static void setUpClass() {
-        sUiAutomoation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
+        sUiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
     }
 
     @Before
@@ -108,6 +110,8 @@ public class RotaryServiceTest {
         mRotaryService.setNavigator(mNavigator);
         mRotaryService.setNodeCopier(MockNodeCopierProvider.get());
         mRotaryService.setInputManager(mock(InputManager.class));
+        mRotaryService.setRotateAcceleration(ROTATION_ACCELERATION_2X_MS,
+                ROTATION_ACCELERATION_3X_MS);
         mNodeBuilder = new NodeBuilder(new ArrayList<>());
     }
 
@@ -492,6 +496,94 @@ public class RotaryServiceTest {
         events = Collections.singletonList(rotaryEvent);
         mRotaryService.onRotaryEvents(validDisplayId, events);
         assertThat(mRotaryService.getFocusedNode()).isEqualTo(defaultFocusNode);
+    }
+
+    /**
+     * Tests {@link RotaryService#onRotaryEvents} in the following view tree:
+     * <pre>
+     *                        root
+     *                      /      \
+     *                     /        \
+     *      focusParkingView        focusArea
+     *                           /   |   |    \
+     *                         /     |   |       \
+     *             defaultFocus button2 button3 ... button6
+     *              (focused)
+     * </pre>
+     */
+    @Test
+    public void testOnRotaryEvents_acceleration() {
+        initActivity(R.layout.rotary_service_test_3_activity);
+
+        AccessibilityWindowInfo window = new WindowBuilder()
+                .setRoot(mWindowRoot)
+                .setBoundsInScreen(mWindowRoot.getBoundsInScreen())
+                .build();
+        List<AccessibilityWindowInfo> windows = Collections.singletonList(window);
+        when(mRotaryService.getWindows()).thenReturn(windows);
+
+        AccessibilityNodeInfo defaultFocusNode = createNode("defaultFocus");
+        assertThat(defaultFocusNode.isFocused()).isTrue();
+        mRotaryService.setFocusedNode(defaultFocusNode);
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(defaultFocusNode);
+
+
+        // Rotating the controller clockwise slowly should move the focus from defaultFocus to
+        // button2.
+        int inputType = CarInputManager.INPUT_TYPE_ROTARY_NAVIGATION;
+        int eventTime = ROTATION_ACCELERATION_2X_MS + 1;
+        int validDisplayId = CarOccupantZoneManager.DISPLAY_TYPE_MAIN;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, true, new long[]{eventTime})));
+        AccessibilityNodeInfo button2Node = createNode("button2");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button2Node);
+
+        // Move focus back to defaultFocus.
+        eventTime += ROTATION_ACCELERATION_2X_MS + 1;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, false, new long[]{eventTime})));
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(defaultFocusNode);
+
+        // Rotating the controller clockwise somewhat fast should move the focus from defaultFocus
+        // to button3.
+        eventTime += ROTATION_ACCELERATION_2X_MS;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, true, new long[]{eventTime})));
+        AccessibilityNodeInfo button3Node = createNode("button3");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button3Node);
+
+        // Move focus back to defaultFocus.
+        eventTime += ROTATION_ACCELERATION_2X_MS;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, false, new long[]{eventTime})));
+
+        // Rotating the controller clockwise very faster should move the focus from defaultFocus to
+        // button4.
+        eventTime += ROTATION_ACCELERATION_3X_MS;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, true, new long[]{eventTime})));
+        AccessibilityNodeInfo button4Node = createNode("button4");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button4Node);
+
+        // Move focus back to defaultFocus.
+        eventTime += ROTATION_ACCELERATION_3X_MS;
+        mRotaryService.onRotaryEvents(validDisplayId,
+                Collections.singletonList(
+                        new RotaryEvent(inputType, false, new long[]{eventTime})));
+
+        // Rotating the controller two detents clockwise somewhat fast should move the focus from
+        // defaultFocus to button5.
+        mRotaryService.onRotaryEvents(validDisplayId, Collections.singletonList(
+                new RotaryEvent(inputType, true,
+                        new long[]{eventTime + ROTATION_ACCELERATION_2X_MS,
+                                eventTime + ROTATION_ACCELERATION_2X_MS * 2})));
+        AccessibilityNodeInfo button5Node = createNode("button5");
+        assertThat(mRotaryService.getFocusedNode()).isEqualTo(button5Node);
     }
 
     /**
@@ -2184,7 +2276,7 @@ public class RotaryServiceTest {
     private void initActivity(@LayoutRes int layoutResId) {
         mIntent.putExtra(NavigatorTestActivity.KEY_LAYOUT_ID, layoutResId);
         mActivityRule.launchActivity(mIntent);
-        mWindowRoot = sUiAutomoation.getRootInActiveWindow();
+        mWindowRoot = sUiAutomation.getRootInActiveWindow();
     }
 
     /**
