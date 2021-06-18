@@ -47,6 +47,8 @@ import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityActi
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION;
 import static android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD;
 
+import static com.android.car.internal.ExcludeFromCodeCoverageGeneratedReport.BOILERPLATE_CODE;
+import static com.android.car.internal.ExcludeFromCodeCoverageGeneratedReport.DUMP_INFO;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_HIDE_IME;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_NUDGE_SHORTCUT;
 import static com.android.car.ui.utils.RotaryConstants.ACTION_NUDGE_TO_ANOTHER_FOCUS_AREA;
@@ -102,6 +104,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.car.internal.ExcludeFromCodeCoverageGeneratedReport;
 import com.android.car.ui.utils.DirectManipulationHelper;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.dump.DualDumpOutputStream;
@@ -1652,8 +1655,8 @@ public class RotaryService extends AccessibilityService implements
         }
         boolean clockwise = rotaryEvent.isClockwise();
         int count = rotaryEvent.getNumberOfClicks();
-        // TODO(b/153195148): Use the first eventTime for now. We'll need to improve it later.
-        long eventTime = rotaryEvent.getUptimeMillisForClick(0);
+        // TODO(b/153195148): Use the last eventTime for now. We'll need to improve it later.
+        long eventTime = rotaryEvent.getUptimeMillisForClick(count - 1);
         handleRotateEvent(clockwise, count, eventTime);
     }
 
@@ -2449,6 +2452,13 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
+    @ExcludeFromCodeCoverageGeneratedReport(reason = BOILERPLATE_CODE)
+    @VisibleForTesting
+    void setRotateAcceleration(int rotationAcceleration2xMs, int rotationAcceleration3xMs) {
+        mRotationAcceleration2xMs = rotationAcceleration2xMs;
+        mRotationAcceleration3xMs = rotationAcceleration3xMs;
+    }
+
     /**
      * Returns the number of "ticks" to rotate for a single rotate event with the given detent
      * {@code count} at the given time. Uses and updates {@link #mLastRotateEventTime}. The result
@@ -2536,6 +2546,7 @@ public class RotaryService extends AccessibilityService implements
         mInputManager = inputManager;
     }
 
+    @ExcludeFromCodeCoverageGeneratedReport(reason = DUMP_INFO)
     @Override
     protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter writer,
             @Nullable String[] args) {
