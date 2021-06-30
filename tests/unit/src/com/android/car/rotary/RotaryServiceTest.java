@@ -1384,6 +1384,7 @@ public class RotaryServiceTest {
         AccessibilityWindowInfo appWindow = new WindowBuilder()
                 .setRoot(appRoot)
                 .setType(TYPE_APPLICATION)
+                .setFocused(true)
                 .build();
         List<AccessibilityWindowInfo> windows = new ArrayList<>();
         windows.add(appWindow);
@@ -1470,6 +1471,7 @@ public class RotaryServiceTest {
         AccessibilityWindowInfo appWindow = new WindowBuilder()
                 .setRoot(appRoot)
                 .setType(TYPE_APPLICATION)
+                .setFocused(true)
                 .build();
         List<AccessibilityWindowInfo> windows = new ArrayList<>();
         windows.add(appWindow);
@@ -1563,6 +1565,7 @@ public class RotaryServiceTest {
         AccessibilityWindowInfo appWindow = new WindowBuilder()
                 .setRoot(appRoot)
                 .setType(TYPE_APPLICATION)
+                .setFocused(true)
                 .build();
         List<AccessibilityWindowInfo> windows = new ArrayList<>();
         windows.add(appWindow);
@@ -2052,6 +2055,7 @@ public class RotaryServiceTest {
     public void testOnAccessibilityEvent_typeWindowStateChanged() {
         AccessibilityWindowInfo window = mock(AccessibilityWindowInfo.class);
         when(window.getType()).thenReturn(TYPE_APPLICATION);
+        when(window.isFocused()).thenReturn(true);
         when(window.getDisplayId()).thenReturn(DEFAULT_DISPLAY);
 
         AccessibilityNodeInfo node = mock(AccessibilityNodeInfo.class);
@@ -2210,7 +2214,7 @@ public class RotaryServiceTest {
         AccessibilityNodeInfo appButton3Node = createNode("app_button3");
         mRotaryService.setFocusedNode(appButton3Node);
         mRotaryService.mInRotaryMode = true;
-        when(mRotaryService.isInApplicationWindow(appButton3Node)).thenReturn(true);
+        when(mRotaryService.isInFocusedWindow(appButton3Node)).thenReturn(true);
         assertThat(mRotaryService.mInDirectManipulationMode).isFalse();
         assertThat(mRotaryService.mIgnoreViewClickedNode).isNull();
 
