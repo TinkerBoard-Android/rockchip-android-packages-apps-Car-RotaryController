@@ -84,4 +84,11 @@ public class WindowBuilderTest {
         AccessibilityWindowInfo window = new WindowBuilder().setFocused(true).build();
         assertThat(window.isFocused()).isTrue();
     }
+
+    @Test
+    public void testSetTaskId() {
+        AccessibilityWindowInfo window =
+                new WindowBuilder().setTaskId(3).build();
+        assertThat(window.getTaskId()).isEqualTo(3);
+    }
 }
