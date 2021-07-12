@@ -120,6 +120,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A service that can change focus based on rotary controller rotation and nudges, and perform
@@ -2396,13 +2397,14 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
         String oldIme = getCurrentIme();
-        if (oldIme.equals(newIme)) {
+        if (Objects.equals(oldIme, newIme)) {
             L.v("No need to switch IME: " + newIme);
             return;
         }
         setCurrentIme(newIme);
     }
 
+    @Nullable
     private String getCurrentIme() {
         return Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
     }
@@ -2570,7 +2572,7 @@ public class RotaryService extends AccessibilityService implements
      * valid because switching back to the touch IME should occur even if it's disabled and because
      * the rotary IME may be disabled so that it doesn't get used for touch.
      */
-    private boolean isValidIme(String componentName) {
+    private boolean isValidIme(@Nullable String componentName) {
         if (TextUtils.isEmpty(componentName)) {
             return false;
         }
