@@ -120,6 +120,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * A service that can change focus based on rotary controller rotation and nudges, and perform
@@ -1383,12 +1384,14 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // Case 2: the focused node doesn't support rotate directly, it's in application window,
-        // and it's not in the host app.
+        // Case 2: the focused node doesn't support rotate directly, it's in the focused window, and
+        // it's not in the host app.
         // We should inject KEYCODE_DPAD_CENTER event (or KEYCODE_ENTER/KEYCODE_SPACE in a WebView),
         // then the application will handle the injected event.
-        if (isInApplicationWindow(mFocusedNode) && !mNavigator.isHostNode(mFocusedNode)) {
-            L.d("Inject KeyEvent in application window");
+        // Injecting KeyEvents only works when the window is focused. The application window is
+        // focused but ActivityView windows are not.
+        if (isInFocusedWindow(mFocusedNode) && !mNavigator.isHostNode(mFocusedNode)) {
+            L.d("Inject KeyEvent in focused window");
             int keyCode = KeyEvent.KEYCODE_DPAD_CENTER;
             if (mNavigator.isInWebView(mFocusedNode)) {
                 keyCode = mFocusedNode.isCheckable()
@@ -1400,8 +1403,8 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
-        // Case 3: the focused node doesn't support rotate directly, it's in system window or in
-        // the host app.
+        // Case 3: the focused node doesn't support rotate directly, it's in an unfocused window or
+        // in the host app.
         // We start a timer on the ACTION_DOWN event. If the ACTION_UP event occurs before the
         // timeout, we perform ACTION_CLICK on the focused node and abort the timer. If the timer
         // times out before the ACTION_UP event, handleCenterButtonLongPressEvent() will perform
@@ -1766,10 +1769,10 @@ public class RotaryService extends AccessibilityService implements
         // focusable views are visible in the scrollable container. The latter happens when there
         // are focusable views but they're in the wrong direction. Inject a MotionEvent rather than
         // performing an action so that the application can control the amount it scrolls. Scrolling
-        // is only supported in the application window because injected events always go to the
-        // application window. We don't bother checking whether the scrollable container can
-        // currently scroll because there's nothing else to do if it can't.
-        if (remainingRotationCount > 0 && isInApplicationWindow(mFocusedNode)) {
+        // is only supported in the focused window because injected events always go to the focused
+        // window. We don't bother checking whether the scrollable container can currently scroll
+        // because there's nothing else to do if it can't.
+        if (remainingRotationCount > 0 && isInFocusedWindow(mFocusedNode)) {
             AccessibilityNodeInfo scrollableContainer =
                     mNavigator.findScrollableContainer(mFocusedNode);
             if (scrollableContainer != null) {
@@ -1847,15 +1850,15 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
-    /** Returns whether the given {@code node} is in the application window. */
+    /** Returns whether the given {@code node} is in a focused window. */
     @VisibleForTesting
-    boolean isInApplicationWindow(@NonNull AccessibilityNodeInfo node) {
+    boolean isInFocusedWindow(@NonNull AccessibilityNodeInfo node) {
         AccessibilityWindowInfo window = node.getWindow();
         if (window == null) {
             L.w("Failed to get window of " + node);
             return false;
         }
-        boolean result = window.getType() == TYPE_APPLICATION;
+        boolean result = window.isFocused();
         Utils.recycleWindow(window);
         return result;
     }
@@ -2394,13 +2397,14 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
         String oldIme = getCurrentIme();
-        if (oldIme.equals(newIme)) {
+        if (Objects.equals(oldIme, newIme)) {
             L.v("No need to switch IME: " + newIme);
             return;
         }
         setCurrentIme(newIme);
     }
 
+    @Nullable
     private String getCurrentIme() {
         return Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
     }
@@ -2568,7 +2572,7 @@ public class RotaryService extends AccessibilityService implements
      * valid because switching back to the touch IME should occur even if it's disabled and because
      * the rotary IME may be disabled so that it doesn't get used for touch.
      */
-    private boolean isValidIme(String componentName) {
+    private boolean isValidIme(@Nullable String componentName) {
         if (TextUtils.isEmpty(componentName)) {
             return false;
         }

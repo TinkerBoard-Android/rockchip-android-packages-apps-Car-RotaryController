@@ -42,6 +42,8 @@ class WindowBuilder {
     private Rect mBoundsInScreen;
     /** The window type, if specified. */
     private int mType;
+    /** Whether the window is focused. */
+    private boolean mFocused = false;
     /** The display ID, if specified. */
     private int mDisplayId = Display.DEFAULT_DISPLAY;
 
@@ -64,6 +66,7 @@ class WindowBuilder {
             }).when(window).getBoundsInScreen(any(Rect.class));
         }
         when(window.getType()).thenReturn(mType);
+        when(window.isFocused()).thenReturn(mFocused);
         when(window.getDisplayId()).thenReturn(mDisplayId);
         return window;
     }
@@ -85,6 +88,11 @@ class WindowBuilder {
 
     WindowBuilder setType(int type) {
         mType = type;
+        return this;
+    }
+
+    WindowBuilder setFocused(boolean isFocused) {
+        mFocused = isFocused;
         return this;
     }
 
