@@ -242,6 +242,7 @@ public class RotaryService extends AccessibilityService implements
     @NonNull
     private NodeCopier mNodeCopier = new NodeCopier();
 
+    @NonNull
     private Navigator mNavigator;
 
     /** Input types to capture. */
@@ -272,6 +273,7 @@ public class RotaryService extends AccessibilityService implements
      * event with the descendant of the {@code FocusArea} that was actually focused. It's null if no
      * nodes are focused or a {@link com.android.car.ui.FocusParkingView} is focused.
      */
+    @Nullable
     private AccessibilityNodeInfo mFocusedNode = null;
 
     /**
@@ -279,18 +281,21 @@ public class RotaryService extends AccessibilityService implements
      * editable node, we leave it focused. This variable is used to keep track of it so that we can
      * return to it when the user nudges out of the IME.
      */
+    @Nullable
     private AccessibilityNodeInfo mEditNode = null;
 
     /**
      * The focus area that contains the {@link #mFocusedNode}. It's null if {@link #mFocusedNode} is
      * null.
      */
+    @Nullable
     private AccessibilityNodeInfo mFocusArea = null;
 
     /**
      * The last clicked node by touching the screen, if any were clicked since we last navigated.
      */
     @VisibleForTesting
+    @Nullable
     AccessibilityNodeInfo mLastTouchedNode = null;
 
     /**
@@ -306,6 +311,7 @@ public class RotaryService extends AccessibilityService implements
      * #mLastViewClickedTime}.
      */
     @VisibleForTesting
+    @Nullable
     AccessibilityNodeInfo mIgnoreViewClickedNode;
 
     /**
@@ -1329,12 +1335,19 @@ public class RotaryService extends AccessibilityService implements
 
         if (fpv == null) {
             L.e("No FocusParkingView in root " + root);
-        } else if (Utils.isCarUiFocusParkingView(fpv)
-                    && fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS)) {
-            L.d("Restored focus successfully in root " + root);
+        } else if (Utils.isCarUiFocusParkingView(fpv)) {
+            if (!fpv.performAction(ACTION_RESTORE_DEFAULT_FOCUS)) {
+                L.e("No view (not even the FocusParkingView) to focus in root " + root);
+                return false;
+            }
             fpv.recycle();
             updateFocusedNodeAfterPerformingFocusAction(root);
-            return true;
+            // After performing ACTION_RESTORE_DEFAULT_FOCUS successfully, the FocusParkingView
+            // might get focused, so mFocusedNode might be null. Return false in this case, and
+            // return true in other cases.
+            boolean success = mFocusedNode != null;
+            L.successOrFailure("Restored focus in root", success);
+            return success;
         }
         Utils.recycleNode(fpv);
 
@@ -1364,7 +1377,7 @@ public class RotaryService extends AccessibilityService implements
         if (!isValidAction(action)) {
             return;
         }
-        if (initFocus()) {
+        if (initFocus() || mFocusedNode == null) {
             return;
         }
         // Case 1: the focused node supports rotate directly. We should ignore ACTION_DOWN event,
@@ -1429,7 +1442,7 @@ public class RotaryService extends AccessibilityService implements
     /** Handles controller center button long-press events. */
     private void handleCenterButtonLongPressEvent() {
         mLongPressTriggered = true;
-        if (initFocus()) {
+        if (initFocus() || mFocusedNode == null) {
             return;
         }
         boolean success = mFocusedNode.performAction(ACTION_LONG_CLICK);
@@ -1471,7 +1484,7 @@ public class RotaryService extends AccessibilityService implements
 
         // If the HUN is currently focused, we should only handle nudge events that are in the
         // opposite direction of the HUN nudge direction.
-        if (mNavigator.isHunWindow(mFocusedNode.getWindow())
+        if (mFocusedNode != null && mNavigator.isHunWindow(mFocusedNode.getWindow())
                 && direction != mHunEscapeNudgeDirection) {
             Utils.recycleWindows(windows);
             return;
@@ -1486,6 +1499,13 @@ public class RotaryService extends AccessibilityService implements
     @VisibleForTesting
     void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows,
             @View.FocusRealDirection int direction) {
+        // If there is no non-FocusParkingView focused, execute the off-screen nudge action, if
+        // specified.
+        if (mFocusedNode == null) {
+            handleOffScreenNudge(direction);
+            return;
+        }
+
         // If the HUN is in the nudge direction, nudge to it.
         boolean hunFocusResult = focusHunsWindow(windows, direction);
         if (hunFocusResult) {
@@ -1529,17 +1549,10 @@ public class RotaryService extends AccessibilityService implements
         AccessibilityNodeInfo targetFocusArea =
                 mNavigator.findNudgeTargetFocusArea(windows, mFocusedNode, mFocusArea, direction);
 
-        // If the user is nudging off the edge of the screen, execute the app-specific or app-
-        // agnostic off-screen nudge action, if either are specified. The former take precedence
-        // over the latter.
+        // If the user is nudging off the edge of the screen, execute the off-screen nudge action,
+        // if specified.
         if (targetFocusArea == null) {
-            if (handleAppSpecificOffScreenNudge(direction)) {
-                return;
-            }
-            if (handleAppAgnosticOffScreenNudge(direction)) {
-                return;
-            }
-            L.d("Off-screen nudge ignored");
+            handleOffScreenNudge(direction);
             return;
         }
 
@@ -1585,6 +1598,21 @@ public class RotaryService extends AccessibilityService implements
         L.d("Nudging to the nearest implicit focus area "
                 + (success ? "succeeded" : "failed: " + targetFocusArea));
         targetFocusArea.recycle();
+    }
+
+    /**
+     * Executes the app-specific or app-agnostic off-screen nudge action, if either are specified.
+     * The former take precedence over the latter.
+     *
+     * @return whether off-screen nudge action was successfully executed
+     */
+    private boolean handleOffScreenNudge(@View.FocusRealDirection int direction) {
+        boolean success = handleAppSpecificOffScreenNudge(direction)
+                || handleAppAgnosticOffScreenNudge(direction);
+        if (!success) {
+            L.d("Off-screen nudge ignored");
+        }
+        return success;
     }
 
     /**
@@ -1725,7 +1753,7 @@ public class RotaryService extends AccessibilityService implements
     }
 
     private void handleRotateEvent(boolean clockwise, int count, long eventTime) {
-        if (initFocus()) {
+        if (initFocus() || mFocusedNode == null) {
             return;
         }
 
@@ -2011,8 +2039,7 @@ public class RotaryService extends AccessibilityService implements
      *     <li>Otherwise focuses the best target in the node tree and consumes the event.
      * </ol>
      *
-     * @return whether the event was consumed by this method. When {@code false},
-     *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
+     * @return whether the event was consumed by this method
      */
     @VisibleForTesting
     boolean initFocus() {
@@ -2029,8 +2056,7 @@ public class RotaryService extends AccessibilityService implements
      * @param windows the windows currently available to the Accessibility Service
      * @param direction the direction of the nudge that was received (can be
      *                  {@link #INVALID_NUDGE_DIRECTION})
-     * @return whether the event was consumed by this method. When {@code false},
-     *         {@link #mFocusedNode} is guaranteed to not be {@code null}.
+     * @return whether the event was consumed by this method
      */
     private boolean initFocus(@NonNull List<AccessibilityWindowInfo> windows,
             @View.FocusRealDirection int direction) {
@@ -2076,12 +2102,16 @@ public class RotaryService extends AccessibilityService implements
             return true;
         }
 
+        boolean success = false;
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root != null) {
-            restoreDefaultFocusInRoot(root);
+            success = restoreDefaultFocusInRoot(root);
             Utils.recycleNode(root);
         }
-        return true;
+        if (!success) {
+            L.w("Failed to initialize focus");
+        }
+        return success;
     }
 
     /**
