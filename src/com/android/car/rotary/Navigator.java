@@ -15,6 +15,7 @@
  */
 package com.android.car.rotary;
 
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD;
 import static android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT;
@@ -41,7 +42,6 @@ import com.android.car.ui.FocusParkingView;
 import com.android.internal.util.dump.DualDumpOutputStream;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.Predicate;
@@ -71,20 +71,35 @@ class Navigator {
     @NonNull
     private final Rect mAppWindowBounds;
 
-    private final String[] mExcludedOverlayWindowTitles;
+    private int mAppWindowTaskId = INVALID_TASK_ID;
 
     Navigator(int displayWidth, int displayHeight, int hunLeft, int hunRight,
-            boolean showHunOnBottom, String[] excludedOverlayWindowTitles) {
+            boolean showHunOnBottom) {
         mHunLeft = hunLeft;
         mHunRight = hunRight;
         mHunNudgeDirection = showHunOnBottom ? View.FOCUS_DOWN : View.FOCUS_UP;
         mAppWindowBounds = new Rect(0, 0, displayWidth, displayHeight);
-        mExcludedOverlayWindowTitles = excludedOverlayWindowTitles;
     }
 
     @VisibleForTesting
     Navigator() {
-        this(0, 0, 0, 0, false, null);
+        this(0, 0, 0, 0, false);
+    }
+
+    /**
+     * Updates {@link #mAppWindowTaskId} if {@code window} is a full-screen app window on the
+     * default display.
+     */
+    void updateAppWindowTaskId(@NonNull AccessibilityWindowInfo window) {
+        if (window.getType() == TYPE_APPLICATION
+                && window.getDisplayId() == Display.DEFAULT_DISPLAY) {
+            Rect windowBounds = new Rect();
+            window.getBoundsInScreen(windowBounds);
+            if (mAppWindowBounds.equals(windowBounds)) {
+                mAppWindowTaskId = window.getTaskId();
+                L.d("Task ID of app window: " + mAppWindowTaskId);
+            }
+        }
     }
 
     /** Initializes the package name of the host app. */
@@ -511,14 +526,18 @@ class Navigator {
         source.getBoundsInScreen(sourceBounds);
 
         // If the source window is an application window on the default display and it's smaller
-        // than the display, then it's an overlay window (such as a Dialog window). Nudging out of
-        // the overlay window is not allowed unless the source node is editable and the target
-        // window is an IME window (e.g., nudging from the EditText in the Dialog to the IME is
-        // allowed, while nudging from the Button in the Dialog to the IME is not allowed).
+        // than the display, then it's either a TaskView window or an overlay window (such as a
+        // Dialog window). The ID of a TaskView task is different from the full screen application,
+        // while the ID of an overlay task is the same with the full screen application,
+        // so task ID is used to decide whether it's an overlay window.
+        // Nudging out of the overlay window is not allowed unless the source node is editable
+        // and the target window is an IME window (e.g., nudging from the EditText in the Dialog
+        // to the IME is allowed, while nudging from the Button in the Dialog to the IME is not
+        // allowed).
         boolean isSourceWindowOverlayWindow = source.getType() == TYPE_APPLICATION
                 && source.getDisplayId() == Display.DEFAULT_DISPLAY
                 && !mAppWindowBounds.equals(sourceBounds)
-                && !isOverlayWindowExcluded(source);
+                && source.getTaskId() == mAppWindowTaskId;
         Rect destBounds = new Rect();
         for (AccessibilityWindowInfo window : windows) {
             if (window.equals(source)) {
@@ -536,19 +555,6 @@ class Navigator {
                 results.add(window);
             }
         }
-    }
-
-    private boolean isOverlayWindowExcluded(AccessibilityWindowInfo window) {
-        // TODO(b/185399833): Add an explicit API to check for special windows like TaskView.
-        if (mExcludedOverlayWindowTitles == null) {
-            return false;
-        }
-        CharSequence title = window.getTitle();
-        if (title == null) {
-            return false;
-        }
-        String titleString = title.toString();
-        return Arrays.stream(mExcludedOverlayWindowTitles).anyMatch(titleString::equals);
     }
 
     /**
