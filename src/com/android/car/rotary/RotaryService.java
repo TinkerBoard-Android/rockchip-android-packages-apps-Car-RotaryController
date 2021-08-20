@@ -1504,18 +1504,18 @@ public class RotaryService extends AccessibilityService implements
     @VisibleForTesting
     void nudgeTo(@NonNull List<AccessibilityWindowInfo> windows,
             @View.FocusRealDirection int direction) {
+        // If the HUN is in the nudge direction, nudge to it.
+        boolean hunFocusResult = focusHunsWindow(windows, direction);
+        if (hunFocusResult) {
+            L.d("Nudge to HUN successful");
+            return;
+        }
+
         // If there is no non-FocusParkingView focused, execute the off-screen nudge action, if
         // specified.
         if (mFocusedNode == null) {
             L.d("mFocusedNode is null");
             handleOffScreenNudge(direction);
-            return;
-        }
-
-        // If the HUN is in the nudge direction, nudge to it.
-        boolean hunFocusResult = focusHunsWindow(windows, direction);
-        if (hunFocusResult) {
-            L.d("Nudge to HUN successful");
             return;
         }
 
