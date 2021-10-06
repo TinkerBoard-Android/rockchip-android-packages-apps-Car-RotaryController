@@ -39,6 +39,7 @@ import androidx.test.rule.ActivityTestRule;
 
 import com.android.car.rotary.Navigator.FindRotateTargetResult;
 import com.android.car.rotary.ui.TestRecyclerViewAdapter;
+import com.android.car.ui.recyclerview.CarUiRecyclerView;
 
 import org.junit.After;
 import org.junit.Before;
@@ -254,7 +255,8 @@ public class NavigatorTest {
                 R.layout.navigator_find_rotate_target_does_not_skip_offscreen_node_test_activity);
 
         Activity activity = mActivityRule.getActivity();
-        RecyclerView recyclerView = activity.findViewById(R.id.scrollable);
+        CarUiRecyclerView scrollable = activity.findViewById(R.id.scrollable);
+        RecyclerView recyclerView = scrollable.getRecyclerView();
         recyclerView.post(() -> {
             TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 3);
             adapter.setItemsFocusable(true);
@@ -838,14 +840,15 @@ public class NavigatorTest {
     public void test_findNudgeTargetFocusArea_fromScrollableContainer() {
         initActivity(R.layout.navigator_find_nudge_target_focus_area_1_test_activity);
         Activity activity = mActivityRule.getActivity();
-        RecyclerView scrollable = activity.findViewById(R.id.scrollable_container);
-        scrollable.post(() -> {
+        CarUiRecyclerView scrollable = activity.findViewById(R.id.scrollable_container);
+        RecyclerView recyclerView = scrollable.getRecyclerView();
+        recyclerView.post(() -> {
             TestRecyclerViewAdapter adapter = new TestRecyclerViewAdapter(activity, 20);
-            scrollable.setAdapter(adapter);
-            scrollable.requestFocus();
+            recyclerView.setAdapter(adapter);
+            recyclerView.requestFocus();
         });
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        assertThat(scrollable.isFocused()).isEqualTo(true);
+        assertThat(recyclerView.isFocused()).isEqualTo(true);
 
         AccessibilityNodeInfo currentFocusArea = createNode("focus_area1");
 
