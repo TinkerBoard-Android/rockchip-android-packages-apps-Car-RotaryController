@@ -1167,6 +1167,10 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
 
+        // A view was clicked via touch screen. Exit rotary mode in case the touch overlay
+        // doesn't kick in.
+        setInRotaryMode(false);
+
         // Update mLastTouchedNode if the clicked view can take focus. If a view can't take focus,
         // performing focus action on it or calling focusSearch() on it will fail.
         if (!sourceNode.equals(mLastTouchedNode) && Utils.canTakeFocus(sourceNode)) {
@@ -1284,52 +1288,59 @@ public class RotaryService extends AccessibilityService implements
         int windowId = event.getWindowId();
         List<AccessibilityWindowInfo> windows = getWindows();
         AccessibilityWindowInfo window = Utils.findWindowWithId(windows, windowId);
-        if (window == null) {
+        AccessibilityNodeInfo root = null;
+
+        try {
+            if (window == null) {
+                return;
+            }
+            mWindowCache.saveWindowType(windowId, window.getType());
+
+            // Nothing more to do if we're in touch mode.
+            if (!mInRotaryMode) {
+                return;
+            }
+
+            // We only care about this event when the window that was added doesn't contain
+            // mFocusedNode. Ignore other events.
+            if (mFocusedNode != null && mFocusedNode.getWindowId() == windowId) {
+                return;
+            }
+
+            root = window.getRoot();
+            if (root == null) {
+                L.w("No root node in " + window);
+                return;
+            }
+
+            // If the added window is not an IME window and there is a non-FocusParkingView focused
+            // in it, set mFocusedNode to the focused view. If there is no view focused in it,
+            // there is no need to restore view focus inside it, because the FocusParkingView will
+            // restore view focus when the window gains focus.
+            if (window.getType() != TYPE_INPUT_METHOD) {
+                AccessibilityNodeInfo focusedNode = mNavigator.findFocusedNodeInRoot(root);
+                if (focusedNode != null) {
+                    setFocusedNode(focusedNode);
+                    focusedNode.recycle();
+                }
+                return;
+            }
+
+            // If the focused node is editable, save it so that we can return to it when the user
+            // nudges out of the IME.
+            if (mFocusedNode != null && mFocusedNode.isEditable()) {
+                setEditNode(mFocusedNode);
+            }
+
+            // The added window is an IME window, so restore view focus inside it.
+            boolean success = restoreDefaultFocusInRoot(root);
+            if (!success) {
+                L.d("Failed to restore default focus in " + root);
+            }
+        } finally {
             Utils.recycleWindows(windows);
-            return;
+            Utils.recycleNode(root);
         }
-        mWindowCache.saveWindowType(windowId, window.getType());
-
-        // Nothing more to do if we're in touch mode.
-        if (!mInRotaryMode) {
-            Utils.recycleWindows(windows);
-            return;
-        }
-
-        // We only care about this event when the window that was added doesn't contains the focused
-        // node. Ignore other events.
-        if (mFocusedNode != null && mFocusedNode.getWindowId() == windowId) {
-            Utils.recycleWindows(windows);
-            return;
-        }
-
-        // No need to move focus for non-IME window here, because in most cases Android will focus
-        // the FocusParkingView in the added window, and we'll move focus when handling it.
-        if (window.getType() != TYPE_INPUT_METHOD) {
-            Utils.recycleWindows(windows);
-            return;
-        }
-
-        // If the new window is an IME, move focus to the IME.
-        AccessibilityNodeInfo root = window.getRoot();
-        if (root == null) {
-            L.w("No root node in " + window);
-            Utils.recycleWindows(windows);
-            return;
-        }
-        Utils.recycleWindows(windows);
-
-        // If the focused node is editable, save it so that we can return to it when the user
-        // nudges out of the IME.
-        if (mFocusedNode != null && mFocusedNode.isEditable()) {
-            setEditNode(mFocusedNode);
-        }
-
-        boolean success = restoreDefaultFocusInRoot(root);
-        if (!success) {
-            L.d("Failed to restore default focus in " + root);
-        }
-        root.recycle();
     }
 
     private boolean restoreDefaultFocusInRoot(@NonNull AccessibilityNodeInfo root) {
