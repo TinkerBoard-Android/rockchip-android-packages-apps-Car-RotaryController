@@ -2113,12 +2113,14 @@ public class RotaryService extends AccessibilityService implements
             // If mFocusedNode is focused, we're in a good state and can proceed with whatever
             // action the user requested.
             if (mFocusedNode.isFocused()) {
+                L.v("mFocusedNode is already focused: " + mFocusedNode);
                 return false;
             }
             // If the focused node represents an HTML element in a WebView, we just assume the focus
             // is already initialized here, and we'll handle it properly when the user uses the
             // controller next time.
             if (mNavigator.isInWebView(mFocusedNode)) {
+                L.v("mFocusedNode is in a WebView: " + mFocusedNode);
                 return false;
             }
         }
@@ -2137,6 +2139,7 @@ public class RotaryService extends AccessibilityService implements
                 AccessibilityNodeInfo focusedNode = mNavigator.findFocusedNodeInRoot(root);
                 root.recycle();
                 if (focusedNode != null) {
+                    L.v("Setting mFocusedNode to the focused node: " + focusedNode);
                     setFocusedNode(focusedNode);
                     focusedNode.recycle();
                     return false;
@@ -2145,19 +2148,31 @@ public class RotaryService extends AccessibilityService implements
         }
 
         if (mLastTouchedNode != null && focusLastTouchedNode()) {
+            L.v("Focusing on the last touched node: " + mLastTouchedNode);
             return true;
         }
 
+        // Try to initialize focus inside the focused window on main display.
+        // Note: getWindows() only returns the windows on main display (displayId=0), while
+        // getRootInActiveWindow() returns the root node of the active window, which may not be on
+        // the main display, such as the cluster window on another display (displayId=1). Since we
+        // want to focus on the main display, we shouldn't use getRootInActiveWindow() here.
         boolean success = false;
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root != null) {
-            success = restoreDefaultFocusInRoot(root);
-            Utils.recycleNode(root);
+        for (AccessibilityWindowInfo window : windows) {
+            if (window.isFocused()) {
+                AccessibilityNodeInfo root = window.getRoot();
+                if (root != null) {
+                    success = restoreDefaultFocusInRoot(root);
+                    root.recycle();
+                }
+                L.v((success ? "Succeeded" : "Failed") + " to initialize focus inside the "
+                        + "focused window: " + window);
+                return success;
+            }
         }
-        if (!success) {
-            L.w("Failed to initialize focus");
-        }
-        return success;
+
+        L.w("Failed to initialize focus");
+        return false;
     }
 
     /**
