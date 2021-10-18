@@ -1880,7 +1880,7 @@ public class RotaryService extends AccessibilityService implements
 
     private void onForegroundActivityChanged(@NonNull AccessibilityNodeInfo root,
             @NonNull AccessibilityWindowInfo window,
-            CharSequence packageName, CharSequence className) {
+            @Nullable CharSequence packageName, @Nullable CharSequence className) {
         // If the foreground app is a client app, store its package name.
         AccessibilityNodeInfo surfaceView = mNavigator.findSurfaceViewInRoot(root);
         if (surfaceView != null) {
@@ -1888,14 +1888,22 @@ public class RotaryService extends AccessibilityService implements
             surfaceView.recycle();
         }
 
-        ComponentName newActivity = new ComponentName(packageName.toString(), className.toString());
-        if (newActivity.equals(mForegroundActivity)) {
+        ComponentName newActivity = packageName != null && className != null
+                ? new ComponentName(packageName.toString(), className.toString())
+                : null;
+        if (newActivity != null && newActivity.equals(mForegroundActivity)) {
             return;
         }
         mForegroundActivity = newActivity;
         mNavigator.updateAppWindowTaskId(window);
-        if (mInDirectManipulationMode) {
-            L.d("Exit direct manipulation mode because the foreground app has changed");
+
+        // Exit direct manipulation mode if the new Activity is in a new package.
+        // Note: There is no need to handle the case when mForegroundActivity is null because it
+        // couldn't be null in direct manipulation mode. The null check is just for precaution.
+        if (mInDirectManipulationMode && mForegroundActivity != null
+                && !mForegroundActivity.getPackageName().equals(packageName)) {
+            L.w("Exit direct manipulation mode because the foreground app has changed from "
+                    + mForegroundActivity.getPackageName() + " to " + packageName);
             mInDirectManipulationMode = false;
         }
     }
