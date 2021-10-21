@@ -1097,6 +1097,17 @@ public class RotaryService extends AccessibilityService implements
             L.w("Null source node in " + event);
             return;
         }
+        AccessibilityWindowInfo window = sourceNode.getWindow();
+        if (window != null) {
+            try {
+                if (window.getDisplayId() != DEFAULT_DISPLAY) {
+                    L.d("Ignore focused event from window : " + window);
+                    return;
+                }
+            } finally {
+                window.recycle();
+            }
+        }
         if (mNavigator.isClientNode(sourceNode)) {
             L.d("Ignore focused event from the client app " + sourceNode);
             return;
