@@ -122,6 +122,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * A service that can change focus based on rotary controller rotation and nudges, and perform
@@ -2151,47 +2152,81 @@ public class RotaryService extends AccessibilityService implements
             return true;
         }
 
-        // If there is a non-FocusParkingView focused in any window, set mFocusedNode to that view.
-        for (AccessibilityWindowInfo window : windows) {
+        // Try to initialize focus on main display.
+        // Firstly, sort the windows based on:
+        // 1. The focused state. The focused window comes first to other windows.
+        // 2. Window type, if the focused state is the same. Application window
+        //    (TYPE_APPLICATION = 1) comes first, then IME window (TYPE_INPUT_METHOD = 2),
+        //    then system window (TYPE_SYSTEM = 3), etc.
+        // 3. Window layer, if the conditions above are the same. The window with greater layer
+        //    (Z-order) comes first.
+        // Note: getWindows() only returns the windows on main display (displayId = 0), while
+        // getRootInActiveWindow() returns the root node of the active window, which may not be on
+        // the main display, such as the cluster window on another display (displayId = 1). Since we
+        // want to focus on the main display, we shouldn't use getRootInActiveWindow().
+        List<AccessibilityWindowInfo> sortedWindows = windows
+                .stream()
+                .sorted((w1, w2) -> {
+                    if (w1.isFocused() != w2.isFocused()) {
+                        return w2.isFocused() ? 1 : -1;
+                    }
+                    if (w1.getType() != w2.getType()) {
+                        return w1.getType() - w2.getType();
+                    }
+                    return w2.getLayer() - w1.getLayer();
+                })
+                .collect(Collectors.toList());
+
+        // If there are any windows with a non-FocusParkingView focused, set mFocusedNode
+        // to the focused view in the first such window and clear the focus in the others.
+        boolean hasFocusedNode = false;
+        for (AccessibilityWindowInfo window : sortedWindows) {
             AccessibilityNodeInfo root = window.getRoot();
             if (root != null) {
                 AccessibilityNodeInfo focusedNode = mNavigator.findFocusedNodeInRoot(root);
                 root.recycle();
                 if (focusedNode != null) {
-                    L.v("Setting mFocusedNode to the focused node: " + focusedNode);
-                    setFocusedNode(focusedNode);
+                    if (!hasFocusedNode) {
+                        L.v("Setting mFocusedNode to the focused node: " + focusedNode);
+                        setFocusedNode(focusedNode);
+                    } else {
+                        boolean success = clearFocusInWindow(window);
+                        L.successOrFailure("Clear focus in the window: " + window, success);
+                    }
                     focusedNode.recycle();
-                    return false;
+                    hasFocusedNode = true;
                 }
             }
         }
 
-        if (mLastTouchedNode != null && focusLastTouchedNode()) {
-            L.v("Focusing on the last touched node: " + mLastTouchedNode);
-            return true;
-        }
+        try {
+            // Don't consume the event since there is a focused view already.
+            if (hasFocusedNode) {
+                return false;
+            }
 
-        // Try to initialize focus inside the focused window on main display.
-        // Note: getWindows() only returns the windows on main display (displayId=0), while
-        // getRootInActiveWindow() returns the root node of the active window, which may not be on
-        // the main display, such as the cluster window on another display (displayId=1). Since we
-        // want to focus on the main display, we shouldn't use getRootInActiveWindow() here.
-        boolean success = false;
-        for (AccessibilityWindowInfo window : windows) {
-            if (window.isFocused()) {
+            if (mLastTouchedNode != null && focusLastTouchedNode()) {
+                L.v("Focusing on the last touched node: " + mLastTouchedNode);
+                return true;
+            }
+
+            for (AccessibilityWindowInfo window : sortedWindows) {
                 AccessibilityNodeInfo root = window.getRoot();
                 if (root != null) {
-                    success = restoreDefaultFocusInRoot(root);
+                    boolean success = restoreDefaultFocusInRoot(root);
                     root.recycle();
+                    L.successOrFailure("Initialize focus inside the window: " + window, success);
+                    if (success) {
+                        return true;
+                    }
                 }
-                L.v((success ? "Succeeded" : "Failed") + " to initialize focus inside the "
-                        + "focused window: " + window);
-                return success;
             }
-        }
 
-        L.w("Failed to initialize focus");
-        return false;
+            L.w("Failed to initialize focus");
+            return false;
+        } finally {
+            Utils.recycleWindows(sortedWindows);
+        }
     }
 
     /**
