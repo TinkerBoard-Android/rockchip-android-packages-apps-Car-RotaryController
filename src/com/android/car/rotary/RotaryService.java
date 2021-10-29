@@ -375,6 +375,9 @@ public class RotaryService extends AccessibilityService implements
      */
     private final Intent[] mOffScreenNudgeIntents = new Intent[NUM_DIRECTIONS];
 
+    /** An overlay to capture touch events and exit rotary mode. */
+    @Nullable private FrameLayout mTouchOverlay;
+
     /**
      * Possible actions to do after receiving {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}.
      *
@@ -741,6 +744,7 @@ public class RotaryService extends AccessibilityService implements
 
         unregisterInputMethodObserver();
         unregisterFilterObserver();
+        removeTouchOverlay();
         if (mCarInputManager != null) {
             mCarInputManager.releaseInputEventCapture(CarOccupantZoneManager.DISPLAY_TYPE_MAIN);
         }
@@ -891,14 +895,17 @@ public class RotaryService extends AccessibilityService implements
      * isn't considered a click.
      */
     private void addTouchOverlay() {
+        // Remove existing touch overlay if any.
+        removeTouchOverlay();
+
         // Only views with a visual context, such as a window context, can be added by
         // WindowManager.
-        FrameLayout frameLayout = new FrameLayout(getWindowContext());
+        mTouchOverlay = new FrameLayout(getWindowContext());
 
         FrameLayout.LayoutParams frameLayoutParams =
                 new FrameLayout.LayoutParams(/* width= */ 0, /* height= */ 0);
-        frameLayout.setLayoutParams(frameLayoutParams);
-        frameLayout.setOnTouchListener((view, event) -> {
+        mTouchOverlay.setLayoutParams(frameLayoutParams);
+        mTouchOverlay.setOnTouchListener((view, event) -> {
             // We're trying to identify real touches from the user's fingers, but using the rotary
             // controller to press keys in the rotary IME also triggers this touch listener, so we
             // ignore these touches.
@@ -917,7 +924,15 @@ public class RotaryService extends AccessibilityService implements
         windowLayoutParams.gravity = Gravity.RIGHT | Gravity.TOP;
         windowLayoutParams.privateFlags |= PRIVATE_FLAG_TRUSTED_OVERLAY;
         WindowManager windowManager = getSystemService(WindowManager.class);
-        windowManager.addView(frameLayout, windowLayoutParams);
+        windowManager.addView(mTouchOverlay, windowLayoutParams);
+    }
+
+    private void removeTouchOverlay() {
+        if (mTouchOverlay != null) {
+            WindowManager windowManager = getSystemService(WindowManager.class);
+            windowManager.removeView(mTouchOverlay);
+            mTouchOverlay = null;
+        }
     }
 
     private void onTouchEvent() {
