@@ -1843,8 +1843,7 @@ public class RotaryService extends AccessibilityService implements
                 int displayId = window.getDisplayId();
                 window.recycle();
                 // TODO(b/155823126): Add config to let OEMs determine the mapping.
-                injectMotionEvent(displayId, MotionEvent.AXIS_SCROLL,
-                        clockwise ? rotationCount : -rotationCount);
+                injectMotionEvent(displayId, clockwise ? rotationCount : -rotationCount);
             }
             return;
         }
@@ -2041,18 +2040,30 @@ public class RotaryService extends AccessibilityService implements
         }
         int displayId = window.getDisplayId();
         window.recycle();
-        injectMotionEvent(displayId, axis, clockwise ? -rotationCount : rotationCount);
+        Rect bounds = new Rect();
+        scrollableContainer.getBoundsInScreen(bounds);
+        injectMotionEvent(displayId, axis, clockwise ? -rotationCount : rotationCount,
+                bounds.centerX(), bounds.centerY());
     }
 
-    private void injectMotionEvent(int displayId, int axis, int axisValue) {
+    private void injectMotionEvent(int displayId, int axisValue) {
+        injectMotionEvent(displayId, MotionEvent.AXIS_SCROLL, axisValue, /* x= */ 0, /* y= */ 0);
+    }
+
+    private void injectMotionEvent(int displayId, int axis, int axisValue, float x, float y) {
         long upTime = SystemClock.uptimeMillis();
         MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[1];
         properties[0] = new MotionEvent.PointerProperties();
         properties[0].id = 0; // Any integer value but -1 (INVALID_POINTER_ID) is fine.
         MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
         coords[0] = new MotionEvent.PointerCoords();
-        // No need to set X,Y coordinates. We use a non-pointer source so the event will be routed
-        // to the focused view.
+        // While injected events route themselves to the focused View, many classes convert the
+        // event source to SOURCE_CLASS_POINTER to enable nested scrolling. The nested scrolling
+        // container can only receive the event if we set coordinates within its bounds in the
+        // event. Otherwise, the top level scrollable parent consumes the event. The primary
+        // examples of this are WebViews and CarUiRecylerViews. REFERTO(b/203707657).
+        coords[0].x = x;
+        coords[0].y = y;
         coords[0].setAxisValue(axis, axisValue);
         MotionEvent motionEvent = MotionEvent.obtain(/* downTime= */ upTime,
                 /* eventTime= */ upTime,
