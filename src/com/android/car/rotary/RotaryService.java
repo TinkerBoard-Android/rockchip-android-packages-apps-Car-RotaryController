@@ -254,7 +254,9 @@ public class RotaryService extends AccessibilityService implements
             // Capture controller center button clicks.
             CarInputManager.INPUT_TYPE_DPAD_KEYS,
             // Capture controller nudges.
-            CarInputManager.INPUT_TYPE_SYSTEM_NAVIGATE_KEYS};
+            CarInputManager.INPUT_TYPE_SYSTEM_NAVIGATE_KEYS,
+            // Capture back button clicks.
+            CarInputManager.INPUT_TYPE_NAVIGATE_KEYS};
 
     /**
      * Time interval in milliseconds to decide whether we should accelerate the rotation by 3 times
