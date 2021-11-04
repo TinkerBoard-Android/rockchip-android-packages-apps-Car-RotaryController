@@ -2225,34 +2225,30 @@ public class RotaryService extends AccessibilityService implements
             }
         }
 
-        try {
-            // Don't consume the event since there is a focused view already.
-            if (hasFocusedNode) {
-                return false;
-            }
+        // Don't consume the event since there is a focused view already.
+        if (hasFocusedNode) {
+            return false;
+        }
 
-            if (mLastTouchedNode != null && focusLastTouchedNode()) {
-                L.v("Focusing on the last touched node: " + mLastTouchedNode);
-                return true;
-            }
+        if (mLastTouchedNode != null && focusLastTouchedNode()) {
+            L.v("Focusing on the last touched node: " + mLastTouchedNode);
+            return true;
+        }
 
-            for (AccessibilityWindowInfo window : sortedWindows) {
-                AccessibilityNodeInfo root = window.getRoot();
-                if (root != null) {
-                    boolean success = restoreDefaultFocusInRoot(root);
-                    root.recycle();
-                    L.successOrFailure("Initialize focus inside the window: " + window, success);
-                    if (success) {
-                        return true;
-                    }
+        for (AccessibilityWindowInfo window : sortedWindows) {
+            AccessibilityNodeInfo root = window.getRoot();
+            if (root != null) {
+                boolean success = restoreDefaultFocusInRoot(root);
+                root.recycle();
+                L.successOrFailure("Initialize focus inside the window: " + window, success);
+                if (success) {
+                    return true;
                 }
             }
-
-            L.w("Failed to initialize focus");
-            return false;
-        } finally {
-            Utils.recycleWindows(sortedWindows);
         }
+
+        L.w("Failed to initialize focus");
+        return false;
     }
 
     /**
