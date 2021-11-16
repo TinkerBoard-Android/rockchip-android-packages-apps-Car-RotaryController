@@ -38,6 +38,7 @@ import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOWS_CHANGED
 import static android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_ADDED;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_REMOVED;
+import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_FOCUS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_SELECTION;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS;
@@ -2294,30 +2295,56 @@ public class RotaryService extends AccessibilityService implements
                 .collect(Collectors.toList());
 
         // If there are any windows with a non-FocusParkingView focused, set mFocusedNode
-        // to the focused view in the first such window and clear the focus in the others.
+        // to the focused node in the first such window and clear the focus in the others.
         boolean hasFocusedNode = false;
         for (AccessibilityWindowInfo window : sortedWindows) {
             AccessibilityNodeInfo root = window.getRoot();
-            if (root != null) {
-                AccessibilityNodeInfo focusedNode = mNavigator.findFocusedNodeInRoot(root);
-                root.recycle();
-                if (focusedNode != null) {
-                    if (!hasFocusedNode) {
-                        L.v("Setting mFocusedNode to the focused node: " + focusedNode);
-                        setFocusedNode(focusedNode);
-                    } else {
-                        boolean success = clearFocusInWindow(window);
-                        L.successOrFailure("Clear focus in the window: " + window, success);
-                    }
-                    focusedNode.recycle();
-                    hasFocusedNode = true;
-                }
+            if (root == null) {
+                L.e("Root node of the window is null: " + window);
+                continue;
             }
-        }
+            AccessibilityNodeInfo focusedNode = mNavigator.findFocusedNodeInRoot(root);
+            root.recycle();
+            if (focusedNode == null) {
+                continue;
+            }
 
-        // Don't consume the event since there is a focused view already.
-        if (hasFocusedNode) {
-            return false;
+            // If this window is not the first such window, clear its focus.
+            if (hasFocusedNode) {
+                boolean success = clearFocusInWindow(window);
+                L.successOrFailure("Clear focus in the window: " + window, success);
+                focusedNode.recycle();
+                continue;
+            }
+
+            hasFocusedNode = true;
+            // This window is the first such window. There are two cases:
+            // Case 1: It's in rotary mode. Just update mFocusedNode in this case.
+            if (prevInRotaryMode) {
+                L.v("Setting mFocusedNode to the focused node: " + focusedNode);
+                setFocusedNode(focusedNode);
+                focusedNode.recycle();
+                // Don't consume the event. In rotary mode, the focused view shows a focus
+                // highlight, so the user already knows where the focus is before manipulating
+                // the rotary controller, thus we should proceed to handle the event.
+                return false;
+            }
+            // Case 2: It's in touch mode. In this case we can't just update mFocusedNode because
+            // the application is still in touch mode. Performing ACTION_FOCUS on the focused node
+            // doesn't work either because it's no-op.
+            // In order to make the application exit touch mode, the workaround is to clear its
+            // focus then focus on it again.
+            boolean success = focusedNode.performAction(ACTION_CLEAR_FOCUS)
+                                && focusedNode.performAction(ACTION_FOCUS);
+            setFocusedNode(focusedNode);
+            setPendingFocusedNode(focusedNode);
+            L.successOrFailure("Clear focus then focus on the node again " + focusedNode,
+                    success);
+            focusedNode.recycle();
+            // Consume the event. In touch mode, the focused view doesn't show a focus highlight,
+            // so the user doesn't know where the focus is before manipulating the rotary
+            // controller, thus the event should be used to make the focus highlight appear.
+            return true;
         }
 
         if (mLastTouchedNode != null && focusLastTouchedNode()) {
