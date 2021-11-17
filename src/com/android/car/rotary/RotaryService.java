@@ -65,6 +65,7 @@ import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -580,6 +581,8 @@ public class RotaryService extends AccessibilityService implements
     /** Expiration time for {@link #mPendingFocusedNode} in {@link SystemClock#uptimeMillis}. */
     private long mPendingFocusedExpirationTime;
 
+    @Nullable private ContentResolver mContentResolver;
+
     private final BroadcastReceiver mAppInstallUninstallReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -676,6 +679,13 @@ public class RotaryService extends AccessibilityService implements
         filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         filter.addDataScheme("package");
         registerReceiver(mAppInstallUninstallReceiver, filter);
+
+        if (getBaseContext() != null) {
+            mContentResolver = getContentResolver();
+        }
+        if (mContentResolver == null) {
+            L.w("ContentResolver not available");
+        }
     }
 
     /**
@@ -960,7 +970,10 @@ public class RotaryService extends AccessibilityService implements
             return;
         }
         int flags = serviceInfo.flags;
-        boolean filterKeyEvents = Settings.Secure.getInt(getContentResolver(),
+        if (mContentResolver == null) {
+            return;
+        }
+        boolean filterKeyEvents = Settings.Secure.getInt(mContentResolver,
                 KEY_ROTARY_KEY_EVENT_FILTER, /* def= */ 0) != 0;
         if (filterKeyEvents) {
             flags |= FLAG_REQUEST_FILTER_KEY_EVENTS;
@@ -996,7 +1009,10 @@ public class RotaryService extends AccessibilityService implements
                 }
             }
         };
-        getContentResolver().registerContentObserver(
+        if (mContentResolver == null) {
+            return;
+        }
+        mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(DEFAULT_INPUT_METHOD),
                 /* notifyForDescendants= */ false,
                 mInputMethodObserver);
@@ -1005,7 +1021,10 @@ public class RotaryService extends AccessibilityService implements
     /** Unregisters the observer registered by {@link #registerInputMethodObserver}. */
     private void unregisterInputMethodObserver() {
         if (mInputMethodObserver != null) {
-            getContentResolver().unregisterContentObserver(mInputMethodObserver);
+            if (mContentResolver == null) {
+                return;
+            }
+            mContentResolver.unregisterContentObserver(mInputMethodObserver);
             mInputMethodObserver = null;
         }
     }
@@ -1024,7 +1043,10 @@ public class RotaryService extends AccessibilityService implements
                 updateServiceInfo();
             }
         };
-        getContentResolver().registerContentObserver(
+        if (mContentResolver == null) {
+            return;
+        }
+        mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(KEY_ROTARY_KEY_EVENT_FILTER),
                 /* notifyForDescendants= */ false,
                 mKeyEventFilterObserver);
@@ -1033,7 +1055,10 @@ public class RotaryService extends AccessibilityService implements
     /** Unregisters the observer registered by {@link #registerFilterObserver}. */
     private void unregisterFilterObserver() {
         if (mKeyEventFilterObserver != null) {
-            getContentResolver().unregisterContentObserver(mKeyEventFilterObserver);
+            if (mContentResolver == null) {
+                return;
+            }
+            mContentResolver.unregisterContentObserver(mKeyEventFilterObserver);
             mKeyEventFilterObserver = null;
         }
     }
@@ -2575,12 +2600,18 @@ public class RotaryService extends AccessibilityService implements
 
     @Nullable
     private String getCurrentIme() {
-        return Settings.Secure.getString(getContentResolver(), DEFAULT_INPUT_METHOD);
+        if (mContentResolver == null) {
+            return null;
+        }
+        return Settings.Secure.getString(mContentResolver, DEFAULT_INPUT_METHOD);
     }
 
     private void setCurrentIme(String newIme) {
+        if (mContentResolver == null) {
+            return;
+        }
         boolean result =
-                Settings.Secure.putString(getContentResolver(), DEFAULT_INPUT_METHOD, newIme);
+                Settings.Secure.putString(mContentResolver, DEFAULT_INPUT_METHOD, newIme);
         L.successOrFailure("Switching to IME: " + newIme, result);
     }
 
@@ -2754,8 +2785,11 @@ public class RotaryService extends AccessibilityService implements
      * their subtypes and returns whether {@code componentName} is one of the IMEs.
      */
     private boolean imeSettingContains(@NonNull String settingName, @NonNull String componentName) {
+        if (mContentResolver == null) {
+            return false;
+        }
         String colonSeparatedComponentNamesWithSubtypes =
-                Settings.Secure.getString(getContentResolver(), settingName);
+                Settings.Secure.getString(mContentResolver, settingName);
         if (colonSeparatedComponentNamesWithSubtypes == null) {
             return false;
         }

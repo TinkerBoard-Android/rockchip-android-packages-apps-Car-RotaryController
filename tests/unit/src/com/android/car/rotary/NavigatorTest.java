@@ -23,6 +23,7 @@ import static com.android.car.ui.utils.RotaryConstants.ROTARY_VERTICALLY_SCROLLA
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.UiAutomation;
 import android.content.Intent;
@@ -44,6 +45,7 @@ import com.android.car.rotary.ui.TestRecyclerViewAdapter;
 import com.android.car.ui.recyclerview.CarUiRecyclerView;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -57,6 +59,7 @@ import java.util.List;
 public class NavigatorTest {
 
     private static UiAutomation sUiAutomoation;
+    private static int sOriginalFlags;
 
     private final List<AccessibilityNodeInfo> mNodes = new ArrayList<>();
 
@@ -71,6 +74,19 @@ public class NavigatorTest {
     @BeforeClass
     public static void oneTimeSetup() {
         sUiAutomoation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
+
+        // FLAG_RETRIEVE_INTERACTIVE_WINDOWS is necessary to reliably access the root window.
+        AccessibilityServiceInfo serviceInfo = sUiAutomoation.getServiceInfo();
+        sOriginalFlags = serviceInfo.flags;
+        serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+        sUiAutomoation.setServiceInfo(serviceInfo);
+    }
+
+    @AfterClass
+    public static void oneTimeTearDown() {
+        AccessibilityServiceInfo serviceInfo = sUiAutomoation.getServiceInfo();
+        serviceInfo.flags = sOriginalFlags;
+        sUiAutomoation.setServiceInfo(serviceInfo);
     }
 
     @Before
