@@ -1116,11 +1116,8 @@ public class RotaryService extends AccessibilityService implements
                 }
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                if (mInDirectManipulationMode) {
-                    handleBackButtonEvent(action);
-                    return true;
-                }
-                return false;
+                handleBackButtonEvent(action);
+                return true;
             default:
                 // Do nothing
         }
@@ -1912,9 +1909,10 @@ public class RotaryService extends AccessibilityService implements
         if (!isValidAction(action)) {
             return;
         }
-        // If the focused node doesn't support rotate directly, inject Back button event, then the
-        // application will handle the injected event.
-        if (!DirectManipulationHelper.supportRotateDirectly(mFocusedNode)) {
+        // If we're not in direct manipulation mode or the focused node doesn't support rotate
+        // directly, inject Back button event; then the application will handle the injected event.
+        if (!mInDirectManipulationMode
+                || !DirectManipulationHelper.supportRotateDirectly(mFocusedNode)) {
             injectKeyEvent(KeyEvent.KEYCODE_BACK, action);
             return;
         }
