@@ -720,6 +720,11 @@ public class RotaryService extends AccessibilityService implements
                     if (ready) {
                         mCarInputManager =
                                 (CarInputManager) mCar.getCarManager(Car.CAR_INPUT_SERVICE);
+                        if (mCarInputManager == null) {
+                            // Do nothing if mCarInputManager is null. When it becomes not null,
+                            // this lifecycle event will be called again.
+                            return;
+                        }
                         mCarInputManager.requestInputEventCapture(
                                 CarOccupantZoneManager.DISPLAY_TYPE_MAIN,
                                 mInputTypes,
