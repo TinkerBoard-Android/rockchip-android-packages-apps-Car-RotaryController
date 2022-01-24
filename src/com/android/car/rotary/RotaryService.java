@@ -71,6 +71,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
@@ -1731,30 +1732,33 @@ public class RotaryService extends AccessibilityService implements
      * Returns whether a custom nudge action was performed.
      */
     private boolean handleAppSpecificOffScreenNudge(@View.FocusRealDirection int direction) {
-        Bundle metaData = getForegroundActivityMetaData();
-        if (metaData == null) {
-            L.v("No metadata for " + mForegroundActivity);
-            return false;
+        Bundle activityMetaData = getForegroundActivityMetaData();
+        Bundle packageMetaData = getForegroundPackageMetaData();
+        int globalAction = getGlobalAction(activityMetaData, direction);
+        if (globalAction == INVALID_GLOBAL_ACTION) {
+            globalAction = getGlobalAction(packageMetaData, direction);
         }
-        String directionString = DIRECTION_TO_STRING.get(direction);
-        int globalAction = metaData.getInt(
-                String.format(OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT, directionString),
-                INVALID_GLOBAL_ACTION);
         if (globalAction != INVALID_GLOBAL_ACTION) {
             L.d("App-specific off-screen nudge: " + globalActionToString(globalAction));
             performGlobalAction(globalAction);
             return true;
         }
-        int keyCode = metaData.getInt(
-                String.format(OFF_SCREEN_NUDGE_KEY_CODE_FORMAT, directionString), KEYCODE_UNKNOWN);
+
+        int keyCode = getKeyCode(activityMetaData, direction);
+        if (keyCode == KEYCODE_UNKNOWN) {
+            keyCode = getKeyCode(packageMetaData, direction);
+        }
         if (keyCode != KEYCODE_UNKNOWN) {
             L.d("App-specific off-screen nudge: " + KeyEvent.keyCodeToString(keyCode));
             injectKeyEvent(keyCode, ACTION_DOWN);
             injectKeyEvent(keyCode, ACTION_UP);
             return true;
         }
-        String intentString = metaData.getString(
-                String.format(OFF_SCREEN_NUDGE_INTENT_FORMAT, directionString), null);
+
+        String intentString = getIntentString(activityMetaData, direction);
+        if (intentString == null) {
+            intentString = getIntentString(packageMetaData, direction);
+        }
         if (intentString == null) {
             return false;
         }
@@ -1813,6 +1817,38 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
+    private static int getGlobalAction(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return INVALID_GLOBAL_ACTION;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT, directionString),
+                INVALID_GLOBAL_ACTION);
+    }
+
+    private static int getKeyCode(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return KEYCODE_UNKNOWN;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_KEY_CODE_FORMAT, directionString), KEYCODE_UNKNOWN);
+    }
+
+    @Nullable
+    private static String getIntentString(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return null;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getString(
+                String.format(OFF_SCREEN_NUDGE_INTENT_FORMAT, directionString), null);
+    }
+
     @Nullable
     private Bundle getForegroundActivityMetaData() {
         // The foreground activity can be null in a cold boot when the user has an active
@@ -1826,6 +1862,25 @@ public class RotaryService extends AccessibilityService implements
                     PackageManager.GET_META_DATA);
             return activityInfo.metaData;
         } catch (PackageManager.NameNotFoundException e) {
+            L.v("Failed to find activity " + mForegroundActivity);
+            return null;
+        }
+    }
+
+    @Nullable
+    private Bundle getForegroundPackageMetaData() {
+        // The foreground activity can be null in a cold boot when the user has an active
+        // lockscreen.
+        if (mForegroundActivity == null) {
+            return null;
+        }
+
+        try {
+            ApplicationInfo applicationInfo = getPackageManager().getApplicationInfo(
+                    mForegroundActivity.getPackageName(), PackageManager.GET_META_DATA);
+            return applicationInfo.metaData;
+        } catch (PackageManager.NameNotFoundException e) {
+            L.v("Failed to find package " + mForegroundActivity.getPackageName());
             return null;
         }
     }
