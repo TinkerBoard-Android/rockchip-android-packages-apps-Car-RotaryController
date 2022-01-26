@@ -71,6 +71,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
@@ -531,29 +532,24 @@ public class RotaryService extends AccessibilityService implements
                     // Post this in a handler so that there is no race condition between app
                     // transitions and restoration of focus.
                     getMainThreadHandler().post(() -> {
-                        AccessibilityNodeInfo rootView = window.getRoot();
-                        if (rootView == null) {
-                            L.e("Root view in application window no longer exists");
-                            return;
-                        }
-                        boolean result = restoreDefaultFocusInRoot(rootView);
-                        if (!result) {
+                        boolean success = restoreDefaultFocusInWindow(window);
+                        if (!success) {
                             L.e("Failed to focus the default element in the application window");
                         }
-                        Utils.recycleNode(rootView);
+                        window.recycle();
                     });
                 } else {
                     // Post this in a handler so that there is no race condition between app
                     // transitions and restoration of focus.
                     getMainThreadHandler().post(() -> {
-                        boolean result = clearFocusInWindow(window);
-                        if (!result) {
+                        boolean success = clearFocusInWindow(window);
+                        if (!success) {
                             L.e("Failed to clear the focus in window: " + window);
                         }
+                        window.recycle();
                     });
                 }
             }
-            Utils.recycleWindows(windows);
         }
     };
 
@@ -1399,6 +1395,17 @@ public class RotaryService extends AccessibilityService implements
         }
     }
 
+    private boolean restoreDefaultFocusInWindow(@NonNull AccessibilityWindowInfo window) {
+        AccessibilityNodeInfo root = window.getRoot();
+        if (root == null) {
+            L.d("No root node in window " + window);
+            return false;
+        }
+        boolean success = restoreDefaultFocusInRoot(root);
+        root.recycle();
+        return success;
+    }
+
     private boolean restoreDefaultFocusInRoot(@NonNull AccessibilityNodeInfo root) {
         AccessibilityNodeInfo fpv = mNavigator.findFocusParkingViewInRoot(root);
         // Refresh the node to ensure the focused state is up to date. The node came directly from
@@ -1686,8 +1693,7 @@ public class RotaryService extends AccessibilityService implements
             arguments.clear();
             arguments.putInt(NUDGE_DIRECTION, direction);
             boolean success = performFocusAction(targetFocusArea, arguments);
-            L.d("Nudging to the nearest FocusArea "
-                    + (success ? "succeeded" : "failed: " + targetFocusArea));
+            L.successOrFailure("Nudging to the nearest FocusArea " + targetFocusArea, success);
             targetFocusArea.recycle();
             return;
         }
@@ -1695,8 +1701,8 @@ public class RotaryService extends AccessibilityService implements
         // targetFocusArea is an implicit FocusArea (i.e., the root node of a window without any
         // FocusAreas), so restore the focus in it.
         boolean success = restoreDefaultFocusInRoot(targetFocusArea);
-        L.d("Nudging to the nearest implicit focus area "
-                + (success ? "succeeded" : "failed: " + targetFocusArea));
+        L.successOrFailure("Nudging to the nearest implicit focus area " + targetFocusArea,
+                success);
         targetFocusArea.recycle();
     }
 
@@ -1726,30 +1732,33 @@ public class RotaryService extends AccessibilityService implements
      * Returns whether a custom nudge action was performed.
      */
     private boolean handleAppSpecificOffScreenNudge(@View.FocusRealDirection int direction) {
-        Bundle metaData = getForegroundActivityMetaData();
-        if (metaData == null) {
-            L.v("No metadata for " + mForegroundActivity);
-            return false;
+        Bundle activityMetaData = getForegroundActivityMetaData();
+        Bundle packageMetaData = getForegroundPackageMetaData();
+        int globalAction = getGlobalAction(activityMetaData, direction);
+        if (globalAction == INVALID_GLOBAL_ACTION) {
+            globalAction = getGlobalAction(packageMetaData, direction);
         }
-        String directionString = DIRECTION_TO_STRING.get(direction);
-        int globalAction = metaData.getInt(
-                String.format(OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT, directionString),
-                INVALID_GLOBAL_ACTION);
         if (globalAction != INVALID_GLOBAL_ACTION) {
             L.d("App-specific off-screen nudge: " + globalActionToString(globalAction));
             performGlobalAction(globalAction);
             return true;
         }
-        int keyCode = metaData.getInt(
-                String.format(OFF_SCREEN_NUDGE_KEY_CODE_FORMAT, directionString), KEYCODE_UNKNOWN);
+
+        int keyCode = getKeyCode(activityMetaData, direction);
+        if (keyCode == KEYCODE_UNKNOWN) {
+            keyCode = getKeyCode(packageMetaData, direction);
+        }
         if (keyCode != KEYCODE_UNKNOWN) {
             L.d("App-specific off-screen nudge: " + KeyEvent.keyCodeToString(keyCode));
             injectKeyEvent(keyCode, ACTION_DOWN);
             injectKeyEvent(keyCode, ACTION_UP);
             return true;
         }
-        String intentString = metaData.getString(
-                String.format(OFF_SCREEN_NUDGE_INTENT_FORMAT, directionString), null);
+
+        String intentString = getIntentString(activityMetaData, direction);
+        if (intentString == null) {
+            intentString = getIntentString(packageMetaData, direction);
+        }
         if (intentString == null) {
             return false;
         }
@@ -1808,6 +1817,38 @@ public class RotaryService extends AccessibilityService implements
         return true;
     }
 
+    private static int getGlobalAction(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return INVALID_GLOBAL_ACTION;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_GLOBAL_ACTION_FORMAT, directionString),
+                INVALID_GLOBAL_ACTION);
+    }
+
+    private static int getKeyCode(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return KEYCODE_UNKNOWN;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getInt(
+                String.format(OFF_SCREEN_NUDGE_KEY_CODE_FORMAT, directionString), KEYCODE_UNKNOWN);
+    }
+
+    @Nullable
+    private static String getIntentString(@Nullable Bundle metaData,
+            @View.FocusRealDirection int direction) {
+        if (metaData == null) {
+            return null;
+        }
+        String directionString = DIRECTION_TO_STRING.get(direction);
+        return metaData.getString(
+                String.format(OFF_SCREEN_NUDGE_INTENT_FORMAT, directionString), null);
+    }
+
     @Nullable
     private Bundle getForegroundActivityMetaData() {
         // The foreground activity can be null in a cold boot when the user has an active
@@ -1821,6 +1862,25 @@ public class RotaryService extends AccessibilityService implements
                     PackageManager.GET_META_DATA);
             return activityInfo.metaData;
         } catch (PackageManager.NameNotFoundException e) {
+            L.v("Failed to find activity " + mForegroundActivity);
+            return null;
+        }
+    }
+
+    @Nullable
+    private Bundle getForegroundPackageMetaData() {
+        // The foreground activity can be null in a cold boot when the user has an active
+        // lockscreen.
+        if (mForegroundActivity == null) {
+            return null;
+        }
+
+        try {
+            ApplicationInfo applicationInfo = getPackageManager().getApplicationInfo(
+                    mForegroundActivity.getPackageName(), PackageManager.GET_META_DATA);
+            return applicationInfo.metaData;
+        } catch (PackageManager.NameNotFoundException e) {
+            L.v("Failed to find package " + mForegroundActivity.getPackageName());
             return null;
         }
     }
@@ -2266,14 +2326,10 @@ public class RotaryService extends AccessibilityService implements
         }
 
         for (AccessibilityWindowInfo window : sortedWindows) {
-            AccessibilityNodeInfo root = window.getRoot();
-            if (root != null) {
-                boolean success = restoreDefaultFocusInRoot(root);
-                root.recycle();
-                L.successOrFailure("Initialize focus inside the window: " + window, success);
-                if (success) {
-                    return true;
-                }
+            boolean success = restoreDefaultFocusInWindow(window);
+            L.successOrFailure("Initialize focus inside the window: " + window, success);
+            if (success) {
+                return true;
             }
         }
 
@@ -2400,16 +2456,8 @@ public class RotaryService extends AccessibilityService implements
             L.d("No HUN window to focus");
             return false;
         }
-
-        AccessibilityNodeInfo hunRoot = hunWindow.getRoot();
-        if (hunRoot == null) {
-            L.d("No root in HUN Window to focus");
-            return false;
-        }
-
-        boolean success = restoreDefaultFocusInRoot(hunRoot);
-        hunRoot.recycle();
-        L.d("HUN window focus " + (success ? "successful" : "failed"));
+        boolean success = restoreDefaultFocusInWindow(hunWindow);
+        L.successOrFailure("HUN window focus ", success);
         return success;
     }
 
