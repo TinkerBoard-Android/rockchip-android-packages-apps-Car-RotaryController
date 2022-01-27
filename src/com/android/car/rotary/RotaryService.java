@@ -2252,11 +2252,11 @@ public class RotaryService extends AccessibilityService implements
                 L.v("mFocusedNode is already focused: " + mFocusedNode);
                 return false;
             }
-            // If the focused node represents an HTML element in a WebView, we just assume the focus
-            // is already initialized here, and we'll handle it properly when the user uses the
-            // controller next time.
-            if (mNavigator.isInWebView(mFocusedNode)) {
-                L.v("mFocusedNode is in a WebView: " + mFocusedNode);
+            // If the focused node represents an HTML element in a WebView, or a Composable in a
+            // ComposeView, we just assume the focus is already initialized here, and we'll handle
+            // it properly when the user uses the controller next time.
+            if (mNavigator.isInVirtualNodeHierarchy(mFocusedNode)) {
+                L.v("mFocusedNode is in a WebView or ComposeView: " + mFocusedNode);
                 return false;
             }
         }
@@ -2348,10 +2348,10 @@ public class RotaryService extends AccessibilityService implements
         mFocusedNode = Utils.refreshNode(mFocusedNode);
         if (mFocusedNode == null
                 // No need to clear focus if mFocusedNode is not focused. However, when it's a node
-                // in a WebView, its state might not be up to date, so mFocusedNode.isFocused()
-                // may return false even if the view represented by mFocusedNode is focused.
-                // So don't check the focused state if it's in WebView.
-                || (!mFocusedNode.isFocused() && !mNavigator.isInWebView(mFocusedNode))
+                // in a WebView or ComposeView, its state might not be up to date,
+                // so mFocusedNode.isFocused() may return false even if the view represented by
+                // mFocusedNode is focused. So don't check the focused state if it's in WebView.
+                || (!mFocusedNode.isFocused() && !mNavigator.isInVirtualNodeHierarchy(mFocusedNode))
                 || (targetFocus != null
                         && mFocusedNode.getWindowId() == targetFocus.getWindowId())) {
             return;
@@ -2711,12 +2711,13 @@ public class RotaryService extends AccessibilityService implements
             L.d("No need to focus on targetNode because it's already focused: " + targetNode);
             return true;
         }
-        boolean isInWebView = mNavigator.isInWebView(targetNode);
-        if (!Utils.isFocusArea(targetNode) && Utils.hasFocus(targetNode) && !isInWebView) {
+        boolean isInVirtualHierarchy = mNavigator.isInVirtualNodeHierarchy(targetNode);
+        if (!Utils.isFocusArea(targetNode) && Utils.hasFocus(targetNode) && !isInVirtualHierarchy) {
             // One of targetNode's descendants is already focused, so we can't perform ACTION_FOCUS
             // on targetNode directly unless it's a FocusArea. The workaround is to clear the focus
             // first (by focusing on the FocusParkingView), then focus on targetNode. The
-            // prohibition on focusing a node that has focus doesn't apply in WebViews.
+            // prohibition on focusing a node that has focus doesn't apply in WebViews or
+            // ComposeViews.
             L.d("One of targetNode's descendants is already focused: " + targetNode);
             if (!clearFocusInCurrentWindow()) {
                 return false;
