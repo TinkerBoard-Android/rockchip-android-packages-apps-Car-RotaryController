@@ -650,18 +650,6 @@ class Navigator {
     }
 
     /**
-     * Returns whether the {@code window} is the main application window. A main application
-     * window is an application window on the default display that takes up the entire display.
-     */
-    boolean isMainApplicationWindow(@NonNull AccessibilityWindowInfo window) {
-        Rect windowBounds = new Rect();
-        window.getBoundsInScreen(windowBounds);
-        return window.getType() == TYPE_APPLICATION
-                && window.getDisplayId() == Display.DEFAULT_DISPLAY
-                && mAppWindowBounds.equals(windowBounds);
-    }
-
-    /**
      * Searches from the given node up through its ancestors to the containing focus area, looking
      * for a node that's marked as horizontally or vertically scrollable. Returns a copy of the
      * first such node or null if none is found. The caller is responsible for recycling the result.

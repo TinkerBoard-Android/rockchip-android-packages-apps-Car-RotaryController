@@ -529,57 +529,6 @@ public class RotaryService extends AccessibilityService implements
         NAVIGATION_KEYCODE_TO_DPAD_KEYCODE_MAP = Collections.unmodifiableMap(map);
     }
 
-    private final BroadcastReceiver mHomeButtonReceiver = new BroadcastReceiver() {
-        // Should match the values in PhoneWindowManager.java
-        private static final String SYSTEM_DIALOG_REASON_KEY = "reason";
-        private static final String SYSTEM_DIALOG_REASON_HOME_KEY = "homekey";
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String reason = intent.getStringExtra(SYSTEM_DIALOG_REASON_KEY);
-            if (!SYSTEM_DIALOG_REASON_HOME_KEY.equals(reason)) {
-                L.d("Skipping the processing of ACTION_CLOSE_SYSTEM_DIALOGS broadcast event due "
-                        + "to reason: " + reason);
-                return;
-            }
-
-            // Trigger a back action in order to exit direct manipulation mode.
-            if (mInDirectManipulationMode) {
-                handleBackButtonEvent(ACTION_DOWN);
-                handleBackButtonEvent(ACTION_UP);
-            }
-
-            List<AccessibilityWindowInfo> windows = getWindows();
-            for (AccessibilityWindowInfo window : windows) {
-                if (window == null) {
-                    continue;
-                }
-
-                if (mInRotaryMode && mNavigator.isMainApplicationWindow(window)) {
-                    // Post this in a handler so that there is no race condition between app
-                    // transitions and restoration of focus.
-                    getMainThreadHandler().post(() -> {
-                        boolean success = restoreDefaultFocusInWindow(window);
-                        if (!success) {
-                            L.e("Failed to focus the default element in the application window");
-                        }
-                        window.recycle();
-                    });
-                } else {
-                    // Post this in a handler so that there is no race condition between app
-                    // transitions and restoration of focus.
-                    getMainThreadHandler().post(() -> {
-                        boolean success = clearFocusInWindow(window);
-                        if (!success) {
-                            L.e("Failed to clear the focus in window: " + window);
-                        }
-                        window.recycle();
-                    });
-                }
-            }
-        }
-    };
-
     private Car mCar;
     private CarInputManager mCarInputManager;
     private InputManager mInputManager;
@@ -694,9 +643,6 @@ public class RotaryService extends AccessibilityService implements
 
         mProjectedApps = Arrays.asList(res.getStringArray(R.array.projected_apps));
 
-        getWindowContext().registerReceiver(mHomeButtonReceiver,
-                new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
-
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_PACKAGE_ADDED);
         filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
@@ -782,7 +728,6 @@ public class RotaryService extends AccessibilityService implements
     public void onDestroy() {
         L.v("onDestroy");
         unregisterReceiver(mAppInstallUninstallReceiver);
-        getWindowContext().unregisterReceiver(mHomeButtonReceiver);
 
         unregisterInputMethodObserver();
         unregisterFilterObserver();
