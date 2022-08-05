@@ -169,13 +169,15 @@ class Navigator {
         AccessibilityNodeInfo target = null;
         while (advancedCount < rotationCount) {
             AccessibilityNodeInfo nextCandidate = null;
-            AccessibilityNodeInfo webView = findWebViewAncestor(candidate);
-            if (webView != null) {
-                nextCandidate = findNextFocusableInWebView(webView, candidate, direction);
+            // Virtual View hierarchies like WebViews and ComposeViews do not support focusSearch().
+            AccessibilityNodeInfo virtualViewAncestor = findVirtualViewAncestor(candidate);
+            if (virtualViewAncestor != null) {
+                nextCandidate =
+                    findNextFocusableInVirtualRoot(virtualViewAncestor, candidate, direction);
             }
             if (nextCandidate == null) {
-                // If we aren't in a WebView or there aren't any more focusable nodes within the
-                // WebView, use focusSearch().
+                // If we aren't in a virtual node hierarchy, or there aren't any more focusable
+                // nodes within the virtual node hierarchy, use focusSearch().
                 nextCandidate = candidate.focusSearch(direction);
             }
             AccessibilityNodeInfo candidateFocusArea =
@@ -648,18 +650,6 @@ class Navigator {
     }
 
     /**
-     * Returns whether the {@code window} is the main application window. A main application
-     * window is an application window on the default display that takes up the entire display.
-     */
-    boolean isMainApplicationWindow(@NonNull AccessibilityWindowInfo window) {
-        Rect windowBounds = new Rect();
-        window.getBoundsInScreen(windowBounds);
-        return window.getType() == TYPE_APPLICATION
-                && window.getDisplayId() == Display.DEFAULT_DISPLAY
-                && mAppWindowBounds.equals(windowBounds);
-    }
-
-    /**
      * Searches from the given node up through its ancestors to the containing focus area, looking
      * for a node that's marked as horizontally or vertically scrollable. Returns a copy of the
      * first such node or null if none is found. The caller is responsible for recycling the result.
@@ -812,9 +802,9 @@ class Navigator {
                                 sourceFocusAreaBounds, candidateBounds, direction);
                 },
                 /* targetPredicate= */ candidateNode -> {
-                    // RotaryService can navigate to nodes in a WebView even when off-screen so we
-                    // use canPerformFocus() to skip the bounds check.
-                    if (isInWebView(candidateNode)) {
+                    // RotaryService can navigate to nodes in a WebView or a ComposeView even when
+                    // off-screen so we use canPerformFocus() to skip the bounds check.
+                    if (isInVirtualNodeHierarchy(candidateNode)) {
                         return Utils.canPerformFocus(candidateNode);
                     }
                     // If a node isn't visible to the user, e.g. another window is obscuring it,
@@ -892,6 +882,19 @@ class Navigator {
         return mTreeTraverser.findNodeOrAncestor(node, Utils::isWebView);
     }
 
+    /**
+     * Returns a copy of {@code node} or the nearest ancestor that represents a {@code ComposeView}
+     * or a {@code WebView}. Returns null if {@code node} isn't a {@code ComposeView} or a
+     * {@code WebView} and is not a descendant of a {@code ComposeView} or a {@code WebView}.
+     *
+     * TODO(b/192274274): This method may not be necessary anymore if Compose supports focusSearch.
+     */
+    @Nullable
+    private AccessibilityNodeInfo findVirtualViewAncestor(@NonNull AccessibilityNodeInfo node) {
+        return mTreeTraverser.findNodeOrAncestor(node, /* targetPredicate= */ (nodeInfo) ->
+            Utils.isComposeView(nodeInfo) || Utils.isWebView(nodeInfo));
+    }
+
     /** Returns whether {@code node} is a {@code WebView} or is a descendant of one. */
     boolean isInWebView(@NonNull AccessibilityNodeInfo node) {
         AccessibilityNodeInfo webView = findWebViewAncestor(node);
@@ -903,30 +906,45 @@ class Navigator {
     }
 
     /**
+     * Returns whether {@code node} is a {@code ComposeView}, is a {@code WebView}, or is a
+     * descendant of either.
+     */
+    boolean isInVirtualNodeHierarchy(@NonNull AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo virtualViewAncestor = findVirtualViewAncestor(node);
+        if (virtualViewAncestor == null) {
+            return false;
+        }
+        virtualViewAncestor.recycle();
+        return true;
+    }
+
+    /**
      * Returns the next focusable node after {@code candidate} in {@code direction} in {@code
-     * webView} or null if none. This handles navigating into a WebView as well as within a WebView.
+     * root} or null if none. This handles navigating into a WebView as well as within a WebView.
+     * This also handles navigating into a ComposeView, as well as within a ComposeView.
      */
     @Nullable
-    private AccessibilityNodeInfo findNextFocusableInWebView(@NonNull AccessibilityNodeInfo webView,
+    private AccessibilityNodeInfo findNextFocusableInVirtualRoot(
+            @NonNull AccessibilityNodeInfo root,
             @NonNull AccessibilityNodeInfo candidate, int direction) {
-        // focusSearch() doesn't work in WebViews so use tree traversal instead.
-        if (Utils.isWebView(candidate)) {
+        // focusSearch() doesn't work in WebViews or ComposeViews so use tree traversal instead.
+        if (Utils.isWebView(candidate) || Utils.isComposeView(candidate)) {
             if (direction == View.FOCUS_FORWARD) {
-                // When entering into a WebView, find the first focusable node within the
-                // WebView if any.
-                return findFirstFocusableDescendantInWebView(candidate);
+                // When entering into the root of a virtual node hierarchy, find the first focusable
+                // child node of the root if any.
+                return findFirstFocusableDescendantInVirtualRoot(candidate);
             } else {
-                // When backing into a WebView, find the last focusable node within the
-                // WebView if any.
-                return findLastFocusableDescendantInWebView(candidate);
+                // When backing into the root of a virtual node hierarchy, find the last focusable
+                // child node of the root if any.
+                return findLastFocusableDescendantInVirtualRoot(candidate);
             }
         } else {
-            // When navigating within a WebView, find the next or previous focusable node in
-            // depth-first order.
+            // When navigating within a virtual view hierarchy, find the next or previous focusable
+            // node in depth-first order.
             if (direction == View.FOCUS_FORWARD) {
-                return findFirstFocusDescendantInWebViewAfter(webView, candidate);
+                return findFirstFocusDescendantInVirtualRootAfter(root, candidate);
             } else {
-                return findFirstFocusDescendantInWebViewBefore(webView, candidate);
+                return findFirstFocusDescendantInVirtualRootBefore(root, candidate);
             }
         }
     }
@@ -934,34 +952,34 @@ class Navigator {
     /**
      * Returns the first descendant of {@code webView} which can perform focus. This includes off-
      * screen descendants. The nodes are searched in in depth-first order, not including
-     * {@code webView} itself. If no descendant can perform focus, null is returned. The caller is
+     * {@code root} itself. If no descendant can perform focus, null is returned. The caller is
      * responsible for recycling the result.
      */
     @Nullable
-    private AccessibilityNodeInfo findFirstFocusableDescendantInWebView(
-            @NonNull AccessibilityNodeInfo webView) {
-        return mTreeTraverser.depthFirstSearch(webView,
-                candidateNode -> candidateNode != webView && Utils.canPerformFocus(candidateNode));
+    private AccessibilityNodeInfo findFirstFocusableDescendantInVirtualRoot(
+            @NonNull AccessibilityNodeInfo root) {
+        return mTreeTraverser.depthFirstSearch(root,
+                candidateNode -> candidateNode != root && Utils.canPerformFocus(candidateNode));
     }
 
     /**
-     * Returns the last descendant of {@code webView} which can perform focus. This includes off-
+     * Returns the last descendant of {@code root} which can perform focus. This includes off-
      * screen descendants. The nodes are searched in reverse depth-first order, not including
-     * {@code webView} itself. If no descendant can perform focus, null is returned. The caller is
+     * {@code root} itself. If no descendant can perform focus, null is returned. The caller is
      * responsible for recycling the result.
      */
     @Nullable
-    private AccessibilityNodeInfo findLastFocusableDescendantInWebView(
-            @NonNull AccessibilityNodeInfo webView) {
-        return mTreeTraverser.reverseDepthFirstSearch(webView,
-                candidateNode -> candidateNode != webView && Utils.canPerformFocus(candidateNode));
+    private AccessibilityNodeInfo findLastFocusableDescendantInVirtualRoot(
+            @NonNull AccessibilityNodeInfo root) {
+        return mTreeTraverser.reverseDepthFirstSearch(root,
+                candidateNode -> candidateNode != root && Utils.canPerformFocus(candidateNode));
     }
 
     @Nullable
-    private AccessibilityNodeInfo findFirstFocusDescendantInWebViewBefore(
-            @NonNull AccessibilityNodeInfo webView, @NonNull AccessibilityNodeInfo beforeNode) {
+    private AccessibilityNodeInfo findFirstFocusDescendantInVirtualRootBefore(
+            @NonNull AccessibilityNodeInfo root, @NonNull AccessibilityNodeInfo beforeNode) {
         boolean[] foundBeforeNode = new boolean[1];
-        return mTreeTraverser.reverseDepthFirstSearch(webView,
+        return mTreeTraverser.reverseDepthFirstSearch(root,
                 node -> {
                     if (foundBeforeNode[0] && Utils.canPerformFocus(node)) {
                         return true;
@@ -974,10 +992,10 @@ class Navigator {
     }
 
     @Nullable
-    private AccessibilityNodeInfo findFirstFocusDescendantInWebViewAfter(
-            @NonNull AccessibilityNodeInfo webView, @NonNull AccessibilityNodeInfo afterNode) {
+    private AccessibilityNodeInfo findFirstFocusDescendantInVirtualRootAfter(
+            @NonNull AccessibilityNodeInfo root, @NonNull AccessibilityNodeInfo afterNode) {
         boolean[] foundAfterNode = new boolean[1];
-        return mTreeTraverser.depthFirstSearch(webView,
+        return mTreeTraverser.depthFirstSearch(root,
                 node -> {
                     if (foundAfterNode[0] && Utils.canPerformFocus(node)) {
                         return true;
